@@ -1,6 +1,6 @@
 rock_manifest = {
    lib = {
-      ['cmsgpack.so'] = "7ad00a18c1393d32706da3646e69675f"
+      ['cmsgpack.so'] = "7d35f3ef1e19c6fc6fa4e790d0bf6ecb"
    },
    ['lua-cmsgpack-0.3-2.rockspec'] = "52b998f6f58d0d76ecd05548a328959b"
 }

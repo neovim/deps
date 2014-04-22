@@ -17,7 +17,7 @@ rock_manifest = {
          },
          ['build.lua'] = "a418f151158883ce4d2383fcbab17046",
          ['cache.lua'] = "d55e0c904e3d6fc6a77d14f26fc49187",
-         ['cfg.lua'] = "436a9ff204ff329bea04149f4213b020",
+         ['cfg.lua'] = "0c10e69a4410b6a04c1432aa39b2e2e0",
          ['command_line.lua'] = "0d09c53ba49856f518da58977c401c08",
          ['deps.lua'] = "6351d64a4790e235cc773cbde6056ad4",
          ['dir.lua'] = "6908a5fa866b45e41de8a1da8f436342",
