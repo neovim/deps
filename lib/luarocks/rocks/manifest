@@ -340,6 +340,21 @@ dependencies = {
             name = "lua"
          }
       }
+   },
+   sha2 = {
+      ['0.2.0-1'] = {
+         {
+            constraints = {
+               {
+                  op = ">=",
+                  version = {
+                     5, 1, string = "5.1"
+                  }
+               }
+            },
+            name = "lua"
+         }
+      }
    }
 }
 modules = {
@@ -420,6 +435,15 @@ modules = {
    },
    dkjson = {
       "dkjson/2.4-1"
+   },
+   hmac = {
+      "sha2/0.2.0-1"
+   },
+   ['hmac.md5'] = {
+      "sha2/0.2.0-1"
+   },
+   ['hmac.sha2'] = {
+      "sha2/0.2.0-1"
    },
    lfs = {
       "luafilesystem/1.6.2-2"
@@ -828,6 +852,9 @@ modules = {
    },
    say = {
       "say/1.2-1"
+   },
+   sha2 = {
+      "sha2/0.2.0-1"
    }
 }
 repository = {
@@ -1160,6 +1187,21 @@ repository = {
             dependencies = {},
             modules = {
                say = "say/init.lua"
+            }
+         }
+      }
+   },
+   sha2 = {
+      ['0.2.0-1'] = {
+         {
+            arch = "installed",
+            commands = {},
+            dependencies = {},
+            modules = {
+               hmac = "hmac.lua",
+               ['hmac.md5'] = "hmac/md5.lua",
+               ['hmac.sha2'] = "hmac/sha2.lua",
+               sha2 = "sha2.so"
             }
          }
       }
