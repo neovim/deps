@@ -41,13 +41,15 @@ make deps
 rm -rf build
 rm -rf .deps/build/{src,third-party,tmp}
 
-cat > cc32_wrapper.sh << EOF
+mkdir _bin
+cat > _bin/gcc << EOF
 #!/bin/sh
-cc -m32 "\$@"
+/usr/bin/gcc -m32 "\$@"
 EOF
+chmod +x _bin/gcc
 
-chmod +x cc32_wrapper.sh
-export CC="$(realpath cc32_wrapper.sh)"
+export PATH="$(realpath _bin):${PATH}"
+export CC="$(realpath _bin/gcc)"
 
 patch -p1 << EOF
 diff --git a/third-party/CMakeLists.txt b/third-party/CMakeLists.txt
