@@ -1,12 +1,12 @@
 commands = {
    busted = {
-      "busted/1.10.0-0"
+      "busted/1.10.0-1"
    },
    ['busted.bat'] = {
-      "busted/1.10.0-0"
+      "busted/1.10.0-1"
    },
    busted_bootstrap = {
-      "busted/1.10.0-0"
+      "busted/1.10.0-1"
    },
    luarocks = {
       "luarocks/2.1.2-1"
@@ -21,10 +21,10 @@ commands = {
       "luarocks/2.1.2-1"
    },
    moon = {
-      "moonscript/0.2.5-1"
+      "moonscript/0.2.6-1"
    },
    moonc = {
-      "moonscript/0.2.5-1"
+      "moonscript/0.2.6-1"
    }
 }
 dependencies = {
@@ -59,7 +59,7 @@ dependencies = {
       }
    },
    busted = {
-      ['1.10.0-0'] = {
+      ['1.10.0-1'] = {
          {
             constraints = {
                {
@@ -148,7 +148,7 @@ dependencies = {
       }
    },
    dkjson = {
-      ['2.4-1'] = {
+      ['2.5-1'] = {
          {
             constraints = {
                {
@@ -269,7 +269,7 @@ dependencies = {
       }
    },
    moonscript = {
-      ['0.2.5-1'] = {
+      ['0.2.6-1'] = {
          {
             constraints = {
                {
@@ -319,7 +319,7 @@ dependencies = {
       }
    },
    penlight = {
-      ['1.1.0-3'] = {
+      ['1.3.1-1'] = {
          {
             constraints = {},
             name = "luafilesystem"
@@ -328,21 +328,6 @@ dependencies = {
    },
    say = {
       ['1.2-1'] = {
-         {
-            constraints = {
-               {
-                  op = ">=",
-                  version = {
-                     5, 1, string = "5.1"
-                  }
-               }
-            },
-            name = "lua"
-         }
-      }
-   },
-   sha2 = {
-      ['0.2.0-1'] = {
          {
             constraints = {
                {
@@ -365,67 +350,67 @@ modules = {
       "ansicolors/1.0.2-3"
    },
    busted = {
-      "busted/1.10.0-0"
+      "busted/1.10.0-1"
    },
    ['busted.core'] = {
-      "busted/1.10.0-0"
+      "busted/1.10.0-1"
    },
    ['busted.done'] = {
-      "busted/1.10.0-0"
+      "busted/1.10.0-1"
    },
    ['busted.languages.ar'] = {
-      "busted/1.10.0-0"
+      "busted/1.10.0-1"
    },
    ['busted.languages.en'] = {
-      "busted/1.10.0-0"
+      "busted/1.10.0-1"
    },
    ['busted.languages.fr'] = {
-      "busted/1.10.0-0"
+      "busted/1.10.0-1"
    },
    ['busted.languages.ja'] = {
-      "busted/1.10.0-0"
+      "busted/1.10.0-1"
    },
    ['busted.languages.nl'] = {
-      "busted/1.10.0-0"
+      "busted/1.10.0-1"
    },
    ['busted.languages.ru'] = {
-      "busted/1.10.0-0"
+      "busted/1.10.0-1"
    },
    ['busted.languages.ua'] = {
-      "busted/1.10.0-0"
+      "busted/1.10.0-1"
    },
    ['busted.languages.zh'] = {
-      "busted/1.10.0-0"
+      "busted/1.10.0-1"
    },
    ['busted.loop.copas'] = {
-      "busted/1.10.0-0"
+      "busted/1.10.0-1"
    },
    ['busted.loop.default'] = {
-      "busted/1.10.0-0"
+      "busted/1.10.0-1"
    },
    ['busted.loop.ev'] = {
-      "busted/1.10.0-0"
+      "busted/1.10.0-1"
    },
    ['busted.moon'] = {
-      "busted/1.10.0-0"
+      "busted/1.10.0-1"
    },
    ['busted.output.TAP'] = {
-      "busted/1.10.0-0"
+      "busted/1.10.0-1"
    },
    ['busted.output.json'] = {
-      "busted/1.10.0-0"
+      "busted/1.10.0-1"
    },
    ['busted.output.junit'] = {
-      "busted/1.10.0-0"
+      "busted/1.10.0-1"
    },
    ['busted.output.plain_terminal'] = {
-      "busted/1.10.0-0"
+      "busted/1.10.0-1"
    },
    ['busted.output.stub'] = {
-      "busted/1.10.0-0"
+      "busted/1.10.0-1"
    },
    ['busted.output.utf_terminal'] = {
-      "busted/1.10.0-0"
+      "busted/1.10.0-1"
    },
    cliargs = {
       "lua_cliargs/2.1-2"
@@ -434,16 +419,7 @@ modules = {
       "lua-cmsgpack/0.3-2"
    },
    dkjson = {
-      "dkjson/2.4-1"
-   },
-   hmac = {
-      "sha2/0.2.0-1"
-   },
-   ['hmac.md5'] = {
-      "sha2/0.2.0-1"
-   },
-   ['hmac.sha2'] = {
-      "sha2/0.2.0-1"
+      "dkjson/2.5-1"
    },
    lfs = {
       "luafilesystem/1.6.2-2"
@@ -677,184 +653,187 @@ modules = {
       "luassert/1.7.0-1"
    },
    moon = {
-      "moonscript/0.2.5-1"
+      "moonscript/0.2.6-1"
    },
    ['moon.all'] = {
-      "moonscript/0.2.5-1"
+      "moonscript/0.2.6-1"
    },
    moonscript = {
-      "moonscript/0.2.5-1"
+      "moonscript/0.2.6-1"
    },
    ['moonscript.base'] = {
-      "moonscript/0.2.5-1"
+      "moonscript/0.2.6-1"
    },
    ['moonscript.cmd.coverage'] = {
-      "moonscript/0.2.5-1"
+      "moonscript/0.2.6-1"
    },
    ['moonscript.cmd.lint'] = {
-      "moonscript/0.2.5-1"
+      "moonscript/0.2.6-1"
+   },
+   ['moonscript.cmd.moonc'] = {
+      "moonscript/0.2.6-1"
    },
    ['moonscript.compile'] = {
-      "moonscript/0.2.5-1"
+      "moonscript/0.2.6-1"
    },
    ['moonscript.compile.statement'] = {
-      "moonscript/0.2.5-1"
+      "moonscript/0.2.6-1"
    },
    ['moonscript.compile.value'] = {
-      "moonscript/0.2.5-1"
+      "moonscript/0.2.6-1"
    },
    ['moonscript.data'] = {
-      "moonscript/0.2.5-1"
+      "moonscript/0.2.6-1"
    },
    ['moonscript.dump'] = {
-      "moonscript/0.2.5-1"
+      "moonscript/0.2.6-1"
    },
    ['moonscript.errors'] = {
-      "moonscript/0.2.5-1"
+      "moonscript/0.2.6-1"
    },
    ['moonscript.line_tables'] = {
-      "moonscript/0.2.5-1"
+      "moonscript/0.2.6-1"
    },
    ['moonscript.parse'] = {
-      "moonscript/0.2.5-1"
+      "moonscript/0.2.6-1"
    },
    ['moonscript.transform'] = {
-      "moonscript/0.2.5-1"
+      "moonscript/0.2.6-1"
    },
    ['moonscript.transform.destructure'] = {
-      "moonscript/0.2.5-1"
+      "moonscript/0.2.6-1"
    },
    ['moonscript.transform.names'] = {
-      "moonscript/0.2.5-1"
+      "moonscript/0.2.6-1"
    },
    ['moonscript.types'] = {
-      "moonscript/0.2.5-1"
+      "moonscript/0.2.6-1"
    },
    ['moonscript.util'] = {
-      "moonscript/0.2.5-1"
+      "moonscript/0.2.6-1"
    },
    ['moonscript.version'] = {
-      "moonscript/0.2.5-1"
+      "moonscript/0.2.6-1"
    },
    pl = {
-      "penlight/1.1.0-3"
+      "penlight/1.3.1-1"
    },
    ['pl.Date'] = {
-      "penlight/1.1.0-3"
+      "penlight/1.3.1-1"
    },
    ['pl.List'] = {
-      "penlight/1.1.0-3"
+      "penlight/1.3.1-1"
    },
    ['pl.Map'] = {
-      "penlight/1.1.0-3"
+      "penlight/1.3.1-1"
    },
    ['pl.MultiMap'] = {
-      "penlight/1.1.0-3"
+      "penlight/1.3.1-1"
    },
    ['pl.OrderedMap'] = {
-      "penlight/1.1.0-3"
+      "penlight/1.3.1-1"
    },
    ['pl.Set'] = {
-      "penlight/1.1.0-3"
+      "penlight/1.3.1-1"
    },
    ['pl.app'] = {
-      "penlight/1.1.0-3"
+      "penlight/1.3.1-1"
    },
    ['pl.array2d'] = {
-      "penlight/1.1.0-3"
+      "penlight/1.3.1-1"
    },
    ['pl.class'] = {
-      "penlight/1.1.0-3"
+      "penlight/1.3.1-1"
+   },
+   ['pl.compat'] = {
+      "penlight/1.3.1-1"
    },
    ['pl.comprehension'] = {
-      "penlight/1.1.0-3"
+      "penlight/1.3.1-1"
    },
    ['pl.config'] = {
-      "penlight/1.1.0-3"
+      "penlight/1.3.1-1"
    },
    ['pl.data'] = {
-      "penlight/1.1.0-3"
+      "penlight/1.3.1-1"
    },
    ['pl.dir'] = {
-      "penlight/1.1.0-3"
+      "penlight/1.3.1-1"
    },
    ['pl.file'] = {
-      "penlight/1.1.0-3"
+      "penlight/1.3.1-1"
    },
    ['pl.func'] = {
-      "penlight/1.1.0-3"
+      "penlight/1.3.1-1"
    },
    ['pl.import_into'] = {
-      "penlight/1.1.0-3"
+      "penlight/1.3.1-1"
    },
    ['pl.input'] = {
-      "penlight/1.1.0-3"
+      "penlight/1.3.1-1"
    },
    ['pl.lapp'] = {
-      "penlight/1.1.0-3"
+      "penlight/1.3.1-1"
    },
    ['pl.lexer'] = {
-      "penlight/1.1.0-3"
+      "penlight/1.3.1-1"
    },
    ['pl.luabalanced'] = {
-      "penlight/1.1.0-3"
+      "penlight/1.3.1-1"
    },
    ['pl.operator'] = {
-      "penlight/1.1.0-3"
+      "penlight/1.3.1-1"
    },
    ['pl.path'] = {
-      "penlight/1.1.0-3"
+      "penlight/1.3.1-1"
    },
    ['pl.permute'] = {
-      "penlight/1.1.0-3"
-   },
-   ['pl.platf.luajava'] = {
-      "penlight/1.1.0-3"
+      "penlight/1.3.1-1"
    },
    ['pl.pretty'] = {
-      "penlight/1.1.0-3"
+      "penlight/1.3.1-1"
    },
    ['pl.seq'] = {
-      "penlight/1.1.0-3"
+      "penlight/1.3.1-1"
    },
    ['pl.sip'] = {
-      "penlight/1.1.0-3"
+      "penlight/1.3.1-1"
    },
    ['pl.strict'] = {
-      "penlight/1.1.0-3"
+      "penlight/1.3.1-1"
    },
    ['pl.stringio'] = {
-      "penlight/1.1.0-3"
+      "penlight/1.3.1-1"
    },
    ['pl.stringx'] = {
-      "penlight/1.1.0-3"
+      "penlight/1.3.1-1"
    },
    ['pl.tablex'] = {
-      "penlight/1.1.0-3"
+      "penlight/1.3.1-1"
    },
    ['pl.template'] = {
-      "penlight/1.1.0-3"
+      "penlight/1.3.1-1"
    },
    ['pl.test'] = {
-      "penlight/1.1.0-3"
+      "penlight/1.3.1-1"
    },
    ['pl.text'] = {
-      "penlight/1.1.0-3"
+      "penlight/1.3.1-1"
+   },
+   ['pl.types'] = {
+      "penlight/1.3.1-1"
    },
    ['pl.utils'] = {
-      "penlight/1.1.0-3"
+      "penlight/1.3.1-1"
    },
    ['pl.xml'] = {
-      "penlight/1.1.0-3"
+      "penlight/1.3.1-1"
    },
    re = {
       "lpeg/0.12-1"
    },
    say = {
       "say/1.2-1"
-   },
-   sha2 = {
-      "sha2/0.2.0-1"
    }
 }
 repository = {
@@ -883,7 +862,7 @@ repository = {
       }
    },
    busted = {
-      ['1.10.0-0'] = {
+      ['1.10.0-1'] = {
          {
             arch = "installed",
             commands = {
@@ -893,11 +872,11 @@ repository = {
             },
             dependencies = {
                ansicolors = "1.0.2-3",
-               dkjson = "2.4-1",
+               dkjson = "2.5-1",
                lua_cliargs = "2.1-2",
                luafilesystem = "1.6.2-2",
                luassert = "1.7.0-1",
-               penlight = "1.1.0-3",
+               penlight = "1.3.1-1",
                say = "1.2-1"
             },
             modules = {
@@ -927,7 +906,7 @@ repository = {
       }
    },
    dkjson = {
-      ['2.4-1'] = {
+      ['2.5-1'] = {
          {
             arch = "installed",
             commands = {},
@@ -1092,7 +1071,7 @@ repository = {
       }
    },
    moonscript = {
-      ['0.2.5-1'] = {
+      ['0.2.6-1'] = {
          {
             arch = "installed",
             commands = {
@@ -1111,6 +1090,7 @@ repository = {
                ['moonscript.base'] = "moonscript/base.lua",
                ['moonscript.cmd.coverage'] = "moonscript/cmd/coverage.lua",
                ['moonscript.cmd.lint'] = "moonscript/cmd/lint.lua",
+               ['moonscript.cmd.moonc'] = "moonscript/cmd/moonc.lua",
                ['moonscript.compile'] = "moonscript/compile.lua",
                ['moonscript.compile.statement'] = "moonscript/compile/statement.lua",
                ['moonscript.compile.value'] = "moonscript/compile/value.lua",
@@ -1130,7 +1110,7 @@ repository = {
       }
    },
    penlight = {
-      ['1.1.0-3'] = {
+      ['1.3.1-1'] = {
          {
             arch = "installed",
             commands = {},
@@ -1148,6 +1128,7 @@ repository = {
                ['pl.app'] = "pl/app.lua",
                ['pl.array2d'] = "pl/array2d.lua",
                ['pl.class'] = "pl/class.lua",
+               ['pl.compat'] = "pl/compat.lua",
                ['pl.comprehension'] = "pl/comprehension.lua",
                ['pl.config'] = "pl/config.lua",
                ['pl.data'] = "pl/data.lua",
@@ -1162,7 +1143,6 @@ repository = {
                ['pl.operator'] = "pl/operator.lua",
                ['pl.path'] = "pl/path.lua",
                ['pl.permute'] = "pl/permute.lua",
-               ['pl.platf.luajava'] = "pl/platf/luajava.lua",
                ['pl.pretty'] = "pl/pretty.lua",
                ['pl.seq'] = "pl/seq.lua",
                ['pl.sip'] = "pl/sip.lua",
@@ -1173,6 +1153,7 @@ repository = {
                ['pl.template'] = "pl/template.lua",
                ['pl.test'] = "pl/test.lua",
                ['pl.text'] = "pl/text.lua",
+               ['pl.types'] = "pl/types.lua",
                ['pl.utils'] = "pl/utils.lua",
                ['pl.xml'] = "pl/xml.lua"
             }
@@ -1187,21 +1168,6 @@ repository = {
             dependencies = {},
             modules = {
                say = "say/init.lua"
-            }
-         }
-      }
-   },
-   sha2 = {
-      ['0.2.0-1'] = {
-         {
-            arch = "installed",
-            commands = {},
-            dependencies = {},
-            modules = {
-               hmac = "hmac.lua",
-               ['hmac.md5'] = "hmac/md5.lua",
-               ['hmac.sha2'] = "hmac/sha2.lua",
-               sha2 = "sha2.so"
             }
          }
       }

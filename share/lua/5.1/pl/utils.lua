@@ -2,25 +2,24 @@
 -- See  @{01-introduction.md.Generally_useful_functions|the Guide}.
 -- @module pl.utils
 local format,gsub,byte = string.format,string.gsub,string.byte
+local compat = require 'pl.compat'
 local clock = os.clock
 local stdout = io.stdout
 local append = table.insert
+local unpack = rawget(_G,'unpack') or rawget(table,'unpack')
 
 local collisions = {}
 
-local utils = {}
-
-utils._VERSION = "1.1.0"
-
-local lua51 = rawget(_G,'setfenv')
-
-utils.lua51 = lua51
-if not lua51 then -- Lua 5.2 compatibility
-    unpack = table.unpack
-    loadstring = load
-end
-
-utils.dir_separator = _G.package.config:sub(1,1)
+local utils = {
+    _VERSION = "1.2.1",
+    lua51 = compat.lua51,
+    setfenv = compat.setfenv,
+    getfenv = compat.getfenv,
+    load = compat.load,
+    execute = compat.execute,
+    dir_separator = _G.package.config:sub(1,1),
+    unpack = unpack
+}
 
 --- end this program gracefully.
 -- @param code The exit code or a message to be printed
@@ -219,95 +218,32 @@ function utils.array_tostring (t,temp,tostr)
     return temp
 end
 
-local lua51_load = load
-
-if utils.lua51 then -- define Lua 5.2 style load()
-    function utils.load(str,src,mode,env)
-        local chunk,err
-        if type(str) == 'string' then
-            chunk,err = loadstring(str,src)
-        else
-            chunk,err = lua51_load(str,src)
-        end
-        if chunk and env then setfenv(chunk,env) end
-        return chunk,err
-    end
-else
-    utils.load = load
-    -- setfenv/getfenv replacements for Lua 5.2
-    -- by Sergey Rozhenko
-    -- http://lua-users.org/lists/lua-l/2010-06/msg00313.html
-    -- Roberto Ierusalimschy notes that it is possible for getfenv to return nil
-    -- in the case of a function with no globals:
-    -- http://lua-users.org/lists/lua-l/2010-06/msg00315.html
-    function setfenv(f, t)
-        f = (type(f) == 'function' and f or debug.getinfo(f + 1, 'f').func)
-        local name
-        local up = 0
-        repeat
-            up = up + 1
-            name = debug.getupvalue(f, up)
-        until name == '_ENV' or name == nil
-        if name then
-            debug.upvaluejoin(f, up, function() return name end, 1) -- use unique upvalue
-            debug.setupvalue(f, up, t)
-        end
-        if f ~= 0 then return f end
-    end
-
-    function getfenv(f)
-        local f = f or 0
-        f = (type(f) == 'function' and f or debug.getinfo(f + 1, 'f').func)
-        local name, val
-        local up = 0
-        repeat
-            up = up + 1
-            name, val = debug.getupvalue(f, up)
-        until name == '_ENV' or name == nil
-        return val
-    end
-end
-
-
---- execute a shell command.
--- This is a compatibility function that returns the same for Lua 5.1 and Lua 5.2
+--- execute a shell command and return the output.
+-- This function redirects the output to tempfiles and returns the content of those files.
 -- @param cmd a shell command
+-- @param bin boolean, if true, read output as binary file
 -- @return true if successful
 -- @return actual return code
-function utils.execute (cmd)
-    local res1,res2,res2 = os.execute(cmd)
-    if lua51 then
-        return res1==0,res1
-    else
-        return res1,res2
+-- @return stdout output (string)
+-- @return errout output (string)
+function utils.executeex(cmd, bin)
+    local mode
+    local outfile = os.tmpname()
+    local errfile = os.tmpname()
+
+    if utils.dir_separator == '\\' then
+        outfile = os.getenv('TEMP')..outfile
+        errfile = os.getenv('TEMP')..errfile
     end
+    cmd = cmd .. [[ >"]]..outfile..[[" 2>"]]..errfile..[["]]
+
+    local success, retcode = utils.execute(cmd)
+    local outcontent = utils.readfile(outfile, bin)
+    local errcontent = utils.readfile(errfile, bin)
+    os.remove(outfile)
+    os.remove(errfile)
+    return success, retcode, (outcontent or ""), (errcontent or "")
 end
-
-if lua51 then
-    function table.pack (...)
-        local n = select('#',...)
-        return {n=n; ...}
-    end
-    local sep = package.config:sub(1,1)
-    function package.searchpath (mod,path)
-        mod = mod:gsub('%.',sep)
-        for m in path:gmatch('[^;]+') do
-            local nm = m:gsub('?',mod)
-            local f = io.open(nm,'r')
-            if f then f:close(); return nm end
-        end
-    end
-end
-
-if not table.pack then table.pack = _G.pack end
-if not rawget(_G,"pack") then _G.pack = table.pack end
-
---- take an arbitrary set of arguments and make into a table.
--- This returns the table and the size; works fine for nil arguments
--- @param ... arguments
--- @return table
--- @return table size
--- @usage local t,n = utils.args(...)
 
 --- 'memoize' a function (cache returned value for next call).
 -- This is useful if you have a function which is relatively expensive,
@@ -326,49 +262,6 @@ function utils.memoize(func)
     })
 end
 
---- is the object either a function or a callable object?.
--- @param obj Object to check.
-function utils.is_callable (obj)
-    return type(obj) == 'function' or getmetatable(obj) and getmetatable(obj).__call
-end
-
---- is the object of the specified type?.
--- If the type is a string, then use type, otherwise compare with metatable
--- @param obj An object to check
--- @param tp String of what type it should be
-function utils.is_type (obj,tp)
-    if type(tp) == 'string' then return type(obj) == tp end
-    local mt = getmetatable(obj)
-    return tp == mt
-end
-
-local fileMT = getmetatable(io.stdout)
-
---- a string representation of a type.
--- For tables with metatables, we assume that the metatable has a `_name`
--- field. Knows about Lua file objects.
--- @param obj an object
--- @return a string like 'number', 'table' or 'List'
-function utils.type (obj)
-    local t = type(obj)
-    if t == 'table' or t == 'userdata' then
-        local mt = getmetatable(obj)
-        if mt == fileMT then
-            return 'file'
-        else
-            return mt._name or "unknown "..t
-        end
-    else
-        return t
-    end
-end
-
---- is this number an integer?
--- @param x a number
--- @raise error if x is not a number
-function utils.is_integer (x)
-    return math.ceil(x)==x
-end
 
 utils.stdmt = {
     List = {_name='List'}, Map = {_name='Map'},
@@ -397,7 +290,7 @@ local function _string_lambda(f)
             if not args then return raise 'bad string lambda' end
         end
         local fstr = 'return function('..args..') return '..body..' end'
-        local fn,err = loadstring(fstr)
+        local fn,err = utils.load(fstr)
         if not fn then return raise(err) end
         fn = fn()
         return fn
@@ -426,7 +319,6 @@ local ops
 -- @param msg optional error message
 -- @return a callable
 -- @raise if idx is not a number or if f is not callable
--- @see utils.is_callable
 function utils.function_arg (idx,f,msg)
     utils.assert_arg(1,idx,'number')
     local tp = type(f)
@@ -463,7 +355,7 @@ end
 -- @param p a value
 -- @return a function such that f(x) is fn(p,x)
 -- @raise same as @{function_arg}
--- @see pl.func.curry
+-- @see func.bind1
 function utils.bind1 (fn,p)
     fn = utils.function_arg(1,fn)
     return function(...) return fn(p,...) end
@@ -537,6 +429,16 @@ function utils.raise (err)
     end
 end
 
+--- is the object of the specified type?.
+-- If the type is a string, then use type, otherwise compare with metatable
+-- @param obj An object to check
+-- @param tp String of what type it should be
+function utils.is_type (obj,tp)
+    if type(tp) == 'string' then return type(obj) == tp end
+    local mt = getmetatable(obj)
+    return tp == mt
+end
+
 raise = utils.raise
 
 --- load a code string or bytecode chunk.
@@ -548,22 +450,25 @@ raise = utils.raise
 -- @return error message (chunk is nil)
 -- @function utils.load
 
+---------------
+-- Get environment of a function.
+-- With Lua 5.2, may return nil for a function with no global references!
+-- Based on code by [Sergey Rozhenko](http://lua-users.org/lists/lua-l/2010-06/msg00313.html)
+-- @param f a function or a call stack reference
+-- @function utils.setfenv
 
---- Lua 5.2 Compatible Functions
--- @section lua52
+---------------
+-- Set environment of a function
+-- @param f a function or a call stack reference
+-- @param env a table that becomes the new environment of `f`
+-- @function utils.setfenv
 
---- pack an argument list into a table.
--- @param ... any arguments
--- @return a table with field n set to the length
--- @return the length
--- @function table.pack
-
-------
--- return the full path where a Lua module name would be matched.
--- @param mod module name, possibly dotted
--- @param path a path in the same form as package.path or package.cpath
--- @see path.package_path
--- @function package.searchpath
+--- execute a shell command.
+-- This is a compatibility function that returns the same for Lua 5.1 and Lua 5.2
+-- @param cmd a shell command
+-- @return true if successful
+-- @return actual return code
+-- @function utils.execute
 
 return utils
 
