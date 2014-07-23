@@ -353,8 +353,8 @@ if detected.mingw32 then
    defaults.variables.CC = "mingw32-gcc"
    defaults.variables.RC = "windres"
    defaults.variables.LD = "mingw32-gcc"
-   defaults.variables.CFLAGS = "-m32 -O2"
-   defaults.variables.LIBFLAG = "-m32 -shared"
+   defaults.variables.CFLAGS = "-O2"
+   defaults.variables.LIBFLAG = "-shared"
    defaults.external_deps_patterns = {
       bin = { "?.exe", "?.bat" },
       -- mingw lookup list from http://stackoverflow.com/a/15853231/1793220
@@ -378,13 +378,13 @@ if detected.unix then
    defaults.variables.LUA_BINDIR = site_config.LUA_BINDIR or "/usr/local/bin"
    defaults.variables.LUA_INCDIR = site_config.LUA_INCDIR or "/usr/local/include"
    defaults.variables.LUA_LIBDIR = site_config.LUA_LIBDIR or "/usr/local/lib"
-   defaults.variables.CFLAGS = "-m32 -O2"
+   defaults.variables.CFLAGS = "-O2"
    defaults.cmake_generator = "Unix Makefiles"
    defaults.platforms = { "unix" }
    defaults.variables.CC = "gcc"
    defaults.variables.LD = "gcc"
    defaults.gcc_rpath = true
-   defaults.variables.LIBFLAG = "-m32 -shared"
+   defaults.variables.LIBFLAG = "-shared"
    defaults.external_deps_patterns = {
       bin = { "?" },
       lib = { "lib?.a", "lib?.so", "lib?.so.*" },
@@ -401,6 +401,9 @@ if detected.unix then
    defaults.export_lua_cpath = "export LUA_CPATH='%s'"
    defaults.wrapper_suffix = ""
    defaults.local_cache = home.."/.cache/luarocks"
+   if not defaults.variables.CFLAGS:match("-fPIC") then
+      defaults.variables.CFLAGS = defaults.variables.CFLAGS.." -fPIC"
+   end
    defaults.web_browser = "xdg-open"
 end
 
@@ -411,7 +414,7 @@ if detected.cygwin then
    defaults.cmake_generator = "Unix Makefiles"
    defaults.variables.CC = "echo -llua | xargs gcc"
    defaults.variables.LD = "echo -llua | xargs gcc"
-   defaults.variables.LIBFLAG = "-m32 -shared"
+   defaults.variables.LIBFLAG = "-shared"
 end
 
 if detected.bsd then

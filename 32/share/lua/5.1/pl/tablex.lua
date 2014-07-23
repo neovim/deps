@@ -2,13 +2,14 @@
 --
 -- See @{02-arrays.md.Useful_Operations_on_Tables|the Guide}
 --
--- Dependencies: `pl.utils`
+-- Dependencies: `pl.utils`, `pl.types`
 -- @module pl.tablex
 local utils = require ('pl.utils')
+local types = require ('pl.types')
 local getmetatable,setmetatable,require = getmetatable,setmetatable,require
-local append,remove = table.insert,table.remove
+local tsort,append,remove = table.sort,table.insert,table.remove
 local min,max = math.min,math.max
-local pairs,type,unpack,next,select,tostring = pairs,type,unpack,next,select,tostring
+local pairs,type,unpack,next,select,tostring = pairs,type,utils.unpack,next,select,tostring
 local function_arg = utils.function_arg
 local Set = utils.stdmt.Set
 local List = utils.stdmt.List
@@ -29,39 +30,27 @@ local function makelist (res)
     return setmetatable(res,List)
 end
 
-local function check_meta (val)
-    if type(val) == 'table' then return true end
-    return getmetatable(val)
-end
-
 local function complain (idx,msg)
     error(('argument %d is not %s'):format(idx,msg),3)
 end
 
 local function assert_arg_indexable (idx,val)
-    local mt = check_meta(val)
-    if mt == true then return end
-    if not(mt and mt.__len and mt.__index) then
+    if not types.is_indexable(val) then
         complain(idx,"indexable")
     end
 end
 
 local function assert_arg_iterable (idx,val)
-    local mt = check_meta(val)
-    if mt == true then return end
-    if not(mt and mt.__pairs) then
+    if not types.is_iterable(val) then
         complain(idx,"iterable")
     end
 end
 
 local function assert_arg_writeable (idx,val)
-    local mt = check_meta(val)
-    if mt == true then return end
-    if not(mt and mt.__newindex) then
+    if not types.is_writeable(val) then
         complain(idx,"writeable")
     end
 end
-
 
 --- copy a table into another, in-place.
 -- @param t1 destination table
@@ -333,7 +322,7 @@ function tablex.transform (fun,t,...)
     assert_arg_iterable(1,t)
     fun = function_arg(1,fun)
     for k,v in pairs(t) do
-        t[v] = fun(v,...)
+        t[k] = fun(v,...)
     end
 end
 
@@ -565,11 +554,11 @@ function tablex.difference (s1,s2,symm)
     assert_arg_iterable(2,s2)
     local res = {}
     for k,v in pairs(s1) do
-        if not s2[k] then res[k] = v end
+        if s2[k] == nil then res[k] = v end
     end
     if symm then
         for k,v in pairs(s2) do
-            if not s1[k] then res[k] = v end
+            if s1[k] == nil then res[k] = v end
         end
     end
     return setmeta(res,s1,Map)
@@ -655,11 +644,11 @@ function _copy (dest,src,idest,isrc,nsrc,clean_tail)
     return dest
 end
 
---- copy an array into another one, resizing the destination if necessary. <br>
+--- copy an array into another one, clearing dest after idest+nsrc, if necessary. <br>
 -- @param dest a list-like table
 -- @param src a list-like table
--- @param idest where to start copying values from source (default 1)
--- @param isrc where to start copying values into destination (default 1)
+-- @param idest where to start copying values into destination (default 1)
+-- @param isrc where to start copying values from source (default 1)
 -- @param nsrc number of elements to copy from source (default source size)
 function tablex.icopy (dest,src,idest,isrc,nsrc)
     assert_arg_indexable(1,dest)
@@ -670,8 +659,8 @@ end
 --- copy an array into another one. <br>
 -- @param dest a list-like table
 -- @param src a list-like table
--- @param idest where to start copying values from source (default 1)
--- @param isrc where to start copying values into destination (default 1)
+-- @param idest where to start copying values into destination (default 1)
+-- @param isrc where to start copying values from source (default 1)
 -- @param nsrc number of elements to copy from source (default source size)
 function tablex.move (dest,src,idest,isrc,nsrc)
     assert_arg_indexable(1,dest)
@@ -714,7 +703,7 @@ end
 function tablex.set (t,val,i1,i2)
     assert_arg_indexable(1,t)
     i1,i2 = i1 or 1,i2 or #t
-    if utils.is_callable(val) then
+    if types.is_callable(val) then
         for i = i1,i2 do
             t[i] = val(i)
         end
@@ -816,5 +805,55 @@ function tablex.search (t,value,exclude)
     end
     return _find(t,value,tables)
 end
+
+--- return an iterator to a table sorted by its keys
+-- @param t the table
+-- @param f an optional comparison function (f(x,y) is true if x < y)
+-- @usage for k,v in tablex.sort(t) do print(k,v) end
+-- @return an iterator to traverse elements sorted by the keys
+function tablex.sort(t,f)
+   local keys = {}
+   for k in pairs(t) do keys[#keys + 1] = k end
+   tsort(keys,f)
+   local i = 0
+   return function()
+      i = i + 1
+      return keys[i], t[keys[i]]
+   end
+end
+
+--- return an iterator to a table sorted by its values
+-- @param t the table
+-- @param f an optional comparison function (f(x,y) is true if x < y)
+-- @usage for k,v in tablex.sortv(t) do print(k,v) end
+-- @return an iterator to traverse elements sorted by the values
+function tablex.sortv(t,f)
+   local rev = {}
+   for k,v in pairs(t) do rev[v] = k end
+   local next = tablex.sort(rev,f)
+   return function()
+      local value,key = next()
+      return key,value
+   end
+end
+
+--- modifies a table to be read only.
+-- This only offers weak protection. Tables can still be modified with
+-- table.insert and rawset.
+-- @param t the table
+-- @return the table read only.
+function tablex.readonly(t)
+    local mt = {
+        __index=t,
+        __newindex=function(t, k, v) error("Attempt to modify read-only table", 2) end,
+        __pairs=function() return pairs(t) end,
+        __ipairs=function() return ipairs(t) end,
+        __len=function() return #t end,
+        __metatable=false
+    }
+    return setmetatable({}, mt)
+end
+
+
 
 return tablex

@@ -1,6 +1,0 @@
-rock_manifest = {
-   ['dkjson-2.4-1.rockspec'] = "bea6ecc16063c0ba08e11694a1aa7a95",
-   lua = {
-      ['dkjson.lua'] = "51cd3c73f4804b31243886c38d89addd"
-   }
-}

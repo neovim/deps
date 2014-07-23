@@ -1,7 +1,7 @@
 --- Checks uses of undeclared global variables.
 -- All global variables must be 'declared' through a regular assignment
--- (even assigning nil will do) in a main chunk before being used
--- anywhere or assigned to inside a function.  Existing metatables' __newindex and __index
+-- (even assigning `nil` will do) in a main chunk before being used
+-- anywhere or assigned to inside a function.  Existing metatables `__newindex` and `__index`
 -- metamethods are respected.
 --
 -- You can set any table to have strict behaviour using `strict.module`
@@ -47,17 +47,19 @@ function strict.module (name,mod,predeclared)
             old_newindex(t, n, v)
             if rawget(t,n)~=nil then return end
         end
-        if global then
-            local w = what()
-            if w ~= "main" and w ~= "C" then
-                error("assign to undeclared global '"..n.."'", 2)
+        if not mt.__declared[n] then
+            if global then
+                local w = what()
+                if w ~= "main" and w ~= "C" then
+                    error("assign to undeclared global '"..n.."'", 2)
+                end
             end
+            mt.__declared[n] = true
         end
-        mt.__declared[n] = true
         rawset(t, n, v)
     end
     mt.__index = function(t,n)
-        if not mt.__declared[n] then
+        if not mt.__declared[n] and what() ~= "C" then
             if old_index then
                 local res = old_index(t, n)
                 if res then return res end
