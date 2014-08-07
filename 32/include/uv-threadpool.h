@@ -19,20 +19,19 @@
  * IN THE SOFTWARE.
  */
 
-#ifndef UV_VERSION_H
-#define UV_VERSION_H
-
- /*
- * Versions with an even minor version (e.g. 0.6.1 or 1.0.4) are API and ABI
- * stable. When the minor version is odd, the API can change between patch
- * releases. Make sure you update the -soname directives in configure.ac
- * and uv.gyp whenever you bump UV_VERSION_MAJOR or UV_VERSION_MINOR (but
- * not UV_VERSION_PATCH.)
+/*
+ * This file is private to libuv. It provides common functionality to both
+ * Windows and Unix backends.
  */
 
-#define UV_VERSION_MAJOR 0
-#define UV_VERSION_MINOR 11
-#define UV_VERSION_PATCH 28
-#define UV_VERSION_IS_RELEASE 1
+#ifndef UV_THREADPOOL_H_
+#define UV_THREADPOOL_H_
 
-#endif /* UV_VERSION_H */
+struct uv__work {
+  void (*work)(struct uv__work *w);
+  void (*done)(struct uv__work *w, int status);
+  struct uv_loop_s* loop;
+  void* wq[2];
+};
+
+#endif /* UV_THREADPOOL_H_ */
