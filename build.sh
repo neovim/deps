@@ -72,3 +72,10 @@ EOF
 make deps
 
 popd
+
+rm -rf neovim
+
+cp color_terminal.lua share/lua/*/busted/output
+cp color_terminal.lua 32/share/lua/*/busted/output
+
+git add .
