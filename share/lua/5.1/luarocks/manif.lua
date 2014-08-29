@@ -1,9 +1,10 @@
-
 --- Module for handling manifest files and tables.
 -- Manifest files describe the contents of a LuaRocks tree or server.
 -- They are loaded into manifest tables, which are then used for
 -- performing searches, matching dependencies, etc.
-module("luarocks.manif", package.seeall)
+--module("luarocks.manif", package.seeall)
+local manif = {}
+package.loaded["luarocks.manif"] = manif
 
 local manif_core = require("luarocks.manif_core")
 local persist = require("luarocks.persist")
@@ -17,7 +18,7 @@ local path = require("luarocks.path")
 local repos = require("luarocks.repos")
 local deps = require("luarocks.deps")
 
-rock_manifest_cache = {}
+manif.rock_manifest_cache = {}
 
 --- Commit a table to disk in given local path.
 -- @param where string: The directory where the table should be saved.
@@ -38,22 +39,22 @@ local function save_table(where, name, tbl)
    return ok, err
 end
 
-function load_rock_manifest(name, version, root)
+function manif.load_rock_manifest(name, version, root)
    assert(type(name) == "string")
    assert(type(version) == "string")
 
    local name_version = name.."/"..version
-   if rock_manifest_cache[name_version] then
-      return rock_manifest_cache[name_version].rock_manifest
+   if manif.rock_manifest_cache[name_version] then
+      return manif.rock_manifest_cache[name_version].rock_manifest
    end
    local pathname = path.rock_manifest_file(name, version, root)
    local rock_manifest = persist.load_into_table(pathname)
    if not rock_manifest then return nil end
-   rock_manifest_cache[name_version] = rock_manifest
+   manif.rock_manifest_cache[name_version] = rock_manifest
    return rock_manifest.rock_manifest
 end
 
-function make_rock_manifest(name, version)
+function manif.make_rock_manifest(name, version)
    local install_dir = path.install_dir(name, version)
    local rock_manifest = path.rock_manifest_file(name, version)
    local tree = {}
@@ -80,8 +81,8 @@ function make_rock_manifest(name, version)
          last[last_name] = sum
       end
    end
-   local rock_manifest = { rock_manifest=tree }
-   rock_manifest_cache[name.."/"..version] = rock_manifest
+   rock_manifest = { rock_manifest=tree }
+   manif.rock_manifest_cache[name.."/"..version] = rock_manifest
    save_table(install_dir, "rock_manifest", rock_manifest )
 end
 
@@ -106,7 +107,7 @@ end
 -- @param repo_url string: URL or pathname for the repository.
 -- @return table or (nil, string, [string]): A table representing the manifest,
 -- or nil followed by an error message and an optional error code.
-function load_manifest(repo_url)
+function manif.load_manifest(repo_url)
    assert(type(repo_url) == "string")
 
    if manif_core.manifest_cache[repo_url] then
@@ -129,15 +130,15 @@ function load_manifest(repo_url)
          end
       end
    else
-      local err
+      local err, errcode
       for _, filename in ipairs(filenames) do
-         pathname, err = fetch_manifest_from(repo_url, filename)
+         pathname, err, errcode = fetch_manifest_from(repo_url, filename)
          if pathname then
             break
          end
       end
       if not pathname then 
-         return nil, err
+         return nil, err, errcode
       end
    end
    if pathname:match(".*%.zip$") then
@@ -253,7 +254,7 @@ local function update_dependencies(manifest, deps_mode)
                   for miss, err in pairs(missing) do
                      if miss == current then
                         util.printerr("Tree inconsistency detected: "..current.." has no rockspec. "..err)
-                     else
+                     elseif deps_mode ~= "none" then
                         util.printerr("Missing dependency for "..pkg.." "..version..": "..miss)
                      end
                   end
@@ -333,7 +334,7 @@ local function store_results(results, manifest, dep_handler)
             local entrytable = {}
             entrytable.arch = entry.arch
             if entry.arch == "installed" then
-               local rock_manifest = load_rock_manifest(name, version)
+               local rock_manifest = manif.load_rock_manifest(name, version)
                if not rock_manifest then
                   return nil, "rock_manifest file not found for "..name.." "..version.." - not a LuaRocks 2 tree?"
                end
@@ -364,7 +365,7 @@ end
 -- @param versioned boolean: if versioned versions of the manifest should be created.
 -- @return boolean or (nil, string): True if manifest was generated,
 -- or nil and an error message.
-function make_manifest(repo, deps_mode, remote)
+function manif.make_manifest(repo, deps_mode, remote)
    assert(type(repo) == "string")
    assert(type(deps_mode) == "string")
 
@@ -413,13 +414,13 @@ end
 -- @param name string: Name of a package from the repository.
 -- @param version string: Version of a package from the repository.
 -- @param repo string or nil: Pathname of a local repository. If not given,
--- the default local repository configured as cfg.rocks_dir is used.
+-- the default local repository is used.
 -- @param deps_mode string: Dependency mode: "one" for the current default tree,
 -- "all" for all trees, "order" for all trees with priority >= the current default,
 -- "none" for using the default dependency mode from the configuration.
 -- @return boolean or (nil, string): True if manifest was generated,
 -- or nil and an error message.
-function update_manifest(name, version, repo, deps_mode)
+function manif.update_manifest(name, version, repo, deps_mode)
    assert(type(name) == "string")
    assert(type(version) == "string")
    repo = path.rocks_dir(repo or cfg.root_dir)
@@ -429,14 +430,14 @@ function update_manifest(name, version, repo, deps_mode)
 
    util.printout("Updating manifest for "..repo)
 
-   local manifest, err = load_manifest(repo)
+   local manifest, err = manif.load_manifest(repo)
    if not manifest then
       util.printerr("No existing manifest. Attempting to rebuild...")
-      local ok, err = make_manifest(repo, deps_mode)
+      local ok, err = manif.make_manifest(repo, deps_mode)
       if not ok then
          return nil, err
       end
-      manifest, err = load_manifest(repo)
+      manifest, err = manif.load_manifest(repo)
       if not manifest then
          return nil, err
       end
@@ -453,7 +454,7 @@ function update_manifest(name, version, repo, deps_mode)
    return save_table(repo, "manifest", manifest)
 end
 
-function zip_manifests()
+function manif.zip_manifests()
    for ver in util.lua_versions() do
       local file = "manifest-"..ver
       local zip = file..".zip"
@@ -500,13 +501,13 @@ end
 -- @param file string: The full path of a deployed file.
 -- @param root string or nil: A local root dir for a rocks tree. If not given, the default is used.
 -- @return string, string: name and version of the provider rock.
-function find_current_provider(file, root)
+function manif.find_current_provider(file, root)
    local providers, err = find_providers(file, root)
    if not providers then return nil, err end
    return providers[1]:match("([^/]*)/([^/]*)")
 end
 
-function find_next_provider(file, root)
+function manif.find_next_provider(file, root)
    local providers, err = find_providers(file, root)
    if not providers then return nil, err end
    if providers[2] then
@@ -515,3 +516,5 @@ function find_next_provider(file, root)
       return nil
    end
 end
+
+return manif

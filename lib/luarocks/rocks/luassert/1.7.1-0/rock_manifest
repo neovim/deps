@@ -1,8 +1,12 @@
 rock_manifest = {
+   doc = {
+      LICENSE = "005de8f8f73245c988a708cf1cace960",
+      ['README.md'] = "e7d2ff161e4f80f99ac03977df01141b"
+   },
    lua = {
       luassert = {
-         ['assert.lua'] = "65952aed8146a5e58f997a6d7d72e9b7",
-         ['assertions.lua'] = "fbc3f2aeff3d4d5aa62061857b4d0af5",
+         ['assert.lua'] = "ff4129636c677dada090b8e918076224",
+         ['assertions.lua'] = "f86311473a32ee68d7788511bbd9474a",
          formatters = {
             ['binarystring.lua'] = "1cf3fba0573869e42fe1374f3919b2db",
             ['init.lua'] = "a303b408de5d429241750195bff176fb"
@@ -21,10 +25,10 @@ rock_manifest = {
          ['mock.lua'] = "0cf03425fea556014923e6d7088f99af",
          ['modifiers.lua'] = "86adced69ccf80b195efa711e45a4d2c",
          ['spy.lua'] = "880c184d63134722a046393f7b58c8a6",
-         ['state.lua'] = "04e54d68779fa3d7000faf052380efb1",
+         ['state.lua'] = "f81a18c8b2d077386b62e52d25a5640d",
          ['stub.lua'] = "6f550dbbd7c7eea1bf077cc0daa7b0c1",
-         ['util.lua'] = "d6b1fa0f33897f5488f17da0f84bd229"
+         ['util.lua'] = "76efe8fc038eb256977ed50746cae5cf"
       }
    },
-   ['luassert-1.7.0-1.rockspec'] = "1aaa47e94118c5fdd0a21e56dcfb6d72"
+   ['luassert-1.7.1-0.rockspec'] = "8997f07674241a7cf4156eb1f0c38e88"
 }
