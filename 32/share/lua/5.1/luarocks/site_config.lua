@@ -1,15 +1,18 @@
-module("luarocks.site_config")
-LUAROCKS_PREFIX=[[/opt/neovim-deps/32]]
-LUA_INCDIR=[[/opt/neovim-deps/32/include/luajit-2.0]]
-LUA_LIBDIR=[[/opt/neovim-deps/32/lib]]
-LUA_BINDIR=[[/opt/neovim-deps/32/bin]]
-LUA_INTERPRETER=[[luajit]]
-LUAROCKS_SYSCONFDIR=[[/opt/neovim-deps/32/etc/luarocks]]
-LUAROCKS_ROCKS_TREE=[[/opt/neovim-deps/32]]
-LUAROCKS_FORCE_CONFIG=true
-LUAROCKS_ROCKS_SUBDIR=[[/lib/luarocks/rocks]]
-LUA_DIR_SET=true
-LUAROCKS_UNAME_S=[[Linux]]
-LUAROCKS_UNAME_M=[[x86_64]]
-LUAROCKS_DOWNLOADER=[[wget]]
-LUAROCKS_MD5CHECKER=[[md5sum]]
+local site_config = {}
+site_config.LUAROCKS_PREFIX=[[/opt/neovim-deps/32]]
+site_config.LUA_INCDIR=[[/opt/neovim-deps/32/include/luajit-2.0]]
+site_config.LUA_LIBDIR=[[/opt/neovim-deps/32/lib]]
+site_config.LUA_BINDIR=[[/opt/neovim-deps/32/bin]]
+site_config.LUA_INTERPRETER=[[luajit]]
+site_config.LUAROCKS_SYSCONFDIR=[[/opt/neovim-deps/32/etc/luarocks]]
+site_config.LUAROCKS_ROCKS_TREE=[[/opt/neovim-deps/32]]
+site_config.LUAROCKS_FORCE_CONFIG=true
+site_config.LUAROCKS_ROCKS_SUBDIR=[[/lib/luarocks/rocks]]
+site_config.LUA_DIR_SET=true
+site_config.LUAROCKS_UNAME_S=[[Linux]]
+site_config.LUAROCKS_UNAME_M=[[i686]]
+site_config.LUAROCKS_DOWNLOADER=[[curl]]
+site_config.LUAROCKS_MD5CHECKER=[[md5sum]]
+site_config.LUAROCKS_EXTERNAL_DEPS_SUBDIRS={ bin="bin", lib={ "lib", [[lib/i386-linux-gnu]] }, include="include" }
+site_config.LUAROCKS_RUNTIME_EXTERNAL_DEPS_SUBDIRS={ bin="bin", lib={ "lib", [[lib/i386-linux-gnu]] }, include="include" }
+return site_config

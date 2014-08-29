@@ -3,6 +3,9 @@ rock_manifest = {
       moon = "b9d71e581c3a17d17531c88fc8726685",
       moonc = "ee5bf8ee1cd2075d130fb22613b267f3"
    },
+   doc = {
+      ['README.md'] = "43dce96590efadeddd82ccebfdebc4fe"
+   },
    lua = {
       moon = {
          ['all.lua'] = "515a4a46175ca2d388446590da39d372",

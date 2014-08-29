@@ -4,7 +4,8 @@
 -- uses a global table called "commands" to find commands
 -- to show help for; each command should be represented by a
 -- table containing "help" and "help_summary" fields.
-module("luarocks.help", package.seeall)
+--module("luarocks.help", package.seeall)
+local help = {}
 
 local util = require("luarocks.util")
 local cfg = require("luarocks.cfg")
@@ -12,10 +13,10 @@ local dir = require("luarocks.dir")
 
 local program = util.this_program("luarocks")
 
-help_summary = "Help on commands. Type '"..program.." help <command>' for more."
+help.help_summary = "Help on commands. Type '"..program.." help <command>' for more."
 
-help_arguments = "[<command>]"
-help = [[
+help.help_arguments = "[<command>]"
+help.help = [[
 <command> is the command to show help for.
 ]]
 
@@ -42,7 +43,7 @@ end
 -- given, help summaries for all commands are shown.
 -- @return boolean or (nil, string): true if there were no errors
 -- or nil and an error message if an invalid command was requested.
-function run(...)
+function help.run(...)
    local flags, command = util.parse_flags(...)
 
    if not command then
@@ -64,13 +65,16 @@ function run(...)
 	                       given URL.
 	--tree=<tree>          Which tree to operate on.
 	--local                Use the tree in the user's home directory.
-	                       To enable it, see ']]..program..[[ help path'.]])
+	                       To enable it, see ']]..program..[[ help path'.
+	--verbose              Display verbose output of commands executed.
+	--timeout=<seconds>    Timeout on network operations, in seconds.
+	                       0 means no timeout (wait forever).
+	                       Default is ]]..cfg.connection_timeout..[[.]])
       print_section("VARIABLES")
       util.printout([[
 	Variables from the "variables" table of the configuration file
 	can be overriden with VAR=VALUE assignments.]])
       print_section("COMMANDS")
-      local names = {}
       for name, command in util.sortedpairs(commands) do
          local cmd = require(command)
          util.printout("", name)
@@ -114,3 +118,5 @@ function run(...)
    end
    return true
 end
+
+return help

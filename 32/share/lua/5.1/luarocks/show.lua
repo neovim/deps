@@ -1,19 +1,19 @@
-
 --- Module implementing the LuaRocks "show" command.
 -- Shows information about an installed rock.
-module("luarocks.show", package.seeall)
+--module("luarocks.show", package.seeall)
+local show = {}
+package.loaded["luarocks.show"] = show
 
 local search = require("luarocks.search")
 local cfg = require("luarocks.cfg")
 local util = require("luarocks.util")
 local path = require("luarocks.path")
-local dir = require("luarocks.dir")
 local deps = require("luarocks.deps")
 local fetch = require("luarocks.fetch")
 local manif = require("luarocks.manif")
-help_summary = "Shows information about an installed rock."
+show.help_summary = "Shows information about an installed rock."
 
-help = [[
+show.help = [[
 <argument> is an existing package name.
 Without any flags, show all module information.
 With these flags, return only the desired information:
@@ -55,18 +55,7 @@ local function format_text(text)
    return (table.concat(paragraphs, "\n\n"):gsub("%s$", ""))
 end
 
-local function module_name(mod, filename, name, version, repo, manifest)
-   local base_dir
-   if filename:match("%.lua$") then
-      base_dir = path.deploy_lua_dir(repo)
-   else
-      base_dir = path.deploy_lib_dir(repo)
-   end
-   
-   return dir.path(base_dir, filename)
-end
-
-function pick_installed_rock(name, version, tree)
+function show.pick_installed_rock(name, version, tree)
    local results = {}
    local query = search.make_query(name, version)
    query.exact_name = true
@@ -103,14 +92,14 @@ end
 -- @param name or nil: an existing package name.
 -- @param version string or nil: a version may also be passed.
 -- @return boolean: True if succeeded, nil on errors.
-function run(...)
+function show.run(...)
    local flags, name, version = util.parse_flags(...)
    if not name then
       return nil, "Argument missing. "..util.see_help("show")
    end
    
    local repo, repo_url
-   name, version, repo, repo_url = pick_installed_rock(name, version, flags["tree"])
+   name, version, repo, repo_url = show.pick_installed_rock(name, version, flags["tree"])
    if not name then
       return nil, version
    end
@@ -128,7 +117,7 @@ function run(...)
    if flags["rock-tree"] then util.printout(path.rocks_tree_to_string(repo))
    elseif flags["rock-dir"] then util.printout(directory)
    elseif flags["home"] then util.printout(descript.homepage)
-   elseif flags["modules"] then util.printout(keys_as_string(minfo.modules))
+   elseif flags["modules"] then util.printout(keys_as_string(minfo.modules, "\n"))
    elseif flags["deps"] then util.printout(keys_as_string(minfo.dependencies))
    elseif flags["rockspec"] then util.printout(rockspec_file)
    elseif flags["mversion"] then util.printout(version)
@@ -164,3 +153,5 @@ function run(...)
    return true
 end
 
+
+return show
