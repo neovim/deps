@@ -9,16 +9,16 @@ commands = {
       "busted/1.10.0-1"
    },
    luarocks = {
-      "luarocks/2.1.2-1"
+      "luarocks/2.2.0-1"
    },
    ['luarocks-5.1'] = {
-      "luarocks/2.1.2-1"
+      "luarocks/2.2.0-1"
    },
    ['luarocks-admin'] = {
-      "luarocks/2.1.2-1"
+      "luarocks/2.2.0-1"
    },
    ['luarocks-admin-5.1'] = {
-      "luarocks/2.1.2-1"
+      "luarocks/2.2.0-1"
    },
    moon = {
       "moonscript/0.2.6-1"
@@ -228,7 +228,7 @@ dependencies = {
       }
    },
    luarocks = {
-      ['2.1.2-1'] = {
+      ['2.2.0-1'] = {
          {
             constraints = {
                {
@@ -243,7 +243,7 @@ dependencies = {
       }
    },
    luassert = {
-      ['1.7.0-1'] = {
+      ['1.7.1-0'] = {
          {
             constraints = {
                {
@@ -428,229 +428,244 @@ modules = {
       "lpeg/0.12-1"
    },
    ['luarocks.add'] = {
-      "luarocks/2.1.2-1"
+      "luarocks/2.2.0-1"
    },
    ['luarocks.admin_remove'] = {
-      "luarocks/2.1.2-1"
+      "luarocks/2.2.0-1"
    },
    ['luarocks.build'] = {
-      "luarocks/2.1.2-1"
+      "luarocks/2.2.0-1"
    },
    ['luarocks.build.builtin'] = {
-      "luarocks/2.1.2-1"
+      "luarocks/2.2.0-1"
    },
    ['luarocks.build.cmake'] = {
-      "luarocks/2.1.2-1"
+      "luarocks/2.2.0-1"
    },
    ['luarocks.build.command'] = {
-      "luarocks/2.1.2-1"
+      "luarocks/2.2.0-1"
    },
    ['luarocks.build.make'] = {
-      "luarocks/2.1.2-1"
+      "luarocks/2.2.0-1"
    },
    ['luarocks.cache'] = {
-      "luarocks/2.1.2-1"
+      "luarocks/2.2.0-1"
    },
    ['luarocks.cfg'] = {
-      "luarocks/2.1.2-1"
+      "luarocks/2.2.0-1"
    },
    ['luarocks.command_line'] = {
-      "luarocks/2.1.2-1"
+      "luarocks/2.2.0-1"
    },
    ['luarocks.deps'] = {
-      "luarocks/2.1.2-1"
+      "luarocks/2.2.0-1"
    },
    ['luarocks.dir'] = {
-      "luarocks/2.1.2-1"
+      "luarocks/2.2.0-1"
    },
    ['luarocks.doc'] = {
-      "luarocks/2.1.2-1"
+      "luarocks/2.2.0-1"
    },
    ['luarocks.download'] = {
-      "luarocks/2.1.2-1"
+      "luarocks/2.2.0-1"
    },
    ['luarocks.fetch'] = {
-      "luarocks/2.1.2-1"
+      "luarocks/2.2.0-1"
    },
    ['luarocks.fetch.cvs'] = {
-      "luarocks/2.1.2-1"
+      "luarocks/2.2.0-1"
    },
    ['luarocks.fetch.git'] = {
-      "luarocks/2.1.2-1"
+      "luarocks/2.2.0-1"
    },
    ['luarocks.fetch.git_file'] = {
-      "luarocks/2.1.2-1"
+      "luarocks/2.2.0-1"
+   },
+   ['luarocks.fetch.git_http'] = {
+      "luarocks/2.2.0-1"
    },
    ['luarocks.fetch.hg'] = {
-      "luarocks/2.1.2-1"
+      "luarocks/2.2.0-1"
    },
    ['luarocks.fetch.sscm'] = {
-      "luarocks/2.1.2-1"
+      "luarocks/2.2.0-1"
    },
    ['luarocks.fetch.svn'] = {
-      "luarocks/2.1.2-1"
+      "luarocks/2.2.0-1"
    },
    ['luarocks.fs'] = {
-      "luarocks/2.1.2-1"
+      "luarocks/2.2.0-1"
    },
    ['luarocks.fs.lua'] = {
-      "luarocks/2.1.2-1"
+      "luarocks/2.2.0-1"
    },
    ['luarocks.fs.unix'] = {
-      "luarocks/2.1.2-1"
+      "luarocks/2.2.0-1"
    },
    ['luarocks.fs.unix.tools'] = {
-      "luarocks/2.1.2-1"
+      "luarocks/2.2.0-1"
    },
    ['luarocks.fs.win32'] = {
-      "luarocks/2.1.2-1"
+      "luarocks/2.2.0-1"
    },
    ['luarocks.fs.win32.tools'] = {
-      "luarocks/2.1.2-1"
+      "luarocks/2.2.0-1"
    },
    ['luarocks.help'] = {
-      "luarocks/2.1.2-1"
+      "luarocks/2.2.0-1"
    },
    ['luarocks.index'] = {
-      "luarocks/2.1.2-1"
+      "luarocks/2.2.0-1"
    },
    ['luarocks.install'] = {
-      "luarocks/2.1.2-1"
+      "luarocks/2.2.0-1"
    },
    ['luarocks.lint'] = {
-      "luarocks/2.1.2-1"
+      "luarocks/2.2.0-1"
    },
    ['luarocks.list'] = {
-      "luarocks/2.1.2-1"
+      "luarocks/2.2.0-1"
    },
    ['luarocks.loader'] = {
-      "luarocks/2.1.2-1"
+      "luarocks/2.2.0-1"
    },
    ['luarocks.make'] = {
-      "luarocks/2.1.2-1"
+      "luarocks/2.2.0-1"
    },
    ['luarocks.make_manifest'] = {
-      "luarocks/2.1.2-1"
+      "luarocks/2.2.0-1"
    },
    ['luarocks.manif'] = {
-      "luarocks/2.1.2-1"
+      "luarocks/2.2.0-1"
    },
    ['luarocks.manif_core'] = {
-      "luarocks/2.1.2-1"
+      "luarocks/2.2.0-1"
    },
    ['luarocks.new_version'] = {
-      "luarocks/2.1.2-1"
+      "luarocks/2.2.0-1"
    },
    ['luarocks.pack'] = {
-      "luarocks/2.1.2-1"
+      "luarocks/2.2.0-1"
    },
    ['luarocks.path'] = {
-      "luarocks/2.1.2-1"
+      "luarocks/2.2.0-1"
+   },
+   ['luarocks.path_cmd'] = {
+      "luarocks/2.2.0-1"
    },
    ['luarocks.persist'] = {
-      "luarocks/2.1.2-1"
+      "luarocks/2.2.0-1"
    },
    ['luarocks.purge'] = {
-      "luarocks/2.1.2-1"
+      "luarocks/2.2.0-1"
    },
    ['luarocks.refresh_cache'] = {
-      "luarocks/2.1.2-1"
+      "luarocks/2.2.0-1"
    },
    ['luarocks.remove'] = {
-      "luarocks/2.1.2-1"
+      "luarocks/2.2.0-1"
    },
    ['luarocks.repos'] = {
-      "luarocks/2.1.2-1"
+      "luarocks/2.2.0-1"
    },
    ['luarocks.require'] = {
-      "luarocks/2.1.2-1"
+      "luarocks/2.2.0-1"
    },
    ['luarocks.search'] = {
-      "luarocks/2.1.2-1"
+      "luarocks/2.2.0-1"
    },
    ['luarocks.show'] = {
-      "luarocks/2.1.2-1"
+      "luarocks/2.2.0-1"
    },
    ['luarocks.tools.patch'] = {
-      "luarocks/2.1.2-1"
+      "luarocks/2.2.0-1"
    },
    ['luarocks.tools.tar'] = {
-      "luarocks/2.1.2-1"
+      "luarocks/2.2.0-1"
    },
    ['luarocks.tools.zip'] = {
-      "luarocks/2.1.2-1"
+      "luarocks/2.2.0-1"
    },
    ['luarocks.type_check'] = {
-      "luarocks/2.1.2-1"
+      "luarocks/2.2.0-1"
    },
    ['luarocks.unpack'] = {
-      "luarocks/2.1.2-1"
+      "luarocks/2.2.0-1"
+   },
+   ['luarocks.upload'] = {
+      "luarocks/2.2.0-1"
+   },
+   ['luarocks.upload.api'] = {
+      "luarocks/2.2.0-1"
+   },
+   ['luarocks.upload.multipart'] = {
+      "luarocks/2.2.0-1"
    },
    ['luarocks.util'] = {
-      "luarocks/2.1.2-1"
+      "luarocks/2.2.0-1"
    },
    ['luarocks.validate'] = {
-      "luarocks/2.1.2-1"
+      "luarocks/2.2.0-1"
    },
    ['luarocks.write_rockspec'] = {
-      "luarocks/2.1.2-1"
+      "luarocks/2.2.0-1"
    },
    luassert = {
-      "luassert/1.7.0-1"
+      "luassert/1.7.1-0"
    },
    ['luassert.assert'] = {
-      "luassert/1.7.0-1"
+      "luassert/1.7.1-0"
    },
    ['luassert.assertions'] = {
-      "luassert/1.7.0-1"
+      "luassert/1.7.1-0"
    },
    ['luassert.formatters'] = {
-      "luassert/1.7.0-1"
+      "luassert/1.7.1-0"
    },
    ['luassert.formatters.binarystring'] = {
-      "luassert/1.7.0-1"
+      "luassert/1.7.1-0"
    },
    ['luassert.languages.ar'] = {
-      "luassert/1.7.0-1"
+      "luassert/1.7.1-0"
    },
    ['luassert.languages.en'] = {
-      "luassert/1.7.0-1"
+      "luassert/1.7.1-0"
    },
    ['luassert.languages.fr'] = {
-      "luassert/1.7.0-1"
+      "luassert/1.7.1-0"
    },
    ['luassert.languages.ja'] = {
-      "luassert/1.7.0-1"
+      "luassert/1.7.1-0"
    },
    ['luassert.languages.nl'] = {
-      "luassert/1.7.0-1"
+      "luassert/1.7.1-0"
    },
    ['luassert.languages.ru'] = {
-      "luassert/1.7.0-1"
+      "luassert/1.7.1-0"
    },
    ['luassert.languages.ua'] = {
-      "luassert/1.7.0-1"
+      "luassert/1.7.1-0"
    },
    ['luassert.languages.zh'] = {
-      "luassert/1.7.0-1"
+      "luassert/1.7.1-0"
    },
    ['luassert.mock'] = {
-      "luassert/1.7.0-1"
+      "luassert/1.7.1-0"
    },
    ['luassert.modifiers'] = {
-      "luassert/1.7.0-1"
+      "luassert/1.7.1-0"
    },
    ['luassert.spy'] = {
-      "luassert/1.7.0-1"
+      "luassert/1.7.1-0"
    },
    ['luassert.state'] = {
-      "luassert/1.7.0-1"
+      "luassert/1.7.1-0"
    },
    ['luassert.stub'] = {
-      "luassert/1.7.0-1"
+      "luassert/1.7.1-0"
    },
    ['luassert.util'] = {
-      "luassert/1.7.0-1"
+      "luassert/1.7.1-0"
    },
    moon = {
       "moonscript/0.2.6-1"
@@ -875,7 +890,7 @@ repository = {
                dkjson = "2.5-1",
                lua_cliargs = "2.1-2",
                luafilesystem = "1.6.2-2",
-               luassert = "1.7.0-1",
+               luassert = "1.7.1-0",
                penlight = "1.3.1-1",
                say = "1.2-1"
             },
@@ -967,7 +982,7 @@ repository = {
       }
    },
    luarocks = {
-      ['2.1.2-1'] = {
+      ['2.2.0-1'] = {
          {
             arch = "installed",
             commands = {
@@ -996,6 +1011,7 @@ repository = {
                ['luarocks.fetch.cvs'] = "luarocks/fetch/cvs.lua",
                ['luarocks.fetch.git'] = "luarocks/fetch/git.lua",
                ['luarocks.fetch.git_file'] = "luarocks/fetch/git_file.lua",
+               ['luarocks.fetch.git_http'] = "luarocks/fetch/git_http.lua",
                ['luarocks.fetch.hg'] = "luarocks/fetch/hg.lua",
                ['luarocks.fetch.sscm'] = "luarocks/fetch/sscm.lua",
                ['luarocks.fetch.svn'] = "luarocks/fetch/svn.lua",
@@ -1018,6 +1034,7 @@ repository = {
                ['luarocks.new_version'] = "luarocks/new_version.lua",
                ['luarocks.pack'] = "luarocks/pack.lua",
                ['luarocks.path'] = "luarocks/path.lua",
+               ['luarocks.path_cmd'] = "luarocks/path_cmd.lua",
                ['luarocks.persist'] = "luarocks/persist.lua",
                ['luarocks.purge'] = "luarocks/purge.lua",
                ['luarocks.refresh_cache'] = "luarocks/refresh_cache.lua",
@@ -1031,6 +1048,9 @@ repository = {
                ['luarocks.tools.zip'] = "luarocks/tools/zip.lua",
                ['luarocks.type_check'] = "luarocks/type_check.lua",
                ['luarocks.unpack'] = "luarocks/unpack.lua",
+               ['luarocks.upload'] = "luarocks/upload.lua",
+               ['luarocks.upload.api'] = "luarocks/upload/api.lua",
+               ['luarocks.upload.multipart'] = "luarocks/upload/multipart.lua",
                ['luarocks.util'] = "luarocks/util.lua",
                ['luarocks.validate'] = "luarocks/validate.lua",
                ['luarocks.write_rockspec'] = "luarocks/write_rockspec.lua"
@@ -1039,7 +1059,7 @@ repository = {
       }
    },
    luassert = {
-      ['1.7.0-1'] = {
+      ['1.7.1-0'] = {
          {
             arch = "installed",
             commands = {},

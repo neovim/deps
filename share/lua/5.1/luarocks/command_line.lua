@@ -1,6 +1,9 @@
 
 --- Functions for command-line scripts.
-module("luarocks.command_line", package.seeall)
+--module("luarocks.command_line", package.seeall)
+local command_line = {}
+
+local unpack = unpack or table.unpack
 
 local util = require("luarocks.util")
 local cfg = require("luarocks.cfg")
@@ -25,7 +28,7 @@ local function die(message, exitcode)
 end
 
 local function replace_tree(flags, args, tree)
-   local tree = dir.normalize(tree)
+   tree = dir.normalize(tree)
    flags["tree"] = tree
    for i = 1, #args do
       if args[i]:match("%-%-tree=") then
@@ -43,7 +46,7 @@ end
 -- Uses the global table "commands", which contains
 -- the loaded modules representing commands.
 -- @param ... string: Arguments given on the command-line.
-function run_command(...)
+function command_line.run_command(...)
    local args = {...}
    local cmdline_vars = {}
    for i = #args, 1, -1 do
@@ -80,6 +83,15 @@ function run_command(...)
       fs.verbose()
    end
 
+   if flags["timeout"] then   -- setting it in the config file will kick-in earlier in the process
+      local timeout = tonumber(flags["timeout"])
+      if timeout then
+         cfg.connection_timeout = timeout
+      else
+         die "Argument error: --timeout expects a numeric argument."
+      end
+   end
+
    if flags["version"] then
       util.printout(program.." "..cfg.program_version)
       util.printout(program_description)
@@ -111,6 +123,13 @@ function run_command(...)
 
    if flags["deps-mode"] and not deps.check_deps_mode_flag(flags["deps-mode"]) then
       die("Invalid entry for --deps-mode.")
+   end
+   
+   if flags["branch"] then
+     if flags["branch"] == true or flags["branch"] == "" then
+       die("Argument error: use --branch=<branch-name>")
+     end
+     cfg.branch = flags["branch"]
    end
    
    if flags["tree"] then
@@ -199,3 +218,5 @@ function run_command(...)
    end
    util.run_scheduled_functions()
 end
+
+return command_line
