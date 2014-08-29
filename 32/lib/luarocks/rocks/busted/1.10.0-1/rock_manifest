@@ -5,6 +5,10 @@ rock_manifest = {
       busted_bootstrap = "ae69a56bb2ac76e576be5aeda187ba59"
    },
    ['busted-1.10.0-1.rockspec'] = "f307e8bb1c0ea692451ec19476f12602",
+   doc = {
+      LICENSE = "cabb1471206ff05b6b3e0e0af73dbd33",
+      ['README.md'] = "e62dea4e7367bebd97994d058a9fe696"
+   },
    lua = {
       busted = {
          ['core.lua'] = "fab7329cd9b32b9f0211d80f75e76d11",

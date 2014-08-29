@@ -1,5 +1,7 @@
 
-module("luarocks.write_rockspec", package.seeall)
+--module("luarocks.write_rockspec", package.seeall)
+local write_rockspec = {}
+package.loaded["luarocks.write_rockspec"] = write_rockspec
 
 local dir = require("luarocks.dir")
 local fetch = require("luarocks.fetch")
@@ -9,9 +11,9 @@ local persist = require("luarocks.persist")
 local type_check = require("luarocks.type_check")
 local util = require("luarocks.util")
 
-help_summary = "Write a template for a rockspec file."
-help_arguments = "[--output=<file> ...] [<name>] [<version>] {<url>|<path>}"
-help = [[
+write_rockspec.help_summary = "Write a template for a rockspec file."
+write_rockspec.help_arguments = "[--output=<file> ...] [<name>] [<version>] {<url>|<path>}"
+write_rockspec.help = [[
 This command writes an initial version of a rockspec file,
 based on an URL or a local path. You may use a relative path such as '.'.
 If a local path is given, name and version arguments are mandatory.
@@ -27,10 +29,10 @@ rockspec, and is not guaranteed to be complete or correct.
                       directory with a filename based on given name and version.
 --license="<string>"  A license string, such as "MIT/X11" or "GNU GPL v3".
 --summary="<txt>"     A short one-line description summary.
---description="<txt>" A longer description string.
+--detailed="<txt>"    A longer description string.
 --homepage=<url>      Project homepage.
---lua-version=<ver>   Supported Lua versions. Accepted values are "5.1", "5.2"
-                      or "5.1,5.2".
+--lua-version=<ver>   Supported Lua versions. Accepted values are "5.1", "5.2",
+                      "5.3", "5.1,5.2", "5.2,5.3", or "5.1,5.2,5.3".
 --tag=<tag>           Tag to use. Will attempt to extract version number from it.
 --lib=<lib>[,<lib>]   A comma-separated list of libraries that C files need to
                       link to.
@@ -41,7 +43,6 @@ local function open_file(name)
 end
 
 local function get_url(rockspec)
-   local url = rockspec.source.url
    local file, temp_dir, err_code, err_file, err_temp_dir = fetch.fetch_sources(rockspec, false)
    if err_code == "source.dir" then
       file, temp_dir = err_file, err_temp_dir
@@ -50,24 +51,11 @@ local function get_url(rockspec)
       return false
    end
    util.printout("File successfully downloaded. Making checksum and checking base dir...")
-   local md5 = nil
    if fetch.is_basic_protocol(rockspec.source.protocol) then
       rockspec.source.md5 = fs.get_md5(file)
    end
-   local ok, err = fs.change_dir(temp_dir)
-   if not ok then return false end
-   fs.unpack_archive(file)
-   local base_dir = fetch.url_to_base_dir(url)
-   if not fs.exists(base_dir) then
-      util.printerr("Directory "..base_dir.." not found")
-      local files = fs.list_dir()
-      if files[1] and fs.is_dir(files[1]) then
-         util.printerr("Found "..files[1])
-         base_dir = files[1]
-      end
-   end
-   fs.pop_dir()
-   return true, base_dir, temp_dir
+   local inferred_dir, found_dir = fetch.find_base_dir(file, temp_dir, rockspec.source.url)
+   return true, found_dir or inferred_dir, temp_dir
 end
 
 local function configure_lua_version(rockspec, luaver)
@@ -75,8 +63,14 @@ local function configure_lua_version(rockspec, luaver)
       table.insert(rockspec.dependencies, "lua ~> 5.1")
    elseif luaver == "5.2" then
       table.insert(rockspec.dependencies, "lua ~> 5.2")
+   elseif luaver == "5.3" then
+      table.insert(rockspec.dependencies, "lua ~> 5.3")
    elseif luaver == "5.1,5.2" then
       table.insert(rockspec.dependencies, "lua >= 5.1, < 5.3")
+   elseif luaver == "5.2,5.3" then
+      table.insert(rockspec.dependencies, "lua >= 5.2, < 5.4")
+   elseif luaver == "5.1,5.2,5.3" then
+      table.insert(rockspec.dependencies, "lua >= 5.1, < 5.4")
    else
       util.warning("Please specify supported Lua version with --lua-version=<ver>. "..util.see_help("write_rockspec"))
    end
@@ -202,7 +196,7 @@ local function rockspec_cleanup(rockspec)
    rockspec.name = nil
 end
 
-function run(...)
+function write_rockspec.run(...)
    local flags, name, version, url_or_dir = util.parse_flags(...)
    
    if not name then
@@ -342,3 +336,5 @@ function run(...)
 
    return true
 end
+
+return write_rockspec

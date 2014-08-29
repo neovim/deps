@@ -2,7 +2,8 @@
 --- fs operations implemented with third-party tools for Windows platform abstractions.
 -- Download http://unxutils.sourceforge.net/ for Windows GNU utilities
 -- used by this module.
-module("luarocks.fs.win32.tools", package.seeall)
+--module("luarocks.fs.win32.tools", package.seeall)
+local tools = {}
 
 local fs = require("luarocks.fs")
 local dir = require("luarocks.dir")
@@ -35,7 +36,7 @@ end
 --- Obtain current directory.
 -- Uses the module's internal directory stack.
 -- @return string: the absolute pathname of the current directory.
-function current_dir()
+function tools.current_dir()
    local current = cfg.cache_pwd
    if not current then
       local pipe = io.popen(fs.Q(vars.PWD))
@@ -54,7 +55,7 @@ end
 -- @param cmd string: No quoting/escaping is applied to the command.
 -- @return boolean: true if command succeeds (status code 0), false
 -- otherwise.
-function execute_string(cmd)
+function tools.execute_string(cmd)
    cmd = command_at(fs.current_dir(), cmd)
    local code = os.execute(cmd)
    if code == 0 or code == true then
@@ -70,7 +71,7 @@ end
 -- but works well for our purposes for now.
 -- @param directory string: The directory to switch to.
 -- @return boolean or (nil, string): true if successful, (nil, error message) if failed.
-function change_dir(directory)
+function tools.change_dir(directory)
    assert(type(directory) == "string")
    if fs.is_dir(directory) then
       table.insert(dir_stack, directory)
@@ -82,12 +83,12 @@ end
 --- Change directory to root.
 -- Allows leaving a directory (e.g. for deleting it) in
 -- a crossplatform way.
-function change_dir_to_root()
+function tools.change_dir_to_root()
    table.insert(dir_stack, "/")
 end
 
 --- Change working directory to the previous in the directory stack.
-function pop_dir()
+function tools.pop_dir()
    local directory = table.remove(dir_stack)
    return directory ~= nil
 end
@@ -97,7 +98,7 @@ end
 -- too, they are created as well.
 -- @param directory string: pathname of directory to create.
 -- @return boolean: true on success, false on failure.
-function make_dir(directory)
+function tools.make_dir(directory)
    assert(directory)
    directory = dir.normalize(directory)
    fs.execute_quiet(fs.Q(vars.MKDIR).." -p ", directory)
@@ -111,7 +112,7 @@ end
 -- Does not return errors (for example, if directory is not empty or
 -- if already does not exist)
 -- @param directory string: pathname of directory to remove.
-function remove_dir_if_empty(directory)
+function tools.remove_dir_if_empty(directory)
    assert(directory)
    fs.execute_quiet(fs.Q(vars.RMDIR), directory)
 end
@@ -120,7 +121,7 @@ end
 -- Does not return errors (for example, if directory is not empty or
 -- if already does not exist)
 -- @param directory string: pathname of directory to remove.
-function remove_dir_tree_if_empty(directory)
+function tools.remove_dir_tree_if_empty(directory)
    assert(directory)
    fs.execute_quiet(fs.Q(vars.RMDIR), directory)
 end
@@ -130,7 +131,7 @@ end
 -- @param dest string: Pathname of destination
 -- @return boolean or (boolean, string): true on success, false on failure,
 -- plus an error message.
-function copy(src, dest)
+function tools.copy(src, dest)
    assert(src and dest)
    if dest:match("[/\\]$") then dest = dest:sub(1, -2) end
    local ok = fs.execute(fs.Q(vars.CP), src, dest)
@@ -146,7 +147,7 @@ end
 -- @param dest string: Pathname of destination
 -- @return boolean or (boolean, string): true on success, false on failure,
 -- plus an error message.
-function copy_contents(src, dest)
+function tools.copy_contents(src, dest)
    assert(src and dest)
    if fs.execute_quiet(fs.Q(vars.CP).." -dR "..src.."\\*.* "..fs.Q(dest)) then
       return true
@@ -159,33 +160,24 @@ end
 -- For safety, this only accepts absolute paths.
 -- @param arg string: Pathname of source
 -- @return nil
-function delete(arg)
+function tools.delete(arg)
    assert(arg)
    assert(arg:match("^[a-zA-Z]?:?[\\/]"))
    fs.execute_quiet("if exist "..fs.Q(arg.."\\").." ( RMDIR /S /Q "..fs.Q(arg).." ) else ( DEL /Q /F "..fs.Q(arg).." )")
 end
 
---- List the contents of a directory.
--- @param at string or nil: directory to list (will be the current
--- directory if none is given).
--- @return table: an array of strings with the filenames representing
--- the contents of a directory.
-function list_dir(at)
-   assert(type(at) == "string" or not at)
-   if not at then
-      at = fs.current_dir()
-   end
-   if not fs.is_dir(at) then
-      return {}
-   end
-   local result = {}
+--- Internal implementation function for fs.dir.
+-- Yields a filename on each iteration.
+-- @param at string: directory to list
+-- @return nil
+function tools.dir_iterator(at)
    local pipe = io.popen(command_at(at, fs.Q(vars.LS)))
    for file in pipe:lines() do
-      table.insert(result, file)
+      if file ~= "." and file ~= ".." then
+         coroutine.yield(file)
+      end
    end
    pipe:close()
-
-   return result
 end
 
 --- Recursively scan the contents of a directory.
@@ -193,7 +185,7 @@ end
 -- directory if none is given).
 -- @return table: an array of strings with the filenames representing
 -- the contents of a directory. Paths are returned with forward slashes.
-function find(at)
+function tools.find(at)
    assert(type(at) == "string" or not at)
    if not at then
       at = fs.current_dir()
@@ -220,14 +212,14 @@ end
 -- @param ... Filenames to be stored in the archive are given as
 -- additional arguments.
 -- @return boolean: true on success, false on failure.
-function zip(zipfile, ...)
+function tools.zip(zipfile, ...)
    return fs.execute_quiet(fs.Q(vars.SEVENZ).." -aoa a -tzip", zipfile, ...)
 end
 
 --- Uncompress files from a .zip archive.
 -- @param zipfile string: pathname of .zip archive to be extracted.
 -- @return boolean: true on success, false on failure.
-function unzip(zipfile)
+function tools.unzip(zipfile)
    assert(zipfile)
    return fs.execute_quiet(fs.Q(vars.SEVENZ).." -aoa x", zipfile)
 end
@@ -235,7 +227,7 @@ end
 --- Test is pathname is a directory.
 -- @param file string: pathname to test
 -- @return boolean: true if it is a directory, false otherwise.
-function is_dir(file)
+function tools.is_dir(file)
    assert(file)
    return fs.execute_quiet("if not exist " .. fs.Q(file.."\\").." invalidcommandname")
 end
@@ -243,7 +235,7 @@ end
 --- Test is pathname is a regular file.
 -- @param file string: pathname to test
 -- @return boolean: true if it is a regular file, false otherwise.
-function is_file(file)
+function tools.is_file(file)
    assert(file)
    return fs.execute(fs.Q(vars.TEST).." -f", file)
 end
@@ -256,7 +248,7 @@ end
 -- filename can be given explicitly as this second argument.
 -- @return (boolean, string): true and the filename on success,
 -- false and the error message on failure.
-function download(url, filename, cache)
+function tools.use_downloader(url, filename, cache)
    assert(type(url) == "string")
    assert(type(filename) == "string" or not filename)
 
@@ -265,19 +257,26 @@ function download(url, filename, cache)
    local ok   
    if cfg.downloader == "wget" then
       local wget_cmd = fs.Q(vars.WGET).." --no-check-certificate --no-cache --user-agent=\""..cfg.user_agent.." via wget\" --quiet "
+      if cfg.connection_timeout and cfg.connection_timeout > 0 then
+        wget_cmd = wget_cmd .. "--timeout="..tonumber(cfg.connection_timeout).." --tries=1 " 
+      end
       if cache then
          -- --timestamping is incompatible with --output-document,
          -- but that's not a problem for our use cases.
          fs.change_dir(dir.dir_name(filename))
-         ok = fs.execute(wget_cmd.." --timestamping "..fs.Q(url).." 2> NUL 1> NUL")
+         ok = fs.execute_quiet(wget_cmd.." --timestamping ", url)
          fs.pop_dir()
       elseif filename then
-         ok = fs.execute(wget_cmd.." --output-document "..fs.Q(filename).." "..fs.Q(url).." 2> NUL 1> NUL")
+         ok = fs.execute_quiet(wget_cmd.." --output-document ", filename, url)
       else
-         ok = fs.execute(wget_cmd..fs.Q(url).." 2> NUL 1> NUL")
+         ok = fs.execute_quiet(wget_cmd, url)
       end
    elseif cfg.downloader == "curl" then
-      ok = fs.execute_string(fs.Q(vars.CURL).." -L --user-agent \""..cfg.user_agent.." via curl\" "..fs.Q(url).." 2> NUL 1> "..fs.Q(filename))
+      local curl_cmd = vars.CURL.." -f -k -L --user-agent \""..cfg.user_agent.." via curl\" "
+      if cfg.connection_timeout and cfg.connection_timeout > 0 then
+        curl_cmd = curl_cmd .. "--connect-timeout "..tonumber(cfg.connection_timeout).." " 
+      end
+      ok = fs.execute_string(curl_cmd..fs.Q(url).." 2> NUL 1> "..fs.Q(filename))
    end
    if ok then
       return true, filename
@@ -298,7 +297,7 @@ end
 -- filename extension.
 -- @param archive string: Filename of archive.
 -- @return boolean or (boolean, string): true on success, false and an error message on failure.
-function unpack_archive(archive)
+function tools.unpack_archive(archive)
    assert(type(archive) == "string")
 
    local ok
@@ -342,7 +341,7 @@ local md5_cmd = {
 --- Get the MD5 checksum for a file.
 -- @param file string: The file to be computed.
 -- @return string: The MD5 checksum or nil + message
-function get_md5(file)
+function tools.get_md5(file)
    local cmd = md5_cmd[cfg.md5checker]
    if not cmd then return nil, "no MD5 checker command configured" end
    local pipe = io.popen(cmd.." "..fs.Q(fs.absolute_name(file)))
@@ -358,11 +357,13 @@ end
 --- Test for existance of a file.
 -- @param file string: filename to test
 -- @return boolean: true if file exists, false otherwise.
-function exists(file)
+function tools.exists(file)
    assert(file)
    return fs.execute_quiet("if not exist " .. fs.Q(file) .. " invalidcommandname")
 end
 
-function browser(url)
-   return fs.execute(cfg.web_browser.." "..url)
+function tools.browser(url)
+   return fs.execute(cfg.web_browser..' "Starting docs..." '..fs.Q(url))
 end
+
+return tools

@@ -1,0 +1,34 @@
+rock_manifest = {
+   doc = {
+      LICENSE = "005de8f8f73245c988a708cf1cace960",
+      ['README.md'] = "e7d2ff161e4f80f99ac03977df01141b"
+   },
+   lua = {
+      luassert = {
+         ['assert.lua'] = "ff4129636c677dada090b8e918076224",
+         ['assertions.lua'] = "f86311473a32ee68d7788511bbd9474a",
+         formatters = {
+            ['binarystring.lua'] = "1cf3fba0573869e42fe1374f3919b2db",
+            ['init.lua'] = "a303b408de5d429241750195bff176fb"
+         },
+         ['init.lua'] = "23c5d9cb21ddd6717b1bbe6c47d15219",
+         languages = {
+            ['ar.lua'] = "71aaeba826dd2c1dba8d665bfcfb8cc5",
+            ['en.lua'] = "b34e73277050f4bda19bf1fcb96b1c6e",
+            ['fr.lua'] = "4d42e33570130e4908108ea3a04d2d81",
+            ['ja.lua'] = "f59b04bb7c7e21a3a4aa6a896c99af68",
+            ['nl.lua'] = "6e22b303834603ee0d04151f5ffb4ce2",
+            ['ru.lua'] = "2ae652a890148900c64843f539529dcb",
+            ['ua.lua'] = "eac6fa107daa35bc306a420d4b1fb35a",
+            ['zh.lua'] = "eb8a00330cd486e8aeee4847a1ee264b"
+         },
+         ['mock.lua'] = "0cf03425fea556014923e6d7088f99af",
+         ['modifiers.lua'] = "86adced69ccf80b195efa711e45a4d2c",
+         ['spy.lua'] = "880c184d63134722a046393f7b58c8a6",
+         ['state.lua'] = "f81a18c8b2d077386b62e52d25a5640d",
+         ['stub.lua'] = "6f550dbbd7c7eea1bf077cc0daa7b0c1",
+         ['util.lua'] = "76efe8fc038eb256977ed50746cae5cf"
+      }
+   },
+   ['luassert-1.7.1-0.rockspec'] = "8997f07674241a7cf4156eb1f0c38e88"
+}
