@@ -10,7 +10,7 @@ site_config.LUAROCKS_FORCE_CONFIG=true
 site_config.LUAROCKS_ROCKS_SUBDIR=[[/lib/luarocks/rocks]]
 site_config.LUA_DIR_SET=true
 site_config.LUAROCKS_UNAME_S=[[Linux]]
-site_config.LUAROCKS_UNAME_M=[[i686]]
+site_config.LUAROCKS_UNAME_M=[[x86_64]]
 site_config.LUAROCKS_DOWNLOADER=[[curl]]
 site_config.LUAROCKS_MD5CHECKER=[[md5sum]]
 site_config.LUAROCKS_EXTERNAL_DEPS_SUBDIRS={ bin="bin", lib={ "lib", [[lib/i386-linux-gnu]] }, include="include" }
