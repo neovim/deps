@@ -1,4 +1,4 @@
-prefix=/opt/neovim-deps/32
+prefix=/opt/neovim-deps/32/usr
 exec_prefix=${prefix}
 libdir=${exec_prefix}/lib
 includedir=${prefix}/include

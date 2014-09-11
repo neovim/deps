@@ -1,12 +1,6 @@
 commands = {
    busted = {
-      "busted/1.10.0-1"
-   },
-   ['busted.bat'] = {
-      "busted/1.10.0-1"
-   },
-   busted_bootstrap = {
-      "busted/1.10.0-1"
+      "busted/2.0.rc3-0"
    },
    luarocks = {
       "luarocks/2.2.0-1"
@@ -19,30 +13,9 @@ commands = {
    },
    ['luarocks-admin-5.1'] = {
       "luarocks/2.2.0-1"
-   },
-   moon = {
-      "moonscript/0.2.6-1"
-   },
-   moonc = {
-      "moonscript/0.2.6-1"
    }
 }
 dependencies = {
-   ['alt-getopt'] = {
-      ['0.7.0-1'] = {
-         {
-            constraints = {
-               {
-                  op = ">=",
-                  version = {
-                     5, 1, string = "5.1"
-                  }
-               }
-            },
-            name = "lua"
-         }
-      }
-   },
    ansicolors = {
       ['1.0.2-3'] = {
          {
@@ -59,7 +32,7 @@ dependencies = {
       }
    },
    busted = {
-      ['1.10.0-1'] = {
+      ['2.0.rc3-0'] = {
          {
             constraints = {
                {
@@ -116,8 +89,8 @@ dependencies = {
                {
                   op = ">=",
                   version = {
-                     1, 7, 0, revision = 0,
-                     string = "1.7.0-0"
+                     1, 7, 1, revision = 0,
+                     string = "1.7.1-0"
                   }
                }
             },
@@ -144,6 +117,17 @@ dependencies = {
                }
             },
             name = "penlight"
+         }, {
+            constraints = {
+               {
+                  op = ">=",
+                  version = {
+                     1, 1, revision = 3,
+                     string = "1.1-3"
+                  }
+               }
+            },
+            name = "mediator_lua"
          }
       }
    },
@@ -268,8 +252,8 @@ dependencies = {
          }
       }
    },
-   moonscript = {
-      ['0.2.6-1'] = {
+   mediator_lua = {
+      ['1.1-3'] = {
          {
             constraints = {
                {
@@ -280,41 +264,6 @@ dependencies = {
                }
             },
             name = "lua"
-         }, {
-            constraints = {
-               {
-                  op = ">=",
-                  version = {
-                     0, 10, string = "0.10"
-                  }
-               }, {
-                  op = "~=",
-                  version = {
-                     0, 11, string = "0.11"
-                  }
-               }
-            },
-            name = "lpeg"
-         }, {
-            constraints = {
-               {
-                  op = ">=",
-                  version = {
-                     0, 7, string = "0.7"
-                  }
-               }
-            },
-            name = "alt-getopt"
-         }, {
-            constraints = {
-               {
-                  op = ">=",
-                  version = {
-                     1, 5, string = "1.5"
-                  }
-               }
-            },
-            name = "luafilesystem"
          }
       }
    },
@@ -343,74 +292,98 @@ dependencies = {
    }
 }
 modules = {
-   alt_getopt = {
-      "alt-getopt/0.7.0-1"
-   },
    ansicolors = {
       "ansicolors/1.0.2-3"
    },
    busted = {
-      "busted/1.10.0-1"
+      "busted/2.0.rc3-0"
+   },
+   ['busted.compatibility'] = {
+      "busted/2.0.rc3-0"
+   },
+   ['busted.context'] = {
+      "busted/2.0.rc3-0"
    },
    ['busted.core'] = {
-      "busted/1.10.0-1"
+      "busted/2.0.rc3-0"
    },
    ['busted.done'] = {
-      "busted/1.10.0-1"
+      "busted/2.0.rc3-0"
+   },
+   ['busted.environment'] = {
+      "busted/2.0.rc3-0"
    },
    ['busted.languages.ar'] = {
-      "busted/1.10.0-1"
+      "busted/2.0.rc3-0"
+   },
+   ['busted.languages.de'] = {
+      "busted/2.0.rc3-0"
    },
    ['busted.languages.en'] = {
-      "busted/1.10.0-1"
+      "busted/2.0.rc3-0"
    },
    ['busted.languages.fr'] = {
-      "busted/1.10.0-1"
+      "busted/2.0.rc3-0"
    },
    ['busted.languages.ja'] = {
-      "busted/1.10.0-1"
+      "busted/2.0.rc3-0"
    },
    ['busted.languages.nl'] = {
-      "busted/1.10.0-1"
+      "busted/2.0.rc3-0"
    },
    ['busted.languages.ru'] = {
-      "busted/1.10.0-1"
+      "busted/2.0.rc3-0"
+   },
+   ['busted.languages.th'] = {
+      "busted/2.0.rc3-0"
    },
    ['busted.languages.ua'] = {
-      "busted/1.10.0-1"
+      "busted/2.0.rc3-0"
    },
    ['busted.languages.zh'] = {
-      "busted/1.10.0-1"
+      "busted/2.0.rc3-0"
    },
-   ['busted.loop.copas'] = {
-      "busted/1.10.0-1"
+   ['busted.modules.configuration_loader'] = {
+      "busted/2.0.rc3-0"
    },
-   ['busted.loop.default'] = {
-      "busted/1.10.0-1"
+   ['busted.modules.files.lua'] = {
+      "busted/2.0.rc3-0"
    },
-   ['busted.loop.ev'] = {
-      "busted/1.10.0-1"
+   ['busted.modules.files.moonscript'] = {
+      "busted/2.0.rc3-0"
    },
-   ['busted.moon'] = {
-      "busted/1.10.0-1"
+   ['busted.modules.files.terra'] = {
+      "busted/2.0.rc3-0"
    },
-   ['busted.output.TAP'] = {
-      "busted/1.10.0-1"
+   ['busted.modules.luacov'] = {
+      "busted/2.0.rc3-0"
    },
-   ['busted.output.json'] = {
-      "busted/1.10.0-1"
+   ['busted.modules.output_handler_loader'] = {
+      "busted/2.0.rc3-0"
    },
-   ['busted.output.junit'] = {
-      "busted/1.10.0-1"
+   ['busted.modules.test_file_loader'] = {
+      "busted/2.0.rc3-0"
    },
-   ['busted.output.plain_terminal'] = {
-      "busted/1.10.0-1"
+   ['busted.outputHandlers.TAP'] = {
+      "busted/2.0.rc3-0"
    },
-   ['busted.output.stub'] = {
-      "busted/1.10.0-1"
+   ['busted.outputHandlers.base'] = {
+      "busted/2.0.rc3-0"
    },
-   ['busted.output.utf_terminal'] = {
-      "busted/1.10.0-1"
+   ['busted.outputHandlers.json'] = {
+      "busted/2.0.rc3-0"
+   },
+   ['busted.outputHandlers.junit'] = {
+      "busted/2.0.rc3-0"
+   },
+   ['busted.outputHandlers.plainTerminal'] = {
+      "busted/2.0.rc3-0"
+   },
+   ['busted.outputHandlers.sound'] = {
+      "busted/2.0.rc3-0"
+   },
+   ['busted.outputHandlers.utfTerminal'] = {
+      "busted/2.0.rc3-0"
    },
    cliargs = {
       "lua_cliargs/2.1-2"
@@ -667,68 +640,8 @@ modules = {
    ['luassert.util'] = {
       "luassert/1.7.1-0"
    },
-   moon = {
-      "moonscript/0.2.6-1"
-   },
-   ['moon.all'] = {
-      "moonscript/0.2.6-1"
-   },
-   moonscript = {
-      "moonscript/0.2.6-1"
-   },
-   ['moonscript.base'] = {
-      "moonscript/0.2.6-1"
-   },
-   ['moonscript.cmd.coverage'] = {
-      "moonscript/0.2.6-1"
-   },
-   ['moonscript.cmd.lint'] = {
-      "moonscript/0.2.6-1"
-   },
-   ['moonscript.cmd.moonc'] = {
-      "moonscript/0.2.6-1"
-   },
-   ['moonscript.compile'] = {
-      "moonscript/0.2.6-1"
-   },
-   ['moonscript.compile.statement'] = {
-      "moonscript/0.2.6-1"
-   },
-   ['moonscript.compile.value'] = {
-      "moonscript/0.2.6-1"
-   },
-   ['moonscript.data'] = {
-      "moonscript/0.2.6-1"
-   },
-   ['moonscript.dump'] = {
-      "moonscript/0.2.6-1"
-   },
-   ['moonscript.errors'] = {
-      "moonscript/0.2.6-1"
-   },
-   ['moonscript.line_tables'] = {
-      "moonscript/0.2.6-1"
-   },
-   ['moonscript.parse'] = {
-      "moonscript/0.2.6-1"
-   },
-   ['moonscript.transform'] = {
-      "moonscript/0.2.6-1"
-   },
-   ['moonscript.transform.destructure'] = {
-      "moonscript/0.2.6-1"
-   },
-   ['moonscript.transform.names'] = {
-      "moonscript/0.2.6-1"
-   },
-   ['moonscript.types'] = {
-      "moonscript/0.2.6-1"
-   },
-   ['moonscript.util'] = {
-      "moonscript/0.2.6-1"
-   },
-   ['moonscript.version'] = {
-      "moonscript/0.2.6-1"
+   mediator = {
+      "mediator_lua/1.1-3"
    },
    pl = {
       "penlight/1.3.1-1"
@@ -852,18 +765,6 @@ modules = {
    }
 }
 repository = {
-   ['alt-getopt'] = {
-      ['0.7.0-1'] = {
-         {
-            arch = "installed",
-            commands = {},
-            dependencies = {},
-            modules = {
-               alt_getopt = "alt_getopt.lua"
-            }
-         }
-      }
-   },
    ansicolors = {
       ['1.0.2-3'] = {
          {
@@ -877,13 +778,11 @@ repository = {
       }
    },
    busted = {
-      ['1.10.0-1'] = {
+      ['2.0.rc3-0'] = {
          {
             arch = "installed",
             commands = {
-               busted = "busted",
-               ['busted.bat'] = "busted.bat",
-               busted_bootstrap = "busted_bootstrap"
+               busted = "busted"
             },
             dependencies = {
                ansicolors = "1.0.2-3",
@@ -891,31 +790,41 @@ repository = {
                lua_cliargs = "2.1-2",
                luafilesystem = "1.6.2-2",
                luassert = "1.7.1-0",
+               mediator_lua = "1.1-3",
                penlight = "1.3.1-1",
                say = "1.2-1"
             },
             modules = {
                busted = "busted/init.lua",
+               ['busted.compatibility'] = "busted/compatibility.lua",
+               ['busted.context'] = "busted/context.lua",
                ['busted.core'] = "busted/core.lua",
                ['busted.done'] = "busted/done.lua",
+               ['busted.environment'] = "busted/environment.lua",
                ['busted.languages.ar'] = "busted/languages/ar.lua",
+               ['busted.languages.de'] = "busted/languages/de.lua",
                ['busted.languages.en'] = "busted/languages/en.lua",
                ['busted.languages.fr'] = "busted/languages/fr.lua",
                ['busted.languages.ja'] = "busted/languages/ja.lua",
                ['busted.languages.nl'] = "busted/languages/nl.lua",
                ['busted.languages.ru'] = "busted/languages/ru.lua",
+               ['busted.languages.th'] = "busted/languages/th.lua",
                ['busted.languages.ua'] = "busted/languages/ua.lua",
                ['busted.languages.zh'] = "busted/languages/zh.lua",
-               ['busted.loop.copas'] = "busted/loop/copas.lua",
-               ['busted.loop.default'] = "busted/loop/default.lua",
-               ['busted.loop.ev'] = "busted/loop/ev.lua",
-               ['busted.moon'] = "busted/moon.lua",
-               ['busted.output.TAP'] = "busted/output/TAP.lua",
-               ['busted.output.json'] = "busted/output/json.lua",
-               ['busted.output.junit'] = "busted/output/junit.lua",
-               ['busted.output.plain_terminal'] = "busted/output/plain_terminal.lua",
-               ['busted.output.stub'] = "busted/output/stub.lua",
-               ['busted.output.utf_terminal'] = "busted/output/utf_terminal.lua"
+               ['busted.modules.configuration_loader'] = "busted/modules/configuration_loader.lua",
+               ['busted.modules.files.lua'] = "busted/modules/files/lua.lua",
+               ['busted.modules.files.moonscript'] = "busted/modules/files/moonscript.lua",
+               ['busted.modules.files.terra'] = "busted/modules/files/terra.lua",
+               ['busted.modules.luacov'] = "busted/modules/luacov.lua",
+               ['busted.modules.output_handler_loader'] = "busted/modules/output_handler_loader.lua",
+               ['busted.modules.test_file_loader'] = "busted/modules/test_file_loader.lua",
+               ['busted.outputHandlers.TAP'] = "busted/outputHandlers/TAP.lua",
+               ['busted.outputHandlers.base'] = "busted/outputHandlers/base.lua",
+               ['busted.outputHandlers.json'] = "busted/outputHandlers/json.lua",
+               ['busted.outputHandlers.junit'] = "busted/outputHandlers/junit.lua",
+               ['busted.outputHandlers.plainTerminal'] = "busted/outputHandlers/plainTerminal.lua",
+               ['busted.outputHandlers.sound'] = "busted/outputHandlers/sound.lua",
+               ['busted.outputHandlers.utfTerminal'] = "busted/outputHandlers/utfTerminal.lua"
             }
          }
       }
@@ -1090,41 +999,14 @@ repository = {
          }
       }
    },
-   moonscript = {
-      ['0.2.6-1'] = {
+   mediator_lua = {
+      ['1.1-3'] = {
          {
             arch = "installed",
-            commands = {
-               moon = "moon",
-               moonc = "moonc"
-            },
-            dependencies = {
-               ['alt-getopt'] = "0.7.0-1",
-               lpeg = "0.12-1",
-               luafilesystem = "1.6.2-2"
-            },
+            commands = {},
+            dependencies = {},
             modules = {
-               moon = "moon/init.lua",
-               ['moon.all'] = "moon/all.lua",
-               moonscript = "moonscript/init.lua",
-               ['moonscript.base'] = "moonscript/base.lua",
-               ['moonscript.cmd.coverage'] = "moonscript/cmd/coverage.lua",
-               ['moonscript.cmd.lint'] = "moonscript/cmd/lint.lua",
-               ['moonscript.cmd.moonc'] = "moonscript/cmd/moonc.lua",
-               ['moonscript.compile'] = "moonscript/compile.lua",
-               ['moonscript.compile.statement'] = "moonscript/compile/statement.lua",
-               ['moonscript.compile.value'] = "moonscript/compile/value.lua",
-               ['moonscript.data'] = "moonscript/data.lua",
-               ['moonscript.dump'] = "moonscript/dump.lua",
-               ['moonscript.errors'] = "moonscript/errors.lua",
-               ['moonscript.line_tables'] = "moonscript/line_tables.lua",
-               ['moonscript.parse'] = "moonscript/parse.lua",
-               ['moonscript.transform'] = "moonscript/transform.lua",
-               ['moonscript.transform.destructure'] = "moonscript/transform/destructure.lua",
-               ['moonscript.transform.names'] = "moonscript/transform/names.lua",
-               ['moonscript.types'] = "moonscript/types.lua",
-               ['moonscript.util'] = "moonscript/util.lua",
-               ['moonscript.version'] = "moonscript/version.lua"
+               mediator = "mediator.lua"
             }
          }
       }
