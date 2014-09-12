@@ -15,8 +15,8 @@
 //    See the License for the specific language governing permissions and
 //    limitations under the License.
 //
-#ifndef MSGPACK_TYPE_NIL_HPP__
-#define MSGPACK_TYPE_NIL_HPP__
+#ifndef MSGPACK_TYPE_NIL_HPP
+#define MSGPACK_TYPE_NIL_HPP
 
 #include "msgpack/object.hpp"
 
@@ -29,37 +29,36 @@ struct nil { };
 }  // namespace type
 
 
-inline type::nil& operator>> (object o, type::nil& v)
+inline object const& operator>> (object const& o, type::nil&)
 {
-	if(o.type != type::NIL) { throw type_error(); }
-	return v;
+    if(o.type != type::NIL) { throw type_error(); }
+    return o;
 }
 
 template <typename Stream>
-inline packer<Stream>& operator<< (packer<Stream>& o, const type::nil& v)
+inline packer<Stream>& operator<< (packer<Stream>& o, const type::nil&)
 {
-	o.pack_nil();
-	return o;
+    o.pack_nil();
+    return o;
 }
 
-inline void operator<< (object& o, type::nil v)
+inline void operator<< (object& o, type::nil)
 {
-	o.type = type::NIL;
+    o.type = type::NIL;
 }
 
 inline void operator<< (object::with_zone& o, type::nil v)
-	{ static_cast<object&>(o) << v; }
+    { static_cast<object&>(o) << v; }
 
 
 template <>
 inline void object::as<void>() const
 {
-	msgpack::type::nil v;
-	convert(&v);
+    msgpack::type::nil v;
+    convert(v);
 }
 
 
 }  // namespace msgpack
 
 #endif /* msgpack/type/nil.hpp */
-

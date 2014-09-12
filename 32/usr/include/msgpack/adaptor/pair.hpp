@@ -15,8 +15,8 @@
 //    See the License for the specific language governing permissions and
 //    limitations under the License.
 //
-#ifndef MSGPACK_TYPE_PAIR_HPP__
-#define MSGPACK_TYPE_PAIR_HPP__
+#ifndef MSGPACK_TYPE_PAIR_HPP
+#define MSGPACK_TYPE_PAIR_HPP
 
 #include "msgpack/object.hpp"
 #include <utility>
@@ -25,37 +25,36 @@ namespace msgpack {
 
 
 template <typename T1, typename T2>
-inline std::pair<T1, T2>& operator>> (object o, std::pair<T1, T2>& v)
+inline object const& operator>> (object const& o, std::pair<T1, T2>& v)
 {
-	if(o.type != type::ARRAY) { throw type_error(); }
-	if(o.via.array.size != 2) { throw type_error(); }
-	o.via.array.ptr[0].convert(&v.first);
-	o.via.array.ptr[1].convert(&v.second);
-	return v;
+    if(o.type != type::ARRAY) { throw type_error(); }
+    if(o.via.array.size != 2) { throw type_error(); }
+    o.via.array.ptr[0].convert(v.first);
+    o.via.array.ptr[1].convert(v.second);
+    return o;
 }
 
 template <typename Stream, typename T1, typename T2>
 inline packer<Stream>& operator<< (packer<Stream>& o, const std::pair<T1, T2>& v)
 {
-	o.pack_array(2);
-	o.pack(v.first);
-	o.pack(v.second);
-	return o;
+    o.pack_array(2);
+    o.pack(v.first);
+    o.pack(v.second);
+    return o;
 }
 
 template <typename T1, typename T2>
 inline void operator<< (object::with_zone& o, const std::pair<T1, T2>& v)
 {
-	o.type = type::ARRAY;
-	object* p = (object*)o.zone->malloc(sizeof(object)*2);
-	o.via.array.ptr = p;
-	o.via.array.size = 2;
-	p[0] = object(v.first, o.zone);
-	p[1] = object(v.second, o.zone);
+    o.type = type::ARRAY;
+    object* p = static_cast<object*>(o.zone.allocate_align(sizeof(object)*2));
+    o.via.array.ptr = p;
+    o.via.array.size = 2;
+    p[0] = object(v.first, o.zone);
+    p[1] = object(v.second, o.zone);
 }
 
 
 }  // namespace msgpack
 
 #endif /* msgpack/type/pair.hpp */
-
