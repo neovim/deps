@@ -1,3 +1,0 @@
-#!/bin/sh
-
-exec '/opt/neovim-deps/32/bin/luajit' -e 'package.path="/opt/neovim-deps/32/share/lua/5.1/?.lua;/opt/neovim-deps/32/share/lua/5.1/?/init.lua;"..package.path; package.cpath="/opt/neovim-deps/32/lib/lua/5.1/?.so;"..package.cpath' -e 'local k,l,_=pcall(require,"luarocks.loader") _=k and l.add_context("busted","1.10.0-1")' '/opt/neovim-deps/32/lib/luarocks/rocks/busted/1.10.0-1/bin/busted_bootstrap' "$@"

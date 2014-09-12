@@ -1,9 +1,0 @@
-rock_manifest = {
-   ['alt-getopt-0.7.0-1.rockspec'] = "5ed13b130d6da7e70d37bd29556ec757",
-   doc = {
-      README = "cbc5479b039f919c339038bd15b0ad02"
-   },
-   lua = {
-      ['alt_getopt.lua'] = "b50f9a0dfca38b936bf71057465f15e1"
-   }
-}
