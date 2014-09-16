@@ -166,8 +166,8 @@ dependencies = {
          }
       }
    },
-   ['lua-cmsgpack'] = {
-      ['0.3-2'] = {
+   ['lua-messagepack'] = {
+      ['0.3.1-1'] = {
          {
             constraints = {
                {
@@ -292,6 +292,9 @@ dependencies = {
    }
 }
 modules = {
+   MessagePack = {
+      "lua-messagepack/0.3.1-1"
+   },
    ansicolors = {
       "ansicolors/1.0.2-3"
    },
@@ -387,9 +390,6 @@ modules = {
    },
    cliargs = {
       "lua_cliargs/2.1-2"
-   },
-   cmsgpack = {
-      "lua-cmsgpack/0.3-2"
    },
    dkjson = {
       "dkjson/2.5-1"
@@ -854,14 +854,14 @@ repository = {
          }
       }
    },
-   ['lua-cmsgpack'] = {
-      ['0.3-2'] = {
+   ['lua-messagepack'] = {
+      ['0.3.1-1'] = {
          {
             arch = "installed",
             commands = {},
             dependencies = {},
             modules = {
-               cmsgpack = "cmsgpack.so"
+               MessagePack = "MessagePack.lua"
             }
          }
       }

@@ -1,9 +1,0 @@
-rock_manifest = {
-   doc = {
-      README = "7f0d4508a2045b1a02a7c2a7a372b891"
-   },
-   lib = {
-      ['cmsgpack.so'] = "c7f48429a18e4ffe22ec8370a23ea76e"
-   },
-   ['lua-cmsgpack-0.3-2.rockspec'] = "52b998f6f58d0d76ecd05548a328959b"
-}

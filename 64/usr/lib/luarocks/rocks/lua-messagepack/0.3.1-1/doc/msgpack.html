@@ -1,0 +1,194 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+   "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+<head>
+  <title>Module MessagePack</title>
+    <link rel="stylesheet" href="http://www.keplerproject.org/doc.css" type="text/css"/>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
+  <meta http-equiv="Author" content="Fran&ccedil;ois Perrad"/>
+  <meta http-equiv="Language" content="en"/>
+  <meta http-equiv="Description" content="Module MessagePack"/>
+  <meta http-equiv="Keywords" content="lua, MessagePack, msgpack, pack, unpack, unpacker, set_number, set_integer"/>
+</head>
+
+<body>
+
+<div id="container">
+
+<div id="product">
+  <div id="product_logo">
+    <a href="http://www.lua.org">
+      <img alt="Lua" src="http://www.andreas-rozek.de/Lua/Lua-Logo_128x128.png"/>
+    </a>
+  </div>
+  <div id="product_name"><big><strong>lua-MessagePack</strong></big></div>
+  <div id="product_description">a pure Lua implementation</div>
+</div> <!-- id="product" -->
+
+<div id="main">
+
+<div id="navigation">
+<h1>MessagePack</h1>
+  <ul>
+    <li><a href="index.html">Home</a>
+      <ul>
+        <li><a href="index.html#overview">Overview</a></li>
+        <li><a href="index.html#references">References</a></li>
+        <li><a href="index.html#status">Status</a></li>
+        <li><a href="index.html#download">Download</a></li>
+        <li><a href="index.html#installation">Installation</a></li>
+        <li><a href="index.html#test">Test</a></li>
+        <li><a href="index.html#license">License</a></li>
+      </ul>
+    </li>
+    <li><strong>module <code>MessagePack</code></strong>
+      <ul>
+        <li><a href="msgpack.html#reference">Reference</a></li>
+        <li><a href="msgpack.html#examples">Examples</a></li>
+      </ul>
+    </li>
+    <li><a href="http://fperrad.github.io/lua-MessagePack">Project</a>
+      <ul>
+        <li><a href="http://github.com/fperrad/lua-MessagePack/">Git</a></li>
+        <li><script type="text/javascript" src="http://www.ohloh.net/p/616645/widgets/project_thin_badge.js"></script></li>
+      </ul>
+    </li>
+  </ul>
+</div> <!-- id="navigation" -->
+
+<div id="content">
+
+<h1><a name="reference"></a>Reference</h1>
+
+<h4><code>pack( data )</code></h4>
+
+<p>Serialize a <code>data</code>.</p>
+
+<h4><code>unpack( str )</code></h4>
+
+<p>Deserialize a <code>string</code>.</p>
+
+<h4><code>unpacker( src )</code></h4>
+
+<p>Accept a <code>string</code> or a
+<a href="http://w3.impa.br/~diego/software/luasocket/ltn12.html#source"><code>ltn12.source</code></a>
+ and returns a iterator.</p>
+<p>The iterator gives a couple of values, the <em>interesting</em> value is the second.</p>
+
+<h4><code>set_number( str )</code></h4>
+
+<p>Configures the behaviour of <code>pack</code>.
+The valid options are <code>'double'</code>, <code>'float'</code> and <code>'integer'</code>.
+The default is <em>usually</em> <code>'double'</code>.</p>
+
+<h4><code>set_integer( str )</code></h4>
+
+<p>Configures the behaviour of <code>pack</code>.
+The valid options are <code>'signed'</code> and <code>'unsigned'</code>.
+The default is <code>'signed'</code>.</p>
+
+<h4><code>set_array( str )</code></h4>
+
+<p>Configures the behaviour of <code>pack</code>.
+The valid options are <code>'without_hole'</code>, <code>'with_hole'</code>
+and <code>'always_as_map'</code>.
+The default is <code>'without_hole'</code>.</p>
+
+<h4><code>set_string( str )</code></h4>
+
+<p>Configures the behaviour of <code>pack</code>.
+The valid options are <code>'string'</code>, <code>'string_compat'</code> and <code>'binary'</code>.
+The default is <code>'string_compat'</code> in order to be compatible with old implementation.</p>
+
+<h3>Data Conversion</h3>
+
+<ul>
+  <li>The following <strong>Lua</strong> types could be converted :
+  <code>nil</code>, <code>boolean</code>, <code>number</code>,
+  <code>string</code> and <code>table</code>.</li>
+
+  <li>A <strong>Lua</strong> <code>number</code> is converted into an <code>integer</code>
+  if <code>math.floor(num) == num</code>,
+  otherwise it is converted into the <strong>MessagePack</strong>
+  <code>float</code> or <code>double</code> (see <code>set_number</code>).</li>
+
+  <li>When a <strong>MessagePack</strong> 64 bits <code>integer</code> is converted
+  to a <strong>Lua</strong> <code>number</code>
+  it is possible that the resulting number will not represent the original number
+  but just an approximation.</li>
+
+  <li>A Lua <code>table</code> is converted into a <strong>MessagePack</strong> <code>array</code>
+  only if <em>all</em> the keys are composed of positive integers greater than 1,
+  without hole or with holes (see <code>set_array</code>).
+  Otherwise it is converted into <strong>MessagePack</strong> <code>map</code>.</li>
+
+  <li>An empty <code>table</code> is always converted
+  into a <strong>MessagePack</strong> <code>array</code>.</li>
+
+  <li>With <code>set_array'always_as_map'</code>, all Lua <code>table</code> are converted
+  into a <strong>MessagePack</strong> <code>map</code>.</li>
+
+  <li>LIMITATION : <strong>MessagePack</strong> cannot handle
+  data with <em>cyclic reference</em>.</li>
+</ul>
+
+<h3>Extensions</h3>
+
+<p>There are introduced with <strong>MessagePack</strong> specification v5.</p>
+<p>During deserialization, unknown extensions are skipped and evaluated
+as a <strong>Lua</strong> <code>nil</code>.</p>
+<p>The following example shows how to create a new <code>module</code>
+which extends <code>MessagePack</code> with the serialization/deserialization
+of <strong>Lua</strong> <code>function</code>
+(obviously, the emitter and receiver MUST use the same version of Lua).</p>
+
+<pre class="example">
+local loadstring = loadstring or load
+local mp = require 'MessagePack'
+local EXT_FUNCTION = 7
+
+mp.packers['function'] = function (buffer, fct)
+    mp.packers['ext'](buffer, EXT_FUNCTION, assert(string.dump(fct)))
+end
+
+mp.build_ext = function (tag, data)
+    if tag == EXT_FUNCTION then
+        return assert(loadstring(data))
+    end
+end
+
+return mp
+</pre>
+
+
+<h2><a name="examples"></a>Examples</h2>
+
+<pre class="example">
+local mp = require 'MessagePack'
+
+mp.set_number'float'
+mp.set_integer'unsigned'
+mp.set_array'with_hole'
+mp.set_string'string'
+
+mpac = mp.pack(data)
+data = mp.unpack(mpac)
+
+local ltn12 = require 'ltn12'
+src = ltn12.source.file(io.open('file', 'r'))
+for _, v in mp.unpacker(src) do
+    print(v)
+end
+</pre>
+
+</div> <!-- id="content" -->
+
+</div> <!-- id="main" -->
+
+<div id="about">
+</div> <!-- id="about" -->
+
+</div> <!-- id="container" -->
+
+</body>
+</html>
