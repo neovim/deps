@@ -131,6 +131,9 @@ dependencies = {
          }
       }
    },
+   coxpcall = {
+      ['1.15.0-1'] = {}
+   },
    dkjson = {
       ['2.5-1'] = {
          {
@@ -267,6 +270,27 @@ dependencies = {
          }
       }
    },
+   ['nvim-client'] = {
+      ['0.0.1-1'] = {
+         {
+            constraints = {
+               {
+                  op = "~>",
+                  version = {
+                     5, 1, string = "5.1"
+                  }
+               }
+            },
+            name = "lua"
+         }, {
+            constraints = {},
+            name = "lua-messagepack"
+         }, {
+            constraints = {},
+            name = "coxpcall"
+         }
+      }
+   },
    penlight = {
       ['1.3.1-1'] = {
          {
@@ -390,6 +414,9 @@ modules = {
    },
    cliargs = {
       "lua_cliargs/2.1-2"
+   },
+   coxpcall = {
+      "coxpcall/1.15.0-1"
    },
    dkjson = {
       "dkjson/2.5-1"
@@ -643,6 +670,18 @@ modules = {
    mediator = {
       "mediator_lua/1.1-3"
    },
+   ['nvim.async_session'] = {
+      "nvim-client/0.0.1-1"
+   },
+   ['nvim.loop'] = {
+      "nvim-client/0.0.1-1"
+   },
+   ['nvim.msgpack_stream'] = {
+      "nvim-client/0.0.1-1"
+   },
+   ['nvim.session'] = {
+      "nvim-client/0.0.1-1"
+   },
    pl = {
       "penlight/1.3.1-1"
    },
@@ -829,6 +868,18 @@ repository = {
          }
       }
    },
+   coxpcall = {
+      ['1.15.0-1'] = {
+         {
+            arch = "installed",
+            commands = {},
+            dependencies = {},
+            modules = {
+               coxpcall = "coxpcall.lua"
+            }
+         }
+      }
+   },
    dkjson = {
       ['2.5-1'] = {
          {
@@ -1007,6 +1058,24 @@ repository = {
             dependencies = {},
             modules = {
                mediator = "mediator.lua"
+            }
+         }
+      }
+   },
+   ['nvim-client'] = {
+      ['0.0.1-1'] = {
+         {
+            arch = "installed",
+            commands = {},
+            dependencies = {
+               coxpcall = "1.15.0-1",
+               ['lua-messagepack'] = "0.3.1-1"
+            },
+            modules = {
+               ['nvim.async_session'] = "nvim/async_session.lua",
+               ['nvim.loop'] = "nvim/loop.so",
+               ['nvim.msgpack_stream'] = "nvim/msgpack_stream.lua",
+               ['nvim.session'] = "nvim/session.lua"
             }
          }
       }
