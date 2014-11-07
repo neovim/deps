@@ -1,8 +1,8 @@
 package = 'nvim-client'
-version = '0.0.1-1'
+version = '0.0.1-2'
 source = {
   url = 'git://github.com/neovim/lua-client',
-  tag = '0.0.1-1'
+  tag = '0.0.1-2'
 }
 description = {
   summary = "Lua client to Nvim",
@@ -23,6 +23,10 @@ external_dependencies = {
 -- https://github.com/diegonehab/luasocket/blob/master/luasocket-scm-0.rockspec
 local function make_plat(plat)
   local libs = {'uv', 'pthread'}
+
+  if plat == 'freebsd' then
+    libs[#libs + 1] = 'kvm'
+  end
 
   if plat == 'linux' then
     libs[#libs + 1] = 'rt'
