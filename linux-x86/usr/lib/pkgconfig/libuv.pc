@@ -1,5 +1,5 @@
-prefix=/opt/neovim-deps/32/usr
-exec_prefix=/opt/neovim-deps/32/usr
+prefix=/opt/neovim-deps/linux-x86/usr
+exec_prefix=/opt/neovim-deps/linux-x86/usr
 libdir=${exec_prefix}/lib
 includedir=${prefix}/include
 

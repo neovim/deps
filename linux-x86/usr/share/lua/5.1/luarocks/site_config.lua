@@ -1,11 +1,11 @@
 local site_config = {}
-site_config.LUAROCKS_PREFIX=[[/opt/neovim-deps/32/usr]]
-site_config.LUA_INCDIR=[[/opt/neovim-deps/32/usr/include/luajit-2.0]]
-site_config.LUA_LIBDIR=[[/opt/neovim-deps/32/usr/lib]]
-site_config.LUA_BINDIR=[[/opt/neovim-deps/32/usr/bin]]
+site_config.LUAROCKS_PREFIX=[[/opt/neovim-deps/linux-x86/usr]]
+site_config.LUA_INCDIR=[[/opt/neovim-deps/linux-x86/usr/include/luajit-2.0]]
+site_config.LUA_LIBDIR=[[/opt/neovim-deps/linux-x86/usr/lib]]
+site_config.LUA_BINDIR=[[/opt/neovim-deps/linux-x86/usr/bin]]
 site_config.LUA_INTERPRETER=[[luajit]]
-site_config.LUAROCKS_SYSCONFDIR=[[/opt/neovim-deps/32/usr/etc/luarocks]]
-site_config.LUAROCKS_ROCKS_TREE=[[/opt/neovim-deps/32/usr]]
+site_config.LUAROCKS_SYSCONFDIR=[[/opt/neovim-deps/linux-x86/usr/etc/luarocks]]
+site_config.LUAROCKS_ROCKS_TREE=[[/opt/neovim-deps/linux-x86/usr]]
 site_config.LUAROCKS_FORCE_CONFIG=true
 site_config.LUAROCKS_ROCKS_SUBDIR=[[/lib/luarocks/rocks]]
 site_config.LUA_DIR_SET=true

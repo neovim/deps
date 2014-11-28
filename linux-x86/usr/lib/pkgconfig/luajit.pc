@@ -5,7 +5,7 @@ relver=3
 version=${majver}.${minver}.${relver}
 abiver=5.1
 
-prefix=/opt/neovim-deps/32/usr
+prefix=/opt/neovim-deps/linux-x86/usr
 multilib=lib
 exec_prefix=${prefix}
 libdir=${exec_prefix}/${multilib}
