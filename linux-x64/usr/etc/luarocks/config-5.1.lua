@@ -1,3 +1,3 @@
 rocks_trees = {
-   { name = [[system]], root = [[/opt/neovim-deps/64/usr]] }
+   { name = [[system]], root = [[/opt/neovim-deps/linux-x64/usr]] }
 }
