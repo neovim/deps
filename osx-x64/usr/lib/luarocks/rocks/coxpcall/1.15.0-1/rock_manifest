@@ -1,0 +1,14 @@
+rock_manifest = {
+   ['coxpcall-1.15.0-1.rockspec'] = "8bb5a1814fa114ec82a6eea47397a745",
+   doc = {
+      us = {
+         ['coxpcall.png'] = "519b34e9f0c798a6df468c271cdbe85d",
+         ['doc.css'] = "d0a913514fb190240b3b4033d105cbc0",
+         ['index.html'] = "da6f1833e151a28cac00881f05992888",
+         ['license.html'] = "7a1ac58b3e462d7a12009cdf26db8858"
+      }
+   },
+   lua = {
+      ['coxpcall.lua'] = "3aae7ac0c1f11b2a84273c0fd8734202"
+   }
+}

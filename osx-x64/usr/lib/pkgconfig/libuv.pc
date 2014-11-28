@@ -1,0 +1,11 @@
+prefix=/opt/neovim-deps/osx-x64/usr
+exec_prefix=/opt/neovim-deps/osx-x64/usr
+libdir=${exec_prefix}/lib
+includedir=${prefix}/include
+
+Name: libuv
+Version: 0.11.28
+Description: multi-platform support library with a focus on asynchronous I/O.
+
+Libs: -L${libdir} -luv -lpthread -ldl 
+Cflags: -I${includedir}
