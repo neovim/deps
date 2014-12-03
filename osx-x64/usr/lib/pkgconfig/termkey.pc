@@ -1,0 +1,8 @@
+libdir=/opt/neovim-deps/osx-x64/usr/lib
+includedir=/opt/neovim-deps/osx-x64/usr/include
+
+Name: termkey
+Description: Abstract terminal key input library
+Version: @VERSION@
+Libs: -L${libdir} -ltermkey
+Cflags: -I${includedir}

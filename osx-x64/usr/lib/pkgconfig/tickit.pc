@@ -1,0 +1,8 @@
+libdir=/opt/neovim-deps/osx-x64/usr/lib
+includedir=/opt/neovim-deps/osx-x64/usr/include
+
+Name: tickit
+Description: Terminal Interface Construction KIT
+Version: 0.0
+Libs: -L${libdir} -ltickit
+Cflags: -I${includedir}
