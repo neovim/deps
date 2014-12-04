@@ -23,7 +23,7 @@ dependency_libs=' -lpthread -ldl'
 weak_library_names=''
 
 # Version information for libuv.
-current=11
+current=1
 age=0
 revision=0
 

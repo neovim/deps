@@ -4,7 +4,7 @@ libdir=${exec_prefix}/lib
 includedir=${prefix}/include
 
 Name: libuv
-Version: 0.11.28
+Version: 1.0.1
 Description: multi-platform support library with a focus on asynchronous I/O.
 
 Libs: -L${libdir} -luv -lpthread -ldl 

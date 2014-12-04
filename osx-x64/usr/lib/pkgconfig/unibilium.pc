@@ -1,6 +1,6 @@
 libdir=/opt/neovim-deps/osx-x64/usr/lib
 includedir=/opt/neovim-deps/osx-x64/usr/include
-version=1.1.0
+version=1.1.1
 
 Name: unibilium
 Description: terminfo parser and utility functions
