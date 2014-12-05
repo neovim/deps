@@ -1,0 +1,19 @@
+rock_manifest = {
+   doc = {
+      LICENSE = "136e4f49dbf29942c572a3a8f6e88a77",
+      ['README.md'] = "2eff1783ff4e67d337ce6fb8196be9ca"
+   },
+   lib = {
+      nvim = {
+         ['loop.so'] = "24b66f4769e17e13bbc98bcfa0e9452d"
+      }
+   },
+   lua = {
+      nvim = {
+         ['async_session.lua'] = "4e4227481aa9377a8eabe36e2b96c256",
+         ['msgpack_stream.lua'] = "4a767980e07c299d294b89ed2b792d29",
+         ['session.lua'] = "ec1c1c924ededeb2eb31fb656cbcbdf8"
+      }
+   },
+   ['nvim-client-0.0.1-6.rockspec'] = "5b0efb10d8850ca5e35eff7d635317b5"
+}
