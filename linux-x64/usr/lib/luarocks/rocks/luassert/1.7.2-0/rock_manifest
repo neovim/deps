@@ -6,29 +6,29 @@ rock_manifest = {
    lua = {
       luassert = {
          ['assert.lua'] = "ff4129636c677dada090b8e918076224",
-         ['assertions.lua'] = "f86311473a32ee68d7788511bbd9474a",
+         ['assertions.lua'] = "961e2345e035e0ef2cb315a52e5c0a64",
          formatters = {
             ['binarystring.lua'] = "1cf3fba0573869e42fe1374f3919b2db",
-            ['init.lua'] = "a303b408de5d429241750195bff176fb"
+            ['init.lua'] = "ff8a03b03aabe2d89de662943f8b252b"
          },
          ['init.lua'] = "23c5d9cb21ddd6717b1bbe6c47d15219",
          languages = {
-            ['ar.lua'] = "71aaeba826dd2c1dba8d665bfcfb8cc5",
-            ['en.lua'] = "b34e73277050f4bda19bf1fcb96b1c6e",
-            ['fr.lua'] = "4d42e33570130e4908108ea3a04d2d81",
-            ['ja.lua'] = "f59b04bb7c7e21a3a4aa6a896c99af68",
-            ['nl.lua'] = "6e22b303834603ee0d04151f5ffb4ce2",
-            ['ru.lua'] = "2ae652a890148900c64843f539529dcb",
-            ['ua.lua'] = "eac6fa107daa35bc306a420d4b1fb35a",
-            ['zh.lua'] = "eb8a00330cd486e8aeee4847a1ee264b"
+            ['ar.lua'] = "ba9ad0979beab828f8729e6235361860",
+            ['en.lua'] = "cb959b8d11d8383f4da12dac9db6f6e7",
+            ['fr.lua'] = "cba5e983f3497bb5a9a94109344b4c44",
+            ['ja.lua'] = "694d78f0f7c95593334d67f43f38193c",
+            ['nl.lua'] = "e2c3a947c2eb5a8a6472d91da0615f0d",
+            ['ru.lua'] = "93878834ffaeface85c6557bc97e421c",
+            ['ua.lua'] = "84dab88033b2814f5b23c1eb70b9eeee",
+            ['zh.lua'] = "1621445b0bd9628587ebfeeac6fd2711"
          },
          ['mock.lua'] = "0cf03425fea556014923e6d7088f99af",
          ['modifiers.lua'] = "86adced69ccf80b195efa711e45a4d2c",
          ['spy.lua'] = "880c184d63134722a046393f7b58c8a6",
-         ['state.lua'] = "f81a18c8b2d077386b62e52d25a5640d",
+         ['state.lua'] = "5dc266843a9a8dc66e12c0a40e2ea494",
          ['stub.lua'] = "6f550dbbd7c7eea1bf077cc0daa7b0c1",
          ['util.lua'] = "76efe8fc038eb256977ed50746cae5cf"
       }
    },
-   ['luassert-1.7.1-0.rockspec'] = "8997f07674241a7cf4156eb1f0c38e88"
+   ['luassert-1.7.2-0.rockspec'] = "d8af27bf341b3053e9322a776b08b9b1"
 }
