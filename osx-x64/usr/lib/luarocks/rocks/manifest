@@ -1,6 +1,6 @@
 commands = {
    busted = {
-      "busted/2.0.rc3-0"
+      "busted/2.0.rc4-0"
    },
    luarocks = {
       "luarocks/2.2.0-1"
@@ -32,7 +32,7 @@ dependencies = {
       }
    },
    busted = {
-      ['2.0.rc3-0'] = {
+      ['2.0.rc4-0'] = {
          {
             constraints = {
                {
@@ -89,8 +89,8 @@ dependencies = {
                {
                   op = ">=",
                   version = {
-                     1, 7, 1, revision = 0,
-                     string = "1.7.1-0"
+                     1, 7, 2, revision = 0,
+                     string = "1.7.2-0"
                   }
                }
             },
@@ -155,7 +155,7 @@ dependencies = {
       }
    },
    lpeg = {
-      ['0.12-1'] = {
+      ['0.12.1-1'] = {
          {
             constraints = {
                {
@@ -323,94 +323,97 @@ modules = {
       "ansicolors/1.0.2-3"
    },
    busted = {
-      "busted/2.0.rc3-0"
+      "busted/2.0.rc4-0"
    },
    ['busted.compatibility'] = {
-      "busted/2.0.rc3-0"
+      "busted/2.0.rc4-0"
    },
    ['busted.context'] = {
-      "busted/2.0.rc3-0"
+      "busted/2.0.rc4-0"
    },
    ['busted.core'] = {
-      "busted/2.0.rc3-0"
+      "busted/2.0.rc4-0"
    },
    ['busted.done'] = {
-      "busted/2.0.rc3-0"
+      "busted/2.0.rc4-0"
    },
    ['busted.environment'] = {
-      "busted/2.0.rc3-0"
+      "busted/2.0.rc4-0"
    },
    ['busted.languages.ar'] = {
-      "busted/2.0.rc3-0"
+      "busted/2.0.rc4-0"
    },
    ['busted.languages.de'] = {
-      "busted/2.0.rc3-0"
+      "busted/2.0.rc4-0"
    },
    ['busted.languages.en'] = {
-      "busted/2.0.rc3-0"
+      "busted/2.0.rc4-0"
    },
    ['busted.languages.fr'] = {
-      "busted/2.0.rc3-0"
+      "busted/2.0.rc4-0"
    },
    ['busted.languages.ja'] = {
-      "busted/2.0.rc3-0"
+      "busted/2.0.rc4-0"
    },
    ['busted.languages.nl'] = {
-      "busted/2.0.rc3-0"
+      "busted/2.0.rc4-0"
    },
    ['busted.languages.ru'] = {
-      "busted/2.0.rc3-0"
+      "busted/2.0.rc4-0"
    },
    ['busted.languages.th'] = {
-      "busted/2.0.rc3-0"
+      "busted/2.0.rc4-0"
    },
    ['busted.languages.ua'] = {
-      "busted/2.0.rc3-0"
+      "busted/2.0.rc4-0"
    },
    ['busted.languages.zh'] = {
-      "busted/2.0.rc3-0"
+      "busted/2.0.rc4-0"
    },
    ['busted.modules.configuration_loader'] = {
-      "busted/2.0.rc3-0"
+      "busted/2.0.rc4-0"
    },
    ['busted.modules.files.lua'] = {
-      "busted/2.0.rc3-0"
+      "busted/2.0.rc4-0"
    },
    ['busted.modules.files.moonscript'] = {
-      "busted/2.0.rc3-0"
+      "busted/2.0.rc4-0"
    },
    ['busted.modules.files.terra'] = {
-      "busted/2.0.rc3-0"
+      "busted/2.0.rc4-0"
    },
    ['busted.modules.luacov'] = {
-      "busted/2.0.rc3-0"
+      "busted/2.0.rc4-0"
    },
    ['busted.modules.output_handler_loader'] = {
-      "busted/2.0.rc3-0"
+      "busted/2.0.rc4-0"
    },
    ['busted.modules.test_file_loader'] = {
-      "busted/2.0.rc3-0"
+      "busted/2.0.rc4-0"
    },
    ['busted.outputHandlers.TAP'] = {
-      "busted/2.0.rc3-0"
+      "busted/2.0.rc4-0"
    },
    ['busted.outputHandlers.base'] = {
-      "busted/2.0.rc3-0"
+      "busted/2.0.rc4-0"
    },
    ['busted.outputHandlers.json'] = {
-      "busted/2.0.rc3-0"
+      "busted/2.0.rc4-0"
    },
    ['busted.outputHandlers.junit'] = {
-      "busted/2.0.rc3-0"
+      "busted/2.0.rc4-0"
    },
    ['busted.outputHandlers.plainTerminal'] = {
-      "busted/2.0.rc3-0"
+      "busted/2.0.rc4-0"
    },
    ['busted.outputHandlers.sound'] = {
-      "busted/2.0.rc3-0"
+      "busted/2.0.rc4-0"
    },
    ['busted.outputHandlers.utfTerminal'] = {
-      "busted/2.0.rc3-0"
+      "busted/2.0.rc4-0"
+   },
+   ['busted.status'] = {
+      "busted/2.0.rc4-0"
    },
    cliargs = {
       "lua_cliargs/2.1-2"
@@ -425,7 +428,7 @@ modules = {
       "luafilesystem/1.6.2-2"
    },
    lpeg = {
-      "lpeg/0.12-1"
+      "lpeg/0.12.1-1"
    },
    ['luarocks.add'] = {
       "luarocks/2.2.0-1"
@@ -797,7 +800,7 @@ modules = {
       "penlight/1.3.1-1"
    },
    re = {
-      "lpeg/0.12-1"
+      "lpeg/0.12.1-1"
    },
    say = {
       "say/1.2-1"
@@ -817,7 +820,7 @@ repository = {
       }
    },
    busted = {
-      ['2.0.rc3-0'] = {
+      ['2.0.rc4-0'] = {
          {
             arch = "installed",
             commands = {
@@ -863,7 +866,8 @@ repository = {
                ['busted.outputHandlers.junit'] = "busted/outputHandlers/junit.lua",
                ['busted.outputHandlers.plainTerminal'] = "busted/outputHandlers/plainTerminal.lua",
                ['busted.outputHandlers.sound'] = "busted/outputHandlers/sound.lua",
-               ['busted.outputHandlers.utfTerminal'] = "busted/outputHandlers/utfTerminal.lua"
+               ['busted.outputHandlers.utfTerminal'] = "busted/outputHandlers/utfTerminal.lua",
+               ['busted.status'] = "busted/status.lua"
             }
          }
       }
@@ -893,7 +897,7 @@ repository = {
       }
    },
    lpeg = {
-      ['0.12-1'] = {
+      ['0.12.1-1'] = {
          {
             arch = "installed",
             commands = {},
