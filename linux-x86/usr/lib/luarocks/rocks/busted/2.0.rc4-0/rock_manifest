@@ -1,20 +1,20 @@
 rock_manifest = {
    bin = {
-      busted = "401893bd74a5a79a30009681625223d8"
+      busted = "1704f95ae227e3c67087b7c6bd307160"
    },
-   ['busted-2.0.rc3-0.rockspec'] = "e4814a4a4ee75bddd88bd8b9ef137bd4",
+   ['busted-2.0.rc4-0.rockspec'] = "1979a8037b2414937c0ce8fead5fbc2e",
    doc = {
       LICENSE = "cabb1471206ff05b6b3e0e0af73dbd33",
       ['README.md'] = "c2ebfe652deeaf9a5652ee54f094a9d7"
    },
    lua = {
       busted = {
-         ['compatibility.lua'] = "1485b6e84df6f721cea80c2445fb07f3",
+         ['compatibility.lua'] = "0f9cff8b8fca30d352ff848b971266d7",
          ['context.lua'] = "0f100c7384d09f1921cbfafc251ecdd0",
-         ['core.lua'] = "7bc05af2b099c291692efa2e66ebebc5",
+         ['core.lua'] = "d4752dc439f4e8e94b668e7c24995724",
          ['done.lua'] = "1a89c2e9a52230a2e3bfe0041e0bfc1d",
          ['environment.lua'] = "f1a46e9276b7b72d7c9f2e1381a9496f",
-         ['init.lua'] = "0f2eb66762c84d86a262a81ee42f5114",
+         ['init.lua'] = "503b096655b786acb1b01dbc4d168190",
          languages = {
             ['ar.lua'] = "bb95e045d1707e92191873af7eaac74f",
             ['de.lua'] = "6e383a826b38f04e67fff4f5c9060419",
@@ -30,23 +30,24 @@ rock_manifest = {
          modules = {
             ['configuration_loader.lua'] = "a80b9937792e2f9737954db466ce6e8a",
             files = {
-               ['lua.lua'] = "6419716a990ef33aea21d5d24e099bc5",
+               ['lua.lua'] = "52b08a4c74c4b29c2d1bcd6bb7110683",
                ['moonscript.lua'] = "ecccbd4158dc0f32ed365beed925056f",
                ['terra.lua'] = "6ab97c769fe2d9e3add7fff2cdf1bcbf"
             },
             ['luacov.lua'] = "86f3e11504c5d01b46408f6509a18d30",
-            ['output_handler_loader.lua'] = "c0f5027cd0e17d646318449fee800d01",
-            ['test_file_loader.lua'] = "00e1721831c25f66f3737d8836592a7f"
+            ['output_handler_loader.lua'] = "fb50d75973246bc058727f901926e051",
+            ['test_file_loader.lua'] = "ef6ce82ebb1a26001f1889ae2ce6cd5f"
          },
          outputHandlers = {
-            ['TAP.lua'] = "17ad91448d14a6de480ea7ade29940b0",
-            ['base.lua'] = "4858edff6e0c447994b6049b4d1c33a4",
+            ['TAP.lua'] = "40ddb07558ab93e93e93819f1d198f6c",
+            ['base.lua'] = "436116c1bf29026b0aa1249ab462a04d",
             ['json.lua'] = "a22cb57833687cacd33e8b40b8a0a0f8",
             ['junit.lua'] = "34430f296fd0facc53bf6351dd655574",
-            ['plainTerminal.lua'] = "2680352d613eb0e189e3ea7164493331",
+            ['plainTerminal.lua'] = "0db932b9dd6fc9bd7624bd8b08600920",
             ['sound.lua'] = "9b7f62e7346af4ca356cb4ab9f4f31f8",
-            ['utfTerminal.lua'] = "0f27f997ff2b5f09df3eb93bc22a908a"
-         }
+            ['utfTerminal.lua'] = "aacb28b4d32fe2ebc54a6509751d03b0"
+         },
+         ['status.lua'] = "8bb455d6125bcc2122c98f608f5d7702"
       }
    }
 }
