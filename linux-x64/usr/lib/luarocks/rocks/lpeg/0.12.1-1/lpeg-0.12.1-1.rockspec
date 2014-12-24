@@ -1,8 +1,8 @@
 package = "LPeg"
-version = "0.12-1"
+version = "0.12.1-1"
 source = {
-   url = "http://www.inf.puc-rio.br/~roberto/lpeg/lpeg-0.12.tar.gz",
-   md5 = "4abb3c28cd8b6565c6a65e88f06c9162"
+   url = "http://www.inf.puc-rio.br/~roberto/lpeg/lpeg-0.12.1.tar.gz",
+   md5 = "acfca4d7075b82d5195e1b3d947904da"
 }
 description = {
    summary = "Parsing Expression Grammars For Lua",
@@ -15,6 +15,7 @@ description = {
       define entire grammars).
    ]],
    homepage = "http://www.inf.puc-rio.br/~roberto/lpeg.html",
+   maintainer = "Gary V. Vaughan <gary@vaughan.pe>",
    license = "MIT/X11"
 }
 dependencies = {
