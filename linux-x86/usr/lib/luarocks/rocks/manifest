@@ -230,7 +230,7 @@ dependencies = {
       }
    },
    luassert = {
-      ['1.7.2-0'] = {
+      ['1.7.3-0'] = {
          {
             constraints = {
                {
@@ -614,61 +614,61 @@ modules = {
       "luarocks/2.2.0-1"
    },
    luassert = {
-      "luassert/1.7.2-0"
+      "luassert/1.7.3-0"
    },
    ['luassert.assert'] = {
-      "luassert/1.7.2-0"
+      "luassert/1.7.3-0"
    },
    ['luassert.assertions'] = {
-      "luassert/1.7.2-0"
+      "luassert/1.7.3-0"
    },
    ['luassert.formatters'] = {
-      "luassert/1.7.2-0"
+      "luassert/1.7.3-0"
    },
    ['luassert.formatters.binarystring'] = {
-      "luassert/1.7.2-0"
+      "luassert/1.7.3-0"
    },
    ['luassert.languages.ar'] = {
-      "luassert/1.7.2-0"
+      "luassert/1.7.3-0"
    },
    ['luassert.languages.en'] = {
-      "luassert/1.7.2-0"
+      "luassert/1.7.3-0"
    },
    ['luassert.languages.fr'] = {
-      "luassert/1.7.2-0"
+      "luassert/1.7.3-0"
    },
    ['luassert.languages.ja'] = {
-      "luassert/1.7.2-0"
+      "luassert/1.7.3-0"
    },
    ['luassert.languages.nl'] = {
-      "luassert/1.7.2-0"
+      "luassert/1.7.3-0"
    },
    ['luassert.languages.ru'] = {
-      "luassert/1.7.2-0"
+      "luassert/1.7.3-0"
    },
    ['luassert.languages.ua'] = {
-      "luassert/1.7.2-0"
+      "luassert/1.7.3-0"
    },
    ['luassert.languages.zh'] = {
-      "luassert/1.7.2-0"
+      "luassert/1.7.3-0"
    },
    ['luassert.mock'] = {
-      "luassert/1.7.2-0"
+      "luassert/1.7.3-0"
    },
    ['luassert.modifiers'] = {
-      "luassert/1.7.2-0"
+      "luassert/1.7.3-0"
    },
    ['luassert.spy'] = {
-      "luassert/1.7.2-0"
+      "luassert/1.7.3-0"
    },
    ['luassert.state'] = {
-      "luassert/1.7.2-0"
+      "luassert/1.7.3-0"
    },
    ['luassert.stub'] = {
-      "luassert/1.7.2-0"
+      "luassert/1.7.3-0"
    },
    ['luassert.util'] = {
-      "luassert/1.7.2-0"
+      "luassert/1.7.3-0"
    },
    mediator = {
       "mediator_lua/1.1-3"
@@ -831,7 +831,7 @@ repository = {
                dkjson = "2.5-1",
                lua_cliargs = "2.1-2",
                luafilesystem = "1.6.2-2",
-               luassert = "1.7.2-0",
+               luassert = "1.7.3-0",
                mediator_lua = "1.1-3",
                penlight = "1.3.1-1",
                say = "1.2-1"
@@ -1023,7 +1023,7 @@ repository = {
       }
    },
    luassert = {
-      ['1.7.2-0'] = {
+      ['1.7.3-0'] = {
          {
             arch = "installed",
             commands = {},
