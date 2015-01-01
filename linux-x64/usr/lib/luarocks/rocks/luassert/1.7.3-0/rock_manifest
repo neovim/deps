@@ -6,10 +6,10 @@ rock_manifest = {
    lua = {
       luassert = {
          ['assert.lua'] = "ff4129636c677dada090b8e918076224",
-         ['assertions.lua'] = "961e2345e035e0ef2cb315a52e5c0a64",
+         ['assertions.lua'] = "971d83646c4c617b70b6574eb861a35d",
          formatters = {
             ['binarystring.lua'] = "1cf3fba0573869e42fe1374f3919b2db",
-            ['init.lua'] = "ff8a03b03aabe2d89de662943f8b252b"
+            ['init.lua'] = "e9fe9f6b52482d3f85f069e261742348"
          },
          ['init.lua'] = "23c5d9cb21ddd6717b1bbe6c47d15219",
          languages = {
@@ -30,5 +30,5 @@ rock_manifest = {
          ['util.lua'] = "76efe8fc038eb256977ed50746cae5cf"
       }
    },
-   ['luassert-1.7.2-0.rockspec'] = "d8af27bf341b3053e9322a776b08b9b1"
+   ['luassert-1.7.3-0.rockspec'] = "0f51e0fda7d028e0536b0bc1829b8ece"
 }
