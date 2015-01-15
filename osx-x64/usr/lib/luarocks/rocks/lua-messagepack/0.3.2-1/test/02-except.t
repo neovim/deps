@@ -2,7 +2,7 @@
 
 require 'Test.More'
 
-plan(20)
+plan(22)
 
 local mp = require 'MessagePack'
 
@@ -38,6 +38,11 @@ error_like( function ()
             end,
             "stack overflow",   -- from Lua interpreter
             "indirect cycle" )
+
+error_like( function ()
+                mp.unpack(string.char(193)) -- 0xC1
+            end,
+            "unpack 'reserved193' is unimplemented" )
 
 is( mp.unpack(mp.pack("text")), "text" )
 
@@ -101,4 +106,9 @@ error_like( function ()
                 mp.packers['fixext4'](nil, 1, '123')
             end,
             "bad length for fixext4" )
+
+lives_ok( function ()
+                mp.packers['fixext4']({}, 1, '1234')
+            end,
+            "fixext4" )
 

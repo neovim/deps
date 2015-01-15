@@ -198,8 +198,8 @@ if not r then
         end
     end
 end
-local i = 1
-local f = io.open('cases.mpac', 'r')
+i = 1
+f = io.open('cases.mpac', 'r')
 local s = ltn12.source.file(f)
 for _, val in mp.unpacker(s) do
     if type(val) == 'table' then
@@ -213,7 +213,7 @@ os.remove 'cases.mpac'  -- clean up
 
 diag("set_string'string'")
 mp.set_string'string'
-local i = 1
+i = 1
 for _, val in mp.unpacker(mpac) do
     if type(val) == 'table' then
         is_deeply(mp.unpack(mp.pack(data[i])), data[i], "unpack/pack " .. data[i+1])
@@ -225,7 +225,7 @@ end
 
 diag("set_string'binary'")
 mp.set_string'binary'
-local i = 1
+i = 1
 for _, val in mp.unpacker(mpac) do
     if type(val) == 'table' then
         is_deeply(mp.unpack(mp.pack(data[i])), data[i], "unpack/pack " .. data[i+1])
@@ -238,7 +238,7 @@ mp.set_string'string_compat'
 
 diag("set_integer'unsigned'")
 mp.set_integer'unsigned'
-local i = 1
+i = 1
 for _, val in mp.unpacker(mpac) do
     if type(val) == 'table' then
         is_deeply(mp.unpack(mp.pack(data[i])), data[i], "unpack/pack " .. data[i+1])
@@ -251,7 +251,7 @@ mp.set_integer'signed'
 
 diag("set_number'float'")
 mp.set_number'float'
-local i = 1
+i = 1
 for _, val in mp.unpacker(mpac) do
     if type(val) == 'table' then
         is_deeply(mp.unpack(mp.pack(data[i])), data[i], "unpack/pack " .. data[i+1])
@@ -263,7 +263,7 @@ end
 
 diag("set_number'integer'")
 mp.set_number'integer'
-local i = 1
+i = 1
 for _, val in mp.unpacker(mpac) do
     if type(val) == 'table' then
         is_deeply(mp.unpack(mp.pack(data[i])), data[i], "unpack/pack " .. data[i+1])
@@ -276,7 +276,7 @@ mp.set_number'double'
 
 diag("set_array'with_hole'")
 mp.set_array'with_hole'
-local i = 1
+i = 1
 for _, val in mp.unpacker(mpac) do
     if type(val) == 'table' then
         is_deeply(mp.unpack(mp.pack(data[i])), data[i], "unpack/pack " .. data[i+1])
@@ -288,7 +288,7 @@ end
 
 diag("set_array'always_as_map'")
 mp.set_array'always_as_map'
-local i = 1
+i = 1
 for _, val in mp.unpacker(mpac) do
     if type(val) == 'table' then
         is_deeply(mp.unpack(mp.pack(data[i])), data[i], "unpack/pack " .. data[i+1])
