@@ -6,7 +6,7 @@ if not pcall(require, 'Coat') then
     skip_all 'no Coat'
 end
 
-plan(4)
+plan(8)
 
 local Meta = require 'Coat.Meta.Class'
 local mp = require 'MessagePack'
@@ -36,22 +36,32 @@ end
 
 class 'Point'
 
-has.x = { is = 'rw', isa = 'number', default = 0 }
-has.y = { is = 'rw', isa = 'number', default = 0 }
+has.x = { is = 'ro', isa = 'number', default = 0 }
+has.y = { is = 'ro', isa = 'number', default = 0 }
+has.desc = { is = 'rw', isa = 'string' }
 
 function overload:__tostring ()
-    return '(' .. self.x .. ', ' .. self.y .. ')'
+    return '(' .. tostring(self.x) .. ', ' .. tostring(self.y) .. ')'
 end
 
 function method:draw ()
     return "drawing " .. self._CLASS .. tostring(self)
 end
 
-a = Point{x = 1, y = 2}
+local a = Point{x = 1, y = 2}
 ok( a:isa 'Point' )
-is( tostring(a), "(1, 2)" )
+is( a:draw(), "drawing Point(1, 2)" )
 
-b =  mp.unpack(mp.pack(a))
+local b = mp.unpack(mp.pack(a))
 ok( b:isa 'Point' )
-is( tostring(b), "(1, 2)" )
+is( b:draw(), "drawing Point(1, 2)" )
 
+a.desc = string.rep('x', 2^9)
+local c = mp.unpack(mp.pack(a))
+ok( c:isa 'Point' )
+is( #c.desc, 2^9 )
+
+a.desc = string.rep('x', 2^17)
+local d = mp.unpack(mp.pack(a))
+ok( d:isa 'Point' )
+is( #d.desc, 2^17 )

@@ -22,13 +22,13 @@ t = mp.unpack(mp.pack(t))
 is( t[2], 'b' )
 is( t[4], nil, "don't follow metatable" )
 
-local t = setmetatable( { a = 1, b = 2, c = 3 }, { __index = { d = 4 } } )
+t = setmetatable( { a = 1, b = 2, c = 3 }, { __index = { d = 4 } } )
 is( t.d, 4 )
 t = mp.unpack(mp.pack(t))
 is( t.b, 2 )
 is( t.d, nil, "don't follow metatable" )
 
-local t = { 10, 20, nil, 40 }
+t = { 10, 20, nil, 40 }
 mp.set_array'without_hole'
 is( mp.pack(t):byte(), 0x80 + 3, "array with hole as map" )
 is_deeply( mp.unpack(mp.pack(t)), t )
@@ -39,7 +39,7 @@ mp.set_array'always_as_map'
 is( mp.pack(t):byte(), 0x80 + 3, "always_as_map" )
 is_deeply( mp.unpack(mp.pack(t)), t )
 
-local t = {}
+t = {}
 mp.set_array'without_hole'
 is( mp.pack(t):byte(), 0x90, "empty table as array" )
 mp.set_array'with_hole'
