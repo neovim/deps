@@ -35,7 +35,7 @@ t = mp.unpack(mp.pack(t))
 is( t[2], 'b' )
 is( t[4], 'd', "follow metatable"  )
 
-local t = setmetatable( { a = 1, b = 2, c = 3 }, { __index = { d = 4 } } )
+t = setmetatable( { a = 1, b = 2, c = 3 }, { __index = { d = 4 } } )
 is( t.d, 4 )
 t = mp.unpack(mp.pack(t))
 is( t.b, 2 )

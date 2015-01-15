@@ -3,7 +3,7 @@
 <html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
 <head>
   <title>lua-MessagePack - Homepage</title>
-    <link rel="stylesheet" href="http://www.keplerproject.org/doc.css" type="text/css"/>
+    <link rel="stylesheet" href="doc.css" type="text/css"/>
   <meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
   <meta http-equiv="Author" content="Fran&ccedil;ois Perrad"/>
   <meta http-equiv="Language" content="en"/>
@@ -22,7 +22,7 @@
     </a>
   </div>
   <div id="product_name"><big><strong>lua-MessagePack</strong></big></div>
-  <div id="product_description">a pure Lua implementation</div>
+  <div id="product_description">a pure Lua implementation (spec v5)</div>
 </div> <!-- id="product" -->
 
 <div id="main">
@@ -76,9 +76,15 @@
 
 <h2><a name="status"></a>Status</h2>
 
-<p>lua-MessagePack is in beta stage.</p>
+<p>lua-MessagePack is in production/stable stage.</p>
 
-<p>It's developed for Lua 5.1 &amp; 5.2, and an experimental refactor for Lua 5.3 is also available.</p>
+<p>It's developed for Lua 5.1, 5.2 &amp; 5.3.
+There are 2 variants:
+  <ul>
+    <li>one compatible with all interpreters since Lua 5.1</li>
+    <li>another which uses the Lua 5.3 features</li>
+  </ul>
+</p>
 
 
 <h2><a name="download"></a>Download</h2>
@@ -92,13 +98,13 @@
 <p>lua-MessagePack is available via LuaRocks:</p>
 
 <pre class="example">
-luarocks install lua-messagepack
+luarocks install lua-messagepack  # or lua-messagepack-lua53
 </pre>
 
 <p>or manually, with:</p>
 
 <pre class="example">
-make install
+make install LUAVER=5.2
 </pre>
 
 <h2><a name="test"></a>Test</h2>
@@ -113,7 +119,7 @@ make test
 
 <h2><a name="license"></a>Copyright and License</h2>
 
-<p>Copyright &copy; 2012-2014 Fran&ccedil;ois Perrad
+<p>Copyright &copy; 2012-2015 Fran&ccedil;ois Perrad
 <a href="http://www.ohloh.net/accounts/4780?ref=Rank">
   <img alt="ohloh profile for Fran&ccedil;ois Perrad"
        height="24" width="32" style="border-width:0"

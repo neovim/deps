@@ -7,9 +7,9 @@ if not r then
     jit = nil
 end
 
-local SIZEOF_NUMBER = 8
-local NUMBER_INTEGRAL = false
-if not jit then
+local SIZEOF_NUMBER = string.pack and #string.pack('n', 0.0) or 8
+local NUMBER_INTEGRAL = math.type and (math.type(0.0) == math.type(0)) or false
+if not jit and _VERSION < 'Lua 5.3' then
     -- Lua 5.1 & 5.2
     local loadstring = loadstring or load
     local luac = string.dump(loadstring "a = 1")
@@ -27,8 +27,9 @@ local tostring = tostring
 local type = type
 local char = require'string'.char
 local floor = require'math'.floor
-local frexp = require'math'.frexp
-local ldexp = require'math'.ldexp
+local tointeger = require'math'.tointeger or floor
+local frexp = require'math'.frexp or require'mathx'.frexp
+local ldexp = require'math'.ldexp or require'mathx'.ldexp
 local huge = require'math'.huge
 local tconcat = require'table'.concat
 
@@ -86,7 +87,7 @@ packers['string_compat'] = function (buffer, str)
         buffer[#buffer+1] = char(0xDA,          -- str16
                                  floor(n / 0x100),
                                  n % 0x100)
-    elseif n <= 0xFFFFFFFF then
+    elseif n <= 4294967295.0 then
         buffer[#buffer+1] = char(0xDB,          -- str32
                                  floor(n / 0x1000000),
                                  floor(n / 0x10000) % 0x100,
@@ -109,7 +110,7 @@ packers['_string'] = function (buffer, str)
         buffer[#buffer+1] = char(0xDA,          -- str16
                                  floor(n / 0x100),
                                  n % 0x100)
-    elseif n <= 0xFFFFFFFF then
+    elseif n <= 4294967295.0 then
         buffer[#buffer+1] = char(0xDB,          -- str32
                                  floor(n / 0x1000000),
                                  floor(n / 0x10000) % 0x100,
@@ -130,7 +131,7 @@ packers['binary'] = function (buffer, str)
         buffer[#buffer+1] = char(0xC5,          -- bin16
                                  floor(n / 0x100),
                                  n % 0x100)
-    elseif n <= 0xFFFFFFFF then
+    elseif n <= 4294967295.0 then
         buffer[#buffer+1] = char(0xC6,          -- bin32
                                  floor(n / 0x1000000),
                                  floor(n / 0x10000) % 0x100,
@@ -162,7 +163,7 @@ packers['map'] = function (buffer, tbl, n)
         buffer[#buffer+1] = char(0xDE,          -- map16
                                  floor(n / 0x100),
                                  n % 0x100)
-    elseif n <= 0xFFFFFFFF then
+    elseif n <= 4294967295.0 then
         buffer[#buffer+1] = char(0xDF,          -- map32
                                  floor(n / 0x1000000),
                                  floor(n / 0x10000) % 0x100,
@@ -184,7 +185,7 @@ packers['array'] = function (buffer, tbl, n)
         buffer[#buffer+1] = char(0xDC,          -- array16
                                  floor(n / 0x100),
                                  n % 0x100)
-    elseif n <= 0xFFFFFFFF then
+    elseif n <= 4294967295.0 then
         buffer[#buffer+1] = char(0xDD,          -- array32
                                  floor(n / 0x1000000),
                                  floor(n / 0x10000) % 0x100,
@@ -270,7 +271,7 @@ packers['unsigned'] = function (buffer, n)
             buffer[#buffer+1] = char(0xCD,      -- uint16
                                      floor(n / 0x100),
                                      n % 0x100)
-        elseif n <= 0xFFFFFFFF then
+        elseif n <= 4294967295.0 then
             buffer[#buffer+1] = char(0xCE,      -- uint32
                                      floor(n / 0x1000000),
                                      floor(n / 0x10000) % 0x100,
@@ -299,7 +300,7 @@ packers['unsigned'] = function (buffer, n)
                                      floor(n / 0x100),
                                      n % 0x100)
         elseif n >= -0x80000000 then
-            n = 0x100000000 + n
+            n = 4294967296.0 + n
             buffer[#buffer+1] = char(0xD2,      -- int32
                                      floor(n / 0x1000000),
                                      floor(n / 0x10000) % 0x100,
@@ -356,7 +357,7 @@ packers['signed'] = function (buffer, n)
                                      floor(n / 0x100),
                                      n % 0x100)
         elseif n >= -0x80000000 then
-            n = 0x100000000 + n
+            n = 4294967296.0 + n
             buffer[#buffer+1] = char(0xD2,      -- int32
                                      floor(n / 0x1000000),
                                      floor(n / 0x10000) % 0x100,
@@ -481,10 +482,10 @@ end
 m.set_number = set_number
 
 for k = 0, 4 do
-    local n = 2^k
+    local n = tointeger(2^k)
     local fixext = 0xD4 + k
-    packers['fixext' .. n] = function (buffer, tag, data)
-        assert(#data == n, "bad length for fixext" .. n)
+    packers['fixext' .. tostring(n)] = function (buffer, tag, data)
+        assert(#data == n, "bad length for fixext" .. tostring(n))
         buffer[#buffer+1] = char(fixext,
                                  tag < 0 and tag + 0x100 or tag)
         buffer[#buffer+1] = data
@@ -502,7 +503,7 @@ packers['ext'] = function (buffer, tag, data)
                                  floor(n / 0x100),
                                  n % 0x100,
                                  tag < 0 and tag + 0x100 or tag)
-    elseif n <= 0xFFFFFFFF then
+    elseif n <= 4294967295.0 then
         buffer[#buffer+1] = char(0xC9,          -- ext&32
                                  floor(n / 0x1000000),
                                  floor(n / 0x10000) % 0x100,
@@ -568,7 +569,7 @@ local types_map = setmetatable({
         elseif k > 0xDF then
             return 'fixnum_neg'
         else
-            return 'reserved' .. k
+            return 'reserved' .. tostring(k)
         end
 end })
 m.types_map = types_map
@@ -676,7 +677,7 @@ unpackers['double'] = function (c)
             n = 0.0/0.0
         end
     else
-        n = sign * ldexp(1.0 + mant / 0x10000000000000, expo - 0x3FF)
+        n = sign * ldexp(1.0 + mant / 4503599627370496.0, expo - 0x3FF)
     end
     c.i = i+8
     return n
@@ -927,8 +928,8 @@ function m.build_ext (tag, data)
 end
 
 for k = 0, 4 do
-    local n = 2^k
-    unpackers['fixext' .. n] = function (c)
+    local n = tointeger(2^k)
+    unpackers['fixext' .. tostring(n)] = function (c)
         local s, i, j = c.s, c.i, c.j
         if i > j then
             c:underflow(i)
@@ -1098,17 +1099,21 @@ end
 set_string'string_compat'
 set_integer'signed'
 if NUMBER_INTEGRAL then
+    packers['double'] = packers['integer']
+    packers['float'] = packers['integer']
     set_number'integer'
 elseif SIZEOF_NUMBER == 4 then
+    packers['double'] = packers['float']
+    m.small_lua = true
     set_number'float'
 else
     set_number'double'
 end
 set_array'without_hole'
 
-m._VERSION = "0.3.1"
+m._VERSION = "0.3.2"
 m._DESCRIPTION = "lua-MessagePack : a pure Lua implementation"
-m._COPYRIGHT = "Copyright (c) 2012-2014 Francois Perrad"
+m._COPYRIGHT = "Copyright (c) 2012-2015 Francois Perrad"
 return m
 --
 -- This library is licensed under the terms of the MIT/X11 license,
