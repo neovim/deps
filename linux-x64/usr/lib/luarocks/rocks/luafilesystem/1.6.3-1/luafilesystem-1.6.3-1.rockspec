@@ -1,7 +1,8 @@
 package = "LuaFileSystem"
-version = "1.6.2-2"
+version = "1.6.3-1"
 source = {
-   url = "https://github.com/downloads/keplerproject/luafilesystem/luafilesystem-1.6.2.tar.gz"
+   url = "git://github.com/keplerproject/luafilesystem",
+   tag = "v_1_6_3",
 }
 description = {
    summary = "File System Library for the Lua Programming Language",
