@@ -271,7 +271,7 @@ dependencies = {
       }
    },
    ['nvim-client'] = {
-      ['0.0.1-7'] = {
+      ['0.0.1-10'] = {
          {
             constraints = {
                {
@@ -674,16 +674,16 @@ modules = {
       "mediator_lua/1.1-3"
    },
    ['nvim.async_session'] = {
-      "nvim-client/0.0.1-7"
+      "nvim-client/0.0.1-10"
    },
    ['nvim.loop'] = {
-      "nvim-client/0.0.1-7"
+      "nvim-client/0.0.1-10"
    },
    ['nvim.msgpack_stream'] = {
-      "nvim-client/0.0.1-7"
+      "nvim-client/0.0.1-10"
    },
    ['nvim.session'] = {
-      "nvim-client/0.0.1-7"
+      "nvim-client/0.0.1-10"
    },
    pl = {
       "penlight/1.3.1-1"
@@ -1067,7 +1067,7 @@ repository = {
       }
    },
    ['nvim-client'] = {
-      ['0.0.1-7'] = {
+      ['0.0.1-10'] = {
          {
             arch = "installed",
             commands = {},

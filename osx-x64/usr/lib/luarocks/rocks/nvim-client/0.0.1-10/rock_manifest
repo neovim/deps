@@ -5,7 +5,7 @@ rock_manifest = {
    },
    lib = {
       nvim = {
-         ['loop.so'] = "9415caca3ad35d9038ba79566141bbf3"
+         ['loop.so'] = "fece7d3b8aff4664be6db6f0d0b6464b"
       }
    },
    lua = {
@@ -15,5 +15,5 @@ rock_manifest = {
          ['session.lua'] = "ec1c1c924ededeb2eb31fb656cbcbdf8"
       }
    },
-   ['nvim-client-0.0.1-7.rockspec'] = "de2a327331018c6440c018e8abc46d73"
+   ['nvim-client-0.0.1-10.rockspec'] = "be0efdce70253a590ebbd9ad0dd60f08"
 }
