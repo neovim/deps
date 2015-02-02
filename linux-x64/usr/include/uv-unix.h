@@ -326,7 +326,7 @@ typedef struct {
   struct addrinfo* hints;                                                     \
   char* hostname;                                                             \
   char* service;                                                              \
-  struct addrinfo* addrinfo;                                                  \
+  struct addrinfo* res;                                                       \
   int retcode;
 
 #define UV_GETNAMEINFO_PRIVATE_FIELDS                                         \
