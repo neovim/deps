@@ -18,13 +18,15 @@
 #ifndef MSGPACK_TYPE_MAP_HPP
 #define MSGPACK_TYPE_MAP_HPP
 
-#include "msgpack/object.hpp"
+#include "msgpack/versioning.hpp"
+#include "msgpack/object_fwd.hpp"
 #include <map>
 #include <vector>
 #include <algorithm>
 
 namespace msgpack {
 
+MSGPACK_API_VERSION_NAMESPACE(v1) {
 
 namespace type {
 
@@ -99,18 +101,20 @@ inline object const& operator>> (object const& o, std::map<K, V>& v)
     if(o.type != type::MAP) { throw type_error(); }
     object_kv* p(o.via.map.ptr);
     object_kv* const pend(o.via.map.ptr + o.via.map.size);
+    std::map<K, V> tmp;
     for(; p != pend; ++p) {
         K key;
         p->key.convert(key);
-        typename std::map<K,V>::iterator it(v.lower_bound(key));
-        if(it != v.end() && !(key < it->first)) {
+        typename std::map<K,V>::iterator it(tmp.lower_bound(key));
+        if(it != tmp.end() && !(key < it->first)) {
             p->val.convert(it->second);
         } else {
             V val;
             p->val.convert(val);
-            v.insert(it, std::pair<K,V>(key, val));
+            tmp.insert(it, std::pair<K,V>(key, val));
         }
     }
+    tmp.swap(v);
     return o;
 }
 
@@ -155,12 +159,14 @@ inline object const& operator>> (object const& o, std::multimap<K, V>& v)
     if(o.type != type::MAP) { throw type_error(); }
     object_kv* p(o.via.map.ptr);
     object_kv* const pend(o.via.map.ptr + o.via.map.size);
+    std::multimap<K, V> tmp;
     for(; p != pend; ++p) {
         std::pair<K, V> value;
         p->key.convert(value.first);
         p->val.convert(value.second);
-        v.insert(value);
+        tmp.insert(value);
     }
+    tmp.swap(v);
     return o;
 }
 
@@ -198,7 +204,8 @@ inline void operator<< (object::with_zone& o, const std::multimap<K,V>& v)
     }
 }
 
+}  // MSGPACK_API_VERSION_NAMESPACE(v1)
 
 }  // namespace msgpack
 
-#endif /* msgpack/type/map.hpp */
+#endif // MSGPACK_TYPE_MAP_HPP

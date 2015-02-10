@@ -18,11 +18,14 @@
 #ifndef MSGPACK_FBUFFER_HPP__
 #define MSGPACK_FBUFFER_HPP__
 
+#include "msgpack/versioning.hpp"
+
 #include <cstdio>
 #include <stdexcept>
 
 namespace msgpack {
 
+MSGPACK_API_VERSION_NAMESPACE(v1) {
 
 class fbuffer {
 public:
@@ -41,16 +44,21 @@ public:
         return m_file;
     }
 
+#if defined(MSGPACK_USE_CPP03)
 private:
     fbuffer(const fbuffer&);
-    fbuffer& operator= (const fbuffer&);
+    fbuffer& operator=(const fbuffer&);
+#else  // defined(MSGPACK_USE_CPP03)
+    fbuffer(const fbuffer&) = delete;
+    fbuffer& operator=(const fbuffer&) = delete;
+#endif // defined(MSGPACK_USE_CPP03)
 
 private:
     FILE* m_file;
 };
 
+}  // MSGPACK_API_VERSION_NAMESPACE(v1)
 
 }  // namespace msgpack
 
 #endif /* msgpack/fbuffer.hpp */
-

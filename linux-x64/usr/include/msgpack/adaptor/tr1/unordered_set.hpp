@@ -18,11 +18,12 @@
 #ifndef MSGPACK_TYPE_TR1_UNORDERED_SET_HPP
 #define MSGPACK_TYPE_TR1_UNORDERED_SET_HPP
 
-#include "msgpack/object.hpp"
+#include "msgpack/versioning.hpp"
+#include "msgpack/object_fwd.hpp"
 
 #if defined(_LIBCPP_VERSION) || (_MSC_VER >= 1700)
 
-#define MSGPACK_HAS_STD_UNOURDERED_SET
+#define MSGPACK_HAS_STD_UNORDERED_SET
 #include <unordered_set>
 #define MSGPACK_STD_TR1 std
 
@@ -30,7 +31,7 @@
 
 #if __GNUC__ >= 4
 
-#define MSGPACK_HAS_STD_TR1_UNOURDERED_SET
+#define MSGPACK_HAS_STD_TR1_UNORDERED_SET
 
 #include <tr1/unordered_set>
 #define MSGPACK_STD_TR1 std::tr1
@@ -39,8 +40,11 @@
 
 #endif  // defined(_LIBCPP_VERSION) || (_MSC_VER >= 1700)
 
+#if defined(MSGPACK_STD_TR1)
+
 namespace msgpack {
 
+MSGPACK_API_VERSION_NAMESPACE(v1) {
 
 template <typename T>
 inline object const& operator>> (object const& o, MSGPACK_STD_TR1::unordered_set<T>& v)
@@ -48,10 +52,12 @@ inline object const& operator>> (object const& o, MSGPACK_STD_TR1::unordered_set
     if(o.type != type::ARRAY) { throw type_error(); }
     object* p = o.via.array.ptr + o.via.array.size;
     object* const pbegin = o.via.array.ptr;
+    MSGPACK_STD_TR1::unordered_set<T> tmp;
     while(p > pbegin) {
         --p;
-        v.insert(p->as<T>());
+        tmp.insert(p->as<T>());
     }
+    tmp.swap(v);
     return o;
 }
 
@@ -94,10 +100,12 @@ inline object const& operator>> (object const& o, MSGPACK_STD_TR1::unordered_mul
     if(o.type != type::ARRAY) { throw type_error(); }
     object* p = o.via.array.ptr + o.via.array.size;
     object* const pbegin = o.via.array.ptr;
+    MSGPACK_STD_TR1::unordered_multiset<T> tmp;
     while(p > pbegin) {
         --p;
-        v.insert(p->as<T>());
+        tmp.insert(p->as<T>());
     }
+    tmp.swap(v);
     return o;
 }
 
@@ -133,9 +141,12 @@ inline void operator<< (object::with_zone& o, const MSGPACK_STD_TR1::unordered_m
     }
 }
 
+}  // MSGPACK_API_VERSION_NAMESPACE(v1)
 
 }  // namespace msgpack
 
 #undef MSGPACK_STD_TR1
 
-#endif /* msgpack/type/set.hpp */
+#endif // MSGPACK_STD_TR1
+
+#endif // MSGPACK_TYPE_TR1_UNORDERED_SET_HPP
