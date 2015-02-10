@@ -1,6 +1,6 @@
 prefix=/opt/neovim-deps/linux-x86/usr
 exec_prefix=/opt/neovim-deps/linux-x86/usr
-libdir=${exec_prefix}/lib
+libdir=/opt/neovim-deps/linux-x86/usr/lib
 includedir=${prefix}/include
 
 Name: libuv
