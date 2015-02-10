@@ -36,6 +36,12 @@ typedef unsigned __int64 uint64_t;
 #include <stdbool.h>
 #endif
 
+#if defined(_MSC_VER)
+#define MSGPACK_DLLEXPORT __declspec(dllexport)
+#else  /* _MSC_VER */
+#define MSGPACK_DLLEXPORT
+#endif /* _MSC_VER */
+
 #ifdef _WIN32
 #define _msgpack_atomic_counter_header <windows.h>
 typedef long _msgpack_atomic_counter_t;
@@ -68,7 +74,12 @@ typedef unsigned int _msgpack_atomic_counter_t;
 #endif
 
 #else
+
 #include <arpa/inet.h>  /* __BYTE_ORDER */
+#  if !defined(__APPLE__) && !(defined(__sun) && defined(__SVR4))
+#    include <byteswap.h>
+#  endif
+
 #endif
 
 #if !defined(__LITTLE_ENDIAN__) && !defined(__BIG_ENDIAN__)
@@ -172,17 +183,20 @@ typedef unsigned int _msgpack_atomic_counter_t;
 
 
 #if !defined(__cplusplus) && defined(_MSC_VER)
-#if !defined(FALSE)
-#define FALSE (0)
-#endif
-#if !defined(TRUE)
-#define TRUE (!FALSE)
-#endif
-#define bool int
-#define true TRUE
-#define false FALSE
-#define inline __inline
+#  if !defined(FALSE)
+#    define FALSE (0)
+#  endif
+#  if !defined(TRUE)
+#    define TRUE (!FALSE)
+#  endif
+#  if _MSC_VER >= 1800
+#    include <stdbool.h>
+#  else
+#    define bool int
+#    define true TRUE
+#    define false FALSE
+#  endif
+#  define inline __inline
 #endif
 
 #endif /* msgpack/sysdep.h */
-

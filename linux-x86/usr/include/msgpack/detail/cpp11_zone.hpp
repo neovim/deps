@@ -18,6 +18,8 @@
 #ifndef MSGPACK_CPP11_ZONE_HPP
 #define MSGPACK_CPP11_ZONE_HPP
 
+#include "msgpack/versioning.hpp"
+
 #include <cstdlib>
 #include <memory>
 #include <vector>
@@ -29,10 +31,12 @@
 #endif
 
 #ifndef MSGPACK_ZONE_ALIGN
-#define MSGPACK_ZONE_ALIGN sizeof(int)
+#define MSGPACK_ZONE_ALIGN sizeof(void*)
 #endif
 
 namespace msgpack {
+
+MSGPACK_API_VERSION_NAMESPACE(v1) {
 
 class zone {
 private:
@@ -92,14 +96,14 @@ private:
             ++m_tail;
         }
 #if !defined(MSGPACK_USE_CPP03)
-        finalizer_array(finalizer_array&& other)
+        finalizer_array(finalizer_array&& other) noexcept
             :m_tail(other.m_tail), m_end(other.m_end), m_array(other.m_array)
         {
             other.m_tail = nullptr;
             other.m_end = nullptr;
             other.m_array = nullptr;
         }
-        finalizer_array& operator=(finalizer_array&& other)
+        finalizer_array& operator=(finalizer_array&& other) noexcept
         {
             this->~finalizer_array();
             new (this) finalizer_array(std::move(other));
@@ -157,12 +161,12 @@ private:
             m_ptr  = reinterpret_cast<char*>(m_head) + sizeof(chunk);
         }
 #if !defined(MSGPACK_USE_CPP03)
-        chunk_list(chunk_list&& other)
+        chunk_list(chunk_list&& other) noexcept
             :m_free(other.m_free), m_ptr(other.m_ptr), m_head(other.m_head)
         {
             other.m_head = nullptr;
         }
-        chunk_list& operator=(chunk_list&& other)
+        chunk_list& operator=(chunk_list&& other) noexcept
         {
             this->~chunk_list();
             new (this) chunk_list(std::move(other));
@@ -184,7 +188,7 @@ public:
     zone(size_t chunk_size = MSGPACK_ZONE_CHUNK_SIZE) noexcept;
 
 public:
-    void* allocate_align(size_t size);
+    void* allocate_align(size_t size, size_t align = MSGPACK_ZONE_ALIGN);
     void* allocate_no_align(size_t size);
 
     void push_finalizer(void (*func)(void*), void* data);
@@ -220,11 +224,11 @@ public:
 
     zone(zone&&) = default;
     zone& operator=(zone&&) = default;
+    zone(const zone&) = delete;
+    zone& operator=(const zone&) = delete;
 
 private:
     void undo_allocate(size_t size);
-    zone(const zone&);
-    zone& operator=(const zone&);
 
     template <typename T>
     static void object_destruct(void* obj);
@@ -239,10 +243,21 @@ inline zone::zone(size_t chunk_size) noexcept:m_chunk_size(chunk_size), m_chunk_
 {
 }
 
-inline void* zone::allocate_align(size_t size)
+inline void* zone::allocate_align(size_t size, size_t align)
 {
-    return allocate_no_align(
-        ((size)+((MSGPACK_ZONE_ALIGN)-1)) & ~((MSGPACK_ZONE_ALIGN)-1));
+    char* aligned =
+        reinterpret_cast<char*>(
+            reinterpret_cast<size_t>(
+                (m_chunk_list.m_ptr + (align - 1))) / align * align);
+    size_t adjusted_size = size + (aligned - m_chunk_list.m_ptr);
+    if(m_chunk_list.m_free >= adjusted_size) {
+        m_chunk_list.m_free -= adjusted_size;
+        m_chunk_list.m_ptr  += adjusted_size;
+        return aligned;
+    }
+    return reinterpret_cast<char*>(
+        reinterpret_cast<size_t>(
+            allocate_expand(size + (align - 1))) / align * align);
 }
 
 inline void* zone::allocate_no_align(size_t size)
@@ -265,7 +280,12 @@ inline void* zone::allocate_expand(size_t size)
     size_t sz = m_chunk_size;
 
     while(sz < size) {
-        sz *= 2;
+        size_t tmp_sz = sz * 2;
+        if (tmp_sz <= sz) {
+            sz = size;
+            break;
+        }
+        sz = tmp_sz;
     }
 
     chunk* c = static_cast<chunk*>(::malloc(sizeof(chunk) + sz));
@@ -340,6 +360,8 @@ T* zone::allocate(Args... args)
         throw;
     }
 }
+
+}  // MSGPACK_API_VERSION_NAMESPACE(v1)
 
 }  // namespace msgpack
 

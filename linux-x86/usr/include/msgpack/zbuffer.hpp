@@ -18,6 +18,8 @@
 #ifndef MSGPACK_ZBUFFER_HPP
 #define MSGPACK_ZBUFFER_HPP
 
+#include "msgpack/versioning.hpp"
+
 #include <stdexcept>
 #include <zlib.h>
 
@@ -31,6 +33,7 @@
 
 namespace msgpack {
 
+MSGPACK_API_VERSION_NAMESPACE(v1) {
 
 class zbuffer {
 public:
@@ -146,8 +149,14 @@ private:
 
         return true;
     }
+#if defined(MSGPACK_USE_CPP03)
 private:
     zbuffer(const zbuffer&);
+    zbuffer& operator=(const zbuffer&);
+#else  // defined(MSGPACK_USE_CPP03)
+    zbuffer(const zbuffer&) = delete;
+    zbuffer& operator=(const zbuffer&) = delete;
+#endif // defined(MSGPACK_USE_CPP03)
 
 private:
     z_stream m_stream;
@@ -155,8 +164,8 @@ private:
     size_t m_init_size;
 };
 
+}  // MSGPACK_API_VERSION_NAMESPACE(v1)
 
 }  // namespace msgpack
 
 #endif /* msgpack/zbuffer.hpp */
-

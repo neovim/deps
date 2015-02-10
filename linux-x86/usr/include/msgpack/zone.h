@@ -61,10 +61,14 @@ typedef struct msgpack_zone {
 #define MSGPACK_ZONE_CHUNK_SIZE 8192
 #endif
 
+MSGPACK_DLLEXPORT
 bool msgpack_zone_init(msgpack_zone* zone, size_t chunk_size);
+MSGPACK_DLLEXPORT
 void msgpack_zone_destroy(msgpack_zone* zone);
 
+MSGPACK_DLLEXPORT
 msgpack_zone* msgpack_zone_new(size_t chunk_size);
+MSGPACK_DLLEXPORT
 void msgpack_zone_free(msgpack_zone* zone);
 
 static inline void* msgpack_zone_malloc(msgpack_zone* zone, size_t size);
@@ -75,20 +79,23 @@ static inline bool msgpack_zone_push_finalizer(msgpack_zone* zone,
 
 static inline void msgpack_zone_swap(msgpack_zone* a, msgpack_zone* b);
 
+MSGPACK_DLLEXPORT
 bool msgpack_zone_is_empty(msgpack_zone* zone);
 
+MSGPACK_DLLEXPORT
 void msgpack_zone_clear(msgpack_zone* zone);
 
 /** @} */
 
 
 #ifndef MSGPACK_ZONE_ALIGN
-#define MSGPACK_ZONE_ALIGN sizeof(int)
+#define MSGPACK_ZONE_ALIGN sizeof(void*)
 #endif
 
+MSGPACK_DLLEXPORT
 void* msgpack_zone_malloc_expand(msgpack_zone* zone, size_t size);
 
-void* msgpack_zone_malloc_no_align(msgpack_zone* zone, size_t size)
+static inline void* msgpack_zone_malloc_no_align(msgpack_zone* zone, size_t size)
 {
     char* ptr;
     msgpack_zone_chunk_list* cl = &zone->chunk_list;
@@ -106,8 +113,25 @@ void* msgpack_zone_malloc_no_align(msgpack_zone* zone, size_t size)
 
 static inline void* msgpack_zone_malloc(msgpack_zone* zone, size_t size)
 {
-    return msgpack_zone_malloc_no_align(zone,
-            ((size)+((MSGPACK_ZONE_ALIGN)-1)) & ~((MSGPACK_ZONE_ALIGN)-1));
+    char* aligned =
+        (char*)(
+            (size_t)(
+                zone->chunk_list.ptr + (MSGPACK_ZONE_ALIGN - 1)
+            ) / MSGPACK_ZONE_ALIGN * MSGPACK_ZONE_ALIGN
+        );
+    size_t adjusted_size = size + (aligned - zone->chunk_list.ptr);
+    if(zone->chunk_list.free >= adjusted_size) {
+        zone->chunk_list.free -= adjusted_size;
+        zone->chunk_list.ptr  += adjusted_size;
+        return aligned;
+    }
+    {
+        void* ptr = msgpack_zone_malloc_expand(zone, size + (MSGPACK_ZONE_ALIGN - 1));
+        if (ptr) {
+            return (char*)((size_t)(ptr) / MSGPACK_ZONE_ALIGN * MSGPACK_ZONE_ALIGN);
+        }
+    }
+    return NULL;
 }
 
 
@@ -145,4 +169,3 @@ static inline void msgpack_zone_swap(msgpack_zone* a, msgpack_zone* b)
 #endif
 
 #endif /* msgpack/zone.h */
-
