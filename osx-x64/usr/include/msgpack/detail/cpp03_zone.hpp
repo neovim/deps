@@ -22,18 +22,20 @@
 #include <memory>
 #include <vector>
 
-#include "msgpack/cpp_config.hpp"
+#include "msgpack/versioning.hpp"
 
 #ifndef MSGPACK_ZONE_CHUNK_SIZE
 #define MSGPACK_ZONE_CHUNK_SIZE 8192
 #endif
 
 #ifndef MSGPACK_ZONE_ALIGN
-#define MSGPACK_ZONE_ALIGN sizeof(int)
+#define MSGPACK_ZONE_ALIGN sizeof(void*)
 #endif
 
 
 namespace msgpack {
+
+MSGPACK_API_VERSION_NAMESPACE(v1) {
 
 class zone {
     struct finalizer {
@@ -148,7 +150,7 @@ public:
     zone(size_t chunk_size = MSGPACK_ZONE_CHUNK_SIZE) /* throw() */;
 
 public:
-    void* allocate_align(size_t size);
+    void* allocate_align(size_t size, size_t align = MSGPACK_ZONE_ALIGN);
     void* allocate_no_align(size_t size);
 
     void push_finalizer(void (*func)(void*), void* data);
@@ -159,21 +161,21 @@ public:
     void clear();
 
     void swap(zone& o);
-    static void* operator new(std::size_t size) throw(std::bad_alloc)
+    static void* operator new(std::size_t size)
     {
         void* p = ::malloc(size);
         if (!p) throw std::bad_alloc();
         return p;
     }
-    static void operator delete(void *p) throw()
+    static void operator delete(void *p) /* throw() */
     {
         ::free(p);
     }
-    static void* operator new(std::size_t size, void* place) throw()
+    static void* operator new(std::size_t size, void* place) /* throw() */
     {
         return ::operator new(size, place);
     }
-    static void operator delete(void* p, void* place) throw()
+    static void operator delete(void* p, void* place) /* throw() */
     {
         ::operator delete(p, place);
     }
@@ -237,16 +239,30 @@ private:
     static void object_delete(void* obj);
 
     void* allocate_expand(size_t size);
+private:
+    zone(const zone&);
+    zone& operator=(const zone&);
 };
 
 inline zone::zone(size_t chunk_size) /* throw() */ :m_chunk_size(chunk_size), m_chunk_list(m_chunk_size)
 {
 }
 
-inline void* zone::allocate_align(size_t size)
+inline void* zone::allocate_align(size_t size, size_t align)
 {
-    return allocate_no_align(
-        ((size)+((MSGPACK_ZONE_ALIGN)-1)) & ~((MSGPACK_ZONE_ALIGN)-1));
+    char* aligned =
+        reinterpret_cast<char*>(
+            reinterpret_cast<size_t>(
+                (m_chunk_list.m_ptr + (align - 1))) / align * align);
+    size_t adjusted_size = size + (aligned - m_chunk_list.m_ptr);
+    if(m_chunk_list.m_free >= adjusted_size) {
+        m_chunk_list.m_free -= adjusted_size;
+        m_chunk_list.m_ptr  += adjusted_size;
+        return aligned;
+    }
+    return reinterpret_cast<char*>(
+        reinterpret_cast<size_t>(
+            allocate_expand(size + (align - 1))) / align * align);
 }
 
 inline void* zone::allocate_no_align(size_t size)
@@ -269,7 +285,12 @@ inline void* zone::allocate_expand(size_t size)
     size_t sz = m_chunk_size;
 
     while(sz < size) {
-        sz *= 2;
+        size_t tmp_sz = sz * 2;
+        if (tmp_sz <= sz) {
+            sz = size;
+            break;
+        }
+        sz = tmp_sz;
     }
 
     chunk* c = static_cast<chunk*>(::malloc(sizeof(chunk) + sz));
@@ -304,7 +325,10 @@ inline void zone::clear()
 
 inline void zone::swap(zone& o)
 {
-    std::swap(*this, o);
+    using std::swap;
+    swap(m_chunk_size, o.m_chunk_size);
+    swap(m_chunk_list, o.m_chunk_list);
+    swap(m_finalizer_array, o.m_finalizer_array);
 }
 
 template <typename T>
@@ -630,6 +654,8 @@ T* zone::allocate(A1 a1, A2 a2, A3 a3, A4 a4, A5 a5, A6 a6, A7 a7, A8 a8, A9 a9,
     }
 }
 
+
+}  // MSGPACK_API_VERSION_NAMESPACE(v1)
 
 }  // namespace msgpack
 

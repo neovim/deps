@@ -18,11 +18,13 @@
 #ifndef MSGPACK_TYPE_INT_HPP
 #define MSGPACK_TYPE_INT_HPP
 
-#include "msgpack/object.hpp"
+#include "msgpack/versioning.hpp"
+#include "msgpack_fwd.hpp"
 #include <limits>
 
 namespace msgpack {
 
+MSGPACK_API_VERSION_NAMESPACE(v1){
 
 namespace type {
 namespace detail {
@@ -66,30 +68,6 @@ namespace detail {
     static inline T convert_integer(object const& o)
     {
         return detail::convert_integer_sign<T, is_signed<T>::value>::convert(o);
-    }
-
-    template <bool Signed>
-    struct pack_char_sign;
-
-    template <>
-    struct pack_char_sign<true> {
-        template <typename Stream>
-        static inline packer<Stream>& pack(packer<Stream>& o, char v) {
-            o.pack_int8(v); return o;
-        }
-    };
-
-    template <>
-    struct pack_char_sign<false> {
-        template <typename Stream>
-        static inline packer<Stream>& pack(packer<Stream>& o, char v) {
-            o.pack_uint8(v); return o;
-        }
-    };
-
-    template <typename Stream>
-    static inline packer<Stream>& pack_char(packer<Stream>& o, char v) {
-        return pack_char_sign<is_signed<char>::value>::pack(o, v);
     }
 
     template <bool Signed>
@@ -161,12 +139,12 @@ inline object const& operator>> (object const& o, unsigned long long& v)
 
 template <typename Stream>
 inline packer<Stream>& operator<< (packer<Stream>& o, char v)
-    { return type::detail::pack_char(o, v); }
+    { o.pack_char(v); return o; }
 
 
 template <typename Stream>
 inline packer<Stream>& operator<< (packer<Stream>& o, signed char v)
-    { o.pack_int8(v); return o; }
+    { o.pack_signed_char(v); return o; }
 
 template <typename Stream>
 inline packer<Stream>& operator<< (packer<Stream>& o, signed short v)
@@ -187,7 +165,7 @@ inline packer<Stream>& operator<< (packer<Stream>& o, signed long long v)
 
 template <typename Stream>
 inline packer<Stream>& operator<< (packer<Stream>& o, unsigned char v)
-    { o.pack_uint8(v); return o; }
+    { o.pack_unsigned_char(v); return o; }
 
 template <typename Stream>
 inline packer<Stream>& operator<< (packer<Stream>& o, unsigned short v)
@@ -322,6 +300,8 @@ inline void operator<< (object::with_zone& o, unsigned long v)
 inline void operator<< (object::with_zone& o, const unsigned long long& v)
     { static_cast<object&>(o) << v; }
 
+
+}  // MSGPACK_API_VERSION_NAMESPACE(v1)
 
 }  // namespace msgpack
 

@@ -18,11 +18,14 @@
 #ifndef MSGPACK_TYPE_SET_HPP
 #define MSGPACK_TYPE_SET_HPP
 
-#include "msgpack/object.hpp"
+#include "msgpack/versioning.hpp"
+#include "msgpack/object_fwd.hpp"
+
 #include <set>
 
 namespace msgpack {
 
+MSGPACK_API_VERSION_NAMESPACE(v1) {
 
 template <typename T>
 inline object const& operator>> (object const& o, std::set<T>& v)
@@ -30,10 +33,12 @@ inline object const& operator>> (object const& o, std::set<T>& v)
     if(o.type != type::ARRAY) { throw type_error(); }
     object* p = o.via.array.ptr + o.via.array.size;
     object* const pbegin = o.via.array.ptr;
+    std::set<T> tmp;
     while(p > pbegin) {
         --p;
-        v.insert(p->as<T>());
+        tmp.insert(p->as<T>());
     }
+    tmp.swap(v);
     return o;
 }
 
@@ -76,10 +81,12 @@ inline object const& operator>> (object const& o, std::multiset<T>& v)
     if(o.type != type::ARRAY) { throw type_error(); }
     object* p = o.via.array.ptr + o.via.array.size;
     object* const pbegin = o.via.array.ptr;
+    std::multiset<T> tmp;
     while(p > pbegin) {
         --p;
-        v.insert(p->as<T>());
+        tmp.insert(p->as<T>());
     }
+    tmp.swap(v);
     return o;
 }
 
@@ -115,7 +122,8 @@ inline void operator<< (object::with_zone& o, const std::multiset<T>& v)
     }
 }
 
+}  // MSGPACK_API_VERSION_NAMESPACE(v1)
 
 }  // namespace msgpack
 
-#endif /* msgpack/type/set.hpp */
+#endif // MSGPACK_TYPE_SET_HPP

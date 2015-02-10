@@ -18,12 +18,14 @@
 #ifndef MSGPACK_CPP11_TUPLE_HPP
 #define MSGPACK_CPP11_TUPLE_HPP
 
+#include "msgpack/versioning.hpp"
+#include "msgpack/object_fwd.hpp"
+
 #include <tuple>
 
-#include "msgpack/object.hpp"
-#include "msgpack/cpp_config.hpp"
-
 namespace msgpack {
+
+MSGPACK_API_VERSION_NAMESPACE(v1) {
 
 // --- Pack ( from tuple to packer stream ---
 template <typename Stream, typename Tuple, std::size_t N>
@@ -45,8 +47,17 @@ struct StdTuplePacker<Stream, Tuple, 1> {
     }
 };
 
+template <typename Stream, typename Tuple>
+struct StdTuplePacker<Stream, Tuple, 0> {
+    static void pack (
+        packer<Stream>&,
+        const Tuple&) {
+    }
+};
+
+
 template <typename Stream, typename... Args>
-const packer<Stream>& operator<< (
+inline const packer<Stream>& operator<< (
     packer<Stream>& o,
     const std::tuple<Args...>& v) {
     o.pack_array(sizeof...(Args));
@@ -75,8 +86,16 @@ struct StdTupleConverter<Tuple, 1> {
     }
 };
 
+template <typename Tuple>
+struct StdTupleConverter<Tuple, 0> {
+    static void convert (
+        object const&,
+        Tuple&) {
+    }
+};
+
 template <typename... Args>
-object const& operator>> (
+inline object const& operator>> (
     object const& o,
     std::tuple<Args...>& v) {
     if(o.type != type::ARRAY) { throw type_error(); }
@@ -105,6 +124,14 @@ struct StdTupleToObjectWithZone<Tuple, 1> {
     }
 };
 
+template <typename Tuple>
+struct StdTupleToObjectWithZone<Tuple, 0> {
+    static void convert (
+        object::with_zone&,
+        const Tuple&) {
+    }
+};
+
 template <typename... Args>
 inline void operator<< (
         object::with_zone& o,
@@ -115,6 +142,8 @@ inline void operator<< (
     StdTupleToObjectWithZone<decltype(v), sizeof...(Args)>::convert(o, v);
 }
 
-} // msgpack
+} // MSGPACK_API_VERSION_NAMESPACE(v1)
+
+} // namespace msgpack
 
 #endif // MSGPACK_CPP11_TUPLE_HPP

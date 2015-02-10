@@ -18,11 +18,12 @@
 #ifndef MSGPACK_TYPE_TR1_UNORDERED_MAP_HPP
 #define MSGPACK_TYPE_TR1_UNORDERED_MAP_HPP
 
-#include "msgpack/object.hpp"
+#include "msgpack/versioning.hpp"
+#include "msgpack/object_fwd.hpp"
 
 #if defined(_LIBCPP_VERSION) || (_MSC_VER >= 1700)
 
-#define MSGPACK_HAS_STD_UNOURDERED_MAP
+#define MSGPACK_HAS_STD_UNORDERED_MAP
 #include <unordered_map>
 #define MSGPACK_STD_TR1 std
 
@@ -30,7 +31,7 @@
 
 #if __GNUC__ >= 4
 
-#define MSGPACK_HAS_STD_TR1_UNOURDERED_MAP
+#define MSGPACK_HAS_STD_TR1_UNORDERED_MAP
 
 #include <tr1/unordered_map>
 #define MSGPACK_STD_TR1 std::tr1
@@ -39,9 +40,11 @@
 
 #endif  // defined(_LIBCPP_VERSION) || (_MSC_VER >= 1700)
 
+#if defined(MSGPACK_STD_TR1)
 
 namespace msgpack {
 
+MSGPACK_API_VERSION_NAMESPACE(v1) {
 
 template <typename K, typename V>
 inline object const& operator>> (object const& o, MSGPACK_STD_TR1::unordered_map<K, V>& v)
@@ -49,11 +52,13 @@ inline object const& operator>> (object const& o, MSGPACK_STD_TR1::unordered_map
     if(o.type != type::MAP) { throw type_error(); }
     object_kv* p(o.via.map.ptr);
     object_kv* const pend(o.via.map.ptr + o.via.map.size);
+    MSGPACK_STD_TR1::unordered_map<K, V> tmp;
     for(; p != pend; ++p) {
         K key;
         p->key.convert(key);
-        p->val.convert(v[key]);
+        p->val.convert(tmp[key]);
     }
+    tmp.swap(v);
     return o;
 }
 
@@ -98,12 +103,14 @@ inline object const& operator>> (object const& o, MSGPACK_STD_TR1::unordered_mul
     if(o.type != type::MAP) { throw type_error(); }
     object_kv* p(o.via.map.ptr);
     object_kv* const pend(o.via.map.ptr + o.via.map.size);
+    MSGPACK_STD_TR1::unordered_multimap<K, V> tmp;
     for(; p != pend; ++p) {
         std::pair<K, V> value;
         p->key.convert(value.first);
         p->val.convert(value.second);
-        v.insert(value);
+        tmp.insert(value);
     }
+    tmp.swap(v);
     return o;
 }
 
@@ -141,9 +148,12 @@ inline void operator<< (object::with_zone& o, const MSGPACK_STD_TR1::unordered_m
     }
 }
 
+}  // MSGPACK_API_VERSION_NAMESPACE(v1)
 
 }  // namespace msgpack
 
 #undef MSGPACK_STD_TR1
 
-#endif /* msgpack/type/map.hpp */
+#endif // MSGPACK_STD_TR1
+
+#endif // MSGPACK_TYPE_TR1_UNORDERED_MAP_HPP
