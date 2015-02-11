@@ -6,7 +6,7 @@ rock_manifest = {
    lua = {
       luassert = {
          ['assert.lua'] = "ff4129636c677dada090b8e918076224",
-         ['assertions.lua'] = "971d83646c4c617b70b6574eb861a35d",
+         ['assertions.lua'] = "685efb3ddc9ee3f11b81d8944289e33b",
          formatters = {
             ['binarystring.lua'] = "1cf3fba0573869e42fe1374f3919b2db",
             ['init.lua'] = "e9fe9f6b52482d3f85f069e261742348"
@@ -26,9 +26,9 @@ rock_manifest = {
          ['modifiers.lua'] = "86adced69ccf80b195efa711e45a4d2c",
          ['spy.lua'] = "880c184d63134722a046393f7b58c8a6",
          ['state.lua'] = "5dc266843a9a8dc66e12c0a40e2ea494",
-         ['stub.lua'] = "6f550dbbd7c7eea1bf077cc0daa7b0c1",
+         ['stub.lua'] = "4fcbc61dc7671d53838361dd689781b8",
          ['util.lua'] = "76efe8fc038eb256977ed50746cae5cf"
       }
    },
-   ['luassert-1.7.3-0.rockspec'] = "0f51e0fda7d028e0536b0bc1829b8ece"
+   ['luassert-1.7.4-0.rockspec'] = "0f26d4c15005e2489fe51ca4052f1a91"
 }
