@@ -77,11 +77,11 @@ local function disect(key)
   local k, ek, v
   local dummy
   -- if there is no comma, between short and extended, add one
-  _, _, dummy = key:find("^%-([%a%d])[%s]%-%-")
+  _, _, dummy = key:find("^%-([%a%d]+)[%s]%-%-")
   if dummy then key = key:gsub("^%-[%a%d][%s]%-%-", "-"..dummy..", --", 1) end
   -- for a short key + value, replace space by "="
-  _, _, dummy = key:find("^%-([%a%d])[%s]")
-  if dummy then key = key:gsub("^%-([%a%d])[ ]", "-"..dummy.."=", 1) end
+  _, _, dummy = key:find("^%-([%a%d]+)[%s]")
+  if dummy then key = key:gsub("^%-([%a%d]+)[ ]", "-"..dummy.."=", 1) end
   -- if there is no "=", then append one
   if not key:find("=") then key = key .. "=" end
   -- get value
@@ -89,7 +89,7 @@ local function disect(key)
   -- get key(s), remove spaces
   key = split(key, "=")[1]:gsub(" ", "")
   -- get short key & extended key
-  _, _, k = key:find("^%-([%a%d]+)")
+  _, _, k = key:find("^%-([^-][^%s,]*)")
   _, _, ek = key:find("%-%-(.+)$")
   if v == "" then v = nil end
   return k,ek,v
@@ -139,7 +139,7 @@ end
 ---
 --- ### Parameters
 --- 1. **key**: the argument's "name" that will be displayed to the user
---- 1. **desc**: a description of the argument
+--- 2. **desc**: a description of the argument
 ---
 --- ### Usage example
 --- The following will parse the argument (if specified) and set its value in `args["root"]`:
@@ -162,9 +162,9 @@ end
 ---
 --- ### Parameters
 --- 1. **key**: the argument's "name" that will be displayed to the user
---- 1. **desc**: a description of the argument
---- 1. **default**: *optional*; specify a default value (the default is "")
---- 1. **maxcount**: *optional*; specify the maximum number of occurences allowed (default is 1)
+--- 2. **desc**: a description of the argument
+--- 3. **default**: *optional*; specify a default value (the default is "")
+--- 4. **maxcount**: *optional*; specify the maximum number of occurences allowed (default is 1)
 ---
 --- ### Usage example
 --- The following will parse the argument (if specified) and set its value in `args["root"]`:
@@ -192,14 +192,14 @@ end
 --- if the 2nd notation is used then a value can be defined after an `=` (`'-key, --expanded-key=VALUE'`).
 --- As a final option it is possible to only use the expanded key (eg. `'--expanded-key'`) both with and
 --- without a value specified.
---- 1. **desc**: a description for the argument to be shown in --help
---- 1. **default**: *optional*; specify a default value (the default is "")
+--- 2. **desc**: a description for the argument to be shown in --help
+--- 3. **default**: *optional*; specify a default value (the default is "")
+--- 4. **callback**: *optional*; specify a function to call when this option is parsed (the default is nil)
 ---
 --- ### Usage example
 --- The following option will be stored in `args["i"]` and `args["input"]` with a default value of `my_file.txt`:
 --- `cli:add_option("-i, --input=FILE", "path to the input file", "my_file.txt")`
-function cli:add_opt(key, desc, default)
-
+function cli:add_opt(key, desc, default, callback)
   -- parameterize the key if needed, possible variations:
   -- 1. -key
   -- 2. -key VALUE
@@ -211,12 +211,28 @@ function cli:add_opt(key, desc, default)
   -- 8. --expanded=VALUE
 
   assert(type(key) == "string" and type(desc) == "string", "Key and description are mandatory arguments (Strings)")
-  assert(type(default) == "string" or default == nil or default == false, "Default argument: expected a string or nil")
+  assert(
+    (
+      type(default) == "string"
+      or default == nil
+      or default == false
+      or (type(default) == "table" and next(default) == nil)
+    ),
+    "Default argument: expected a string, nil, or {}"
+  )
+  assert(
+    (
+      type(callback) == "function"
+      or callback == nil
+      or (getmetatable(callback) or {}).__call
+    ),
+    "Callback argument: expected a function or nil"
+  )
 
   local k, ek, v = disect(key)
 
   if default == false and v ~= nil then
-    error("A flag type option cannot have a value set; " .. key)
+    error("A flag type option cannot have a value set: " .. key)
   end
 
   -- guard against duplicates
@@ -237,6 +253,7 @@ function cli:add_opt(key, desc, default)
     label = key,
     flag = (default == false),
     value = default,
+    callback = callback,
   }
 
   table.insert(self.optional, entry)
@@ -249,9 +266,10 @@ end
 ---
 --- ### Parameters
 -- 1. **key**: the argument's key
--- 1. **desc**: a description of the argument to be displayed in the help listing
-function cli:add_flag(key, desc)
-  self:add_opt(key, desc, false)
+-- 2. **desc**: a description of the argument to be displayed in the help listing
+-- 4. **callback**: *optional*; specify a function to call when this flag is parsed (the default is nil)
+function cli:add_flag(key, desc, callback)
+  self:add_opt(key, desc, false, callback)
 end
 
 --- Parses the arguments found in #arg and returns a table with the populated values.
@@ -259,17 +277,22 @@ end
 --- *Aliases: `parse_args`*
 ---
 --- ### Parameters
---- 1. **noprint**: set this flag to prevent any information (error or help info) from being printed
---- 1. **dump**: set this flag to dump the parsed variables for debugging purposes, alternatively
---- set the first option to --__DEBUG__ (option with 2 trailing and leading underscores) to dump at runtime.
+--- 1. **arguments**: set this to arg
+--- 2. **noprint**: set this flag to prevent any information (error or help info) from being printed
+--- 3. **dump**: set this flag to dump the parsed variables for debugging purposes, alternatively
+--- set the first option to --__DUMP__ (option with 2 trailing and leading underscores) to dump at runtime.
 ---
 --- ### Returns
 --- 1. a table containing the keys specified when the arguments were defined along with the parsed values,
 --- or nil + error message (--help option is considered an error and returns nil + help message)
-function cli:parse(noprint, dump)
-  arg = arg or {}
+function cli:parse(arguments, noprint, dump)
+  if type(arguments) ~= "table" then
+    -- optional 'arguments' was not provided, so shift remaining arguments
+    noprint, dump, arguments = arguments, noprint, nil
+  end
+  local arguments = arguments or arg or {}
   local args = {}
-  for k,v in pairs(arg) do args[k] = v end  -- copy global args local
+  for k,v in pairs(arguments) do args[k] = v end  -- copy args local
 
   -- starts with --help? display the help listing and abort!
   if args[1] and (args[1] == "--help" or args[1] == "-h") then
@@ -300,6 +323,11 @@ function cli:parse(noprint, dump)
       break   -- no optional prefix, so options are done
     end
 
+    if opt == "--" then
+      table.remove(args, 1)
+      break   -- end of options
+    end
+
     if optkey:sub(-1,-1) == "=" then  -- check on a blank value eg. --insert=
       optval = ""
       optkey = optkey:sub(1,-2)
@@ -313,13 +341,13 @@ function cli:parse(noprint, dump)
 
     if not optkey or not entry then
       local option_type = optval and "option" or "flag"
-      return cli_error("unknown/bad " .. option_type .. "; " .. opt, noprint)
+      return cli_error("unknown/bad " .. option_type .. ": " .. opt, noprint)
     end
 
     table.remove(args,1)
     if optpref == "-" then
       if optval then
-        return cli_error("short option does not allow value through '='; "..opt, noprint)
+        return cli_error("short option does not allow value through '=': "..opt, noprint)
       end
       if entry.flag then
         optval = true
@@ -328,29 +356,55 @@ function cli:parse(noprint, dump)
         optval = args[1]
         table.remove(args, 1)
       end
-    elseif optpref == "--" and (not optval) then
-      -- using the expanded-key notation with no value, it is possibly a flag
+    elseif optpref == "--" then
+      -- using the expanded-key notation
       entry = self:__lookup(nil, optkey)
       if entry then
         if entry.flag then
-          optval = true
+          if optval then
+            return cli_error("flag --" .. optkey .. " does not take a value", noprint)
+          else
+            optval = true
+          end
         else
-          return cli_error("option --" .. optkey .. " requires a value to be set", noprint)
+          if not optval then
+            -- value is in the next argument
+            optval = args[1]
+            table.remove(args, 1)
+          end
         end
       else
-        return cli_error("unknown/bad flag; " .. opt, noprint)
+        return cli_error("unknown/bad flag: " .. opt, noprint)
       end
     end
 
-    entry.value = optval
+    if type(entry.value) == 'table' then
+      table.insert(entry.value, optval)
+    else
+      entry.value = optval
+    end
+
+    -- invoke the option's parse-callback, if any
+    if entry.callback then
+      local altkey = entry.key
+
+      if optkey == entry.key then
+        altkey = entry.expanded_key
+      end
+
+      local status, err = entry.callback(optkey, optval, altkey, opt)
+      if status == nil and err then
+        return cli_error(err, noprint)
+      end
+    end
   end
 
   -- missing any required arguments, or too many?
   if #args < #self.required or #args > #self.required + self.optargument.maxcount then
     if self.optargument.maxcount > 0 then
-      return cli_error("bad number of arguments; " .. #self.required .."-" .. #self.required + self.optargument.maxcount .. " argument(s) must be specified, not " .. #args, noprint)
+      return cli_error("bad number of arguments: " .. #self.required .."-" .. #self.required + self.optargument.maxcount .. " argument(s) must be specified, not " .. #args, noprint)
     else
-      return cli_error("bad number of arguments; " .. #self.required .. " argument(s) must be specified, not " .. #args, noprint)
+      return cli_error("bad number of arguments: " .. #self.required .. " argument(s) must be specified, not " .. #args, noprint)
     end
   end
 
@@ -494,7 +548,6 @@ end
 --- ### Returns
 --- 1. a string with the HELP message.
 function cli:print_help(noprint)
-
   local msg = self:print_usage(true) .. "\n"
   local col1 = self.colsz[1]
   local col2 = self.colsz[2]
@@ -528,7 +581,8 @@ function cli:print_help(noprint)
     for _,entry in ipairs(self.optional) do
       local desc = entry.desc
       if not entry.flag and entry.default and #tostring(entry.default) > 0 then
-        desc = desc .. " (default: " .. entry.default .. ")"
+        readable_default = type(entry.default) == "table" and "[]" or tostring(entry.default)
+        desc = desc .. " (default: " .. readable_default .. ")"
       end
       append(entry.label, desc)
     end
@@ -549,10 +603,10 @@ end
 
 
 -- finalize setup
-cli._COPYRIGHT   = "Copyright (C) 2011-2012 Ahmad Amireh"
+cli._COPYRIGHT   = "Copyright (C) 2011-2014 Ahmad Amireh"
 cli._LICENSE     = "The code is released under the MIT terms. Feel free to use it in both open and closed software as you please."
 cli._DESCRIPTION = "Commandline argument parser for Lua"
-cli._VERSION     = "cliargs 2.0-1"
+cli._VERSION     = "cliargs 2.2-0"
 
 -- aliases
 cli.add_argument = cli.add_arg
