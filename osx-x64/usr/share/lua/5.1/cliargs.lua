@@ -95,6 +95,10 @@ local function disect(key)
   return k,ek,v
 end
 
+local function callable(fn)
+  return type(fn) == "function" or (getmetatable(fn) or {}).__call
+end
+
 
 function cli_error(msg, noprint)
   local msg = cli.name .. ": error: " .. msg .. '; re-run with --help for usage.'
@@ -140,45 +144,48 @@ end
 --- ### Parameters
 --- 1. **key**: the argument's "name" that will be displayed to the user
 --- 2. **desc**: a description of the argument
+--- 3. **callback**: *optional*; specify a function to call when this argument is parsed (the default is nil)
 ---
 --- ### Usage example
 --- The following will parse the argument (if specified) and set its value in `args["root"]`:
 --- `cli:add_arg("root", "path to where root scripts can be found")`
-function cli:add_arg(key, desc)
+function cli:add_arg(key, desc, callback)
   assert(type(key) == "string" and type(desc) == "string", "Key and description are mandatory arguments (Strings)")
+  assert(callable(callback) or callback == nil, "Callback argument: expected a function or nil")
 
   if self:__lookup(key, nil, self.required) then
     error("Duplicate argument: " .. key .. ", please rename one of them.")
   end
 
-  table.insert(self.required, { key = key, desc = desc, value = nil })
+  table.insert(self.required, { key = key, desc = desc, value = nil, callback = callback })
   if #key > self.maxlabel then self.maxlabel = #key end
 end
 
 --- Defines an optional argument (or more than one).
---- There can be only 1 optional argument, and is has to be the last one on the argumentlist.
+--- There can be only 1 optional argument, and it has to be the last one on the argumentlist.
 --- *Note:* the value will be stored in `args[@key]`. The value will be a 'string' if 'maxcount == 1',
 --- or a table if 'maxcount > 1'
 ---
 --- ### Parameters
 --- 1. **key**: the argument's "name" that will be displayed to the user
 --- 2. **desc**: a description of the argument
---- 3. **default**: *optional*; specify a default value (the default is "")
+--- 3. **default**: *optional*; specify a default value (the default is nil)
 --- 4. **maxcount**: *optional*; specify the maximum number of occurences allowed (default is 1)
+--- 5. **callback**: *optional*; specify a function to call when this argument is parsed (the default is nil)
 ---
 --- ### Usage example
 --- The following will parse the argument (if specified) and set its value in `args["root"]`:
 --- `cli:add_arg("root", "path to where root scripts can be found", "", 2)`
 --- The value returned will be a table with at least 1 entry and a maximum of 2 entries
-function cli:optarg(key, desc, default, maxcount)
+function cli:optarg(key, desc, default, maxcount, callback)
   assert(type(key) == "string" and type(desc) == "string", "Key and description are mandatory arguments (Strings)")
-  default = default or ""
-  assert(type(default) == "string", "Default value must either be omitted or be a string")
+  assert(type(default) == "string" or default == nil, "Default value must either be omitted or be a string")
   maxcount = maxcount or 1
   maxcount = tonumber(maxcount)
   assert(maxcount and maxcount>0 and maxcount<1000,"Maxcount must be a number from 1 to 999")
+  assert(callable(callback) or callback == nil, "Callback argument: expected a function or nil")
 
-  self.optargument = { key = key, desc = desc, default = default, maxcount = maxcount, value = nil }
+  self.optargument = { key = key, desc = desc, default = default, maxcount = maxcount, value = nil, callback = callback }
   if #key > self.maxlabel then self.maxlabel = #key end
 end
 
@@ -193,7 +200,7 @@ end
 --- As a final option it is possible to only use the expanded key (eg. `'--expanded-key'`) both with and
 --- without a value specified.
 --- 2. **desc**: a description for the argument to be shown in --help
---- 3. **default**: *optional*; specify a default value (the default is "")
+--- 3. **default**: *optional*; specify a default value (the default is nil)
 --- 4. **callback**: *optional*; specify a function to call when this option is parsed (the default is nil)
 ---
 --- ### Usage example
@@ -211,6 +218,7 @@ function cli:add_opt(key, desc, default, callback)
   -- 8. --expanded=VALUE
 
   assert(type(key) == "string" and type(desc) == "string", "Key and description are mandatory arguments (Strings)")
+  assert(callable(callback) or callback == nil, "Callback argument: expected a function or nil")
   assert(
     (
       type(default) == "string"
@@ -219,14 +227,6 @@ function cli:add_opt(key, desc, default, callback)
       or (type(default) == "table" and next(default) == nil)
     ),
     "Default argument: expected a string, nil, or {}"
-  )
-  assert(
-    (
-      type(callback) == "function"
-      or callback == nil
-      or (getmetatable(callback) or {}).__call
-    ),
-    "Callback argument: expected a function or nil"
   )
 
   local k, ek, v = disect(key)
@@ -241,8 +241,7 @@ function cli:add_opt(key, desc, default, callback)
   end
 
   -- set defaults
-  if v == nil then default = false end   -- no value, so its a flag
-  if default == nil then default = "" end
+  if v == nil then default = nil end   -- no value, set it's a flag, so set default to nil
 
   -- below description of full entry record, nils included for reference
   local entry = {
@@ -251,7 +250,7 @@ function cli:add_opt(key, desc, default, callback)
     desc = desc,
     default = default,
     label = key,
-    flag = (default == false),
+    flag = (v == nil), -- no value, so it's a flag
     value = default,
     callback = callback,
   }
@@ -411,6 +410,12 @@ function cli:parse(arguments, noprint, dump)
   -- deal with required args here
   for i, entry in ipairs(self.required) do
     entry.value = args[1]
+    if entry.callback then
+      local status, err = entry.callback(entry.key, entry.value)
+      if status == nil and err then
+        return cli_error(err, noprint)
+      end
+    end
     table.remove(args, 1)
   end
   -- deal with the last optional argument
@@ -420,6 +425,12 @@ function cli:parse(arguments, noprint, dump)
       table.insert(self.optargument.value, args[1])
     else
       self.optargument.value = args[1]
+    end
+    if self.optargument.callback then
+      local status, err = self.optargument.callback(self.optargument.key, args[1])
+      if status == nil and err then
+        return cli_error(err, noprint)
+      end
     end
     table.remove(args,1)
   end
@@ -519,12 +530,15 @@ end
 function cli:print_usage(noprint)
   -- print the USAGE heading
   local msg = "Usage: " .. tostring(self.name)
-  if self.optional[1] then
-    msg = msg .. " [OPTIONS] "
+  if #self.optional > 0 then
+    msg = msg .. " [OPTIONS]"
   end
-  if self.required[1] then
+  if #self.required > 0 or self.optargument.maxcount > 0 then
+    msg = msg .. " [--]"
+  end
+  if #self.required > 0 then
     for _,entry in ipairs(self.required) do
-      msg = msg .. " " .. entry.key .. " "
+      msg = msg .. " " .. entry.key
     end
   end
   if self.optargument.maxcount == 1 then
@@ -571,11 +585,11 @@ function cli:print_help(noprint)
     end
   end
 
-  if self.optargument.maxcount >0 then
+  if self.optargument.maxcount > 0 then
     append(self.optargument.key, self.optargument.desc .. " (optional, default: " .. self.optargument.default .. ")")
   end
 
-  if self.optional[1] then
+  if #self.optional > 0 then
     msg = msg .. "\nOPTIONS: \n"
 
     for _,entry in ipairs(self.optional) do
@@ -606,7 +620,7 @@ end
 cli._COPYRIGHT   = "Copyright (C) 2011-2014 Ahmad Amireh"
 cli._LICENSE     = "The code is released under the MIT terms. Feel free to use it in both open and closed software as you please."
 cli._DESCRIPTION = "Commandline argument parser for Lua"
-cli._VERSION     = "cliargs 2.2-0"
+cli._VERSION     = "cliargs 2.4-1"
 
 -- aliases
 cli.add_argument = cli.add_arg
