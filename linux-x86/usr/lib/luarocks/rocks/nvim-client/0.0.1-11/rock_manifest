@@ -15,5 +15,5 @@ rock_manifest = {
          ['session.lua'] = "ec1c1c924ededeb2eb31fb656cbcbdf8"
       }
    },
-   ['nvim-client-0.0.1-11.rockspec'] = "101bda54380f1132f9779b430800fa78"
+   ['nvim-client-0.0.1-11.rockspec'] = "30c1bb755f014b08c81e529ff6293faf"
 }
