@@ -4,16 +4,13 @@
 --    B = class(A)
 --    class.B(A)
 --
--- The latter form creates a named class within the current environment. Note
--- that this implicitly brings in `pl.utils` as a dependency.
+-- The latter form creates a named class.
 --
 -- See the Guide for further @{01-introduction.md.Simplifying_Object_Oriented_Programming_in_Lua|discussion}
 -- @module pl.class
 
 local error, getmetatable, io, pairs, rawget, rawset, setmetatable, tostring, type =
     _G.error, _G.getmetatable, _G.io, _G.pairs, _G.rawget, _G.rawset, _G.setmetatable, _G.tostring, _G.type
-local compat
-
 -- this trickery is necessary to prevent the inheritance of 'super' and
 -- the resulting recursive call problems.
 local function call_ctor (c,obj,...)
@@ -21,43 +18,17 @@ local function call_ctor (c,obj,...)
     local base = rawget(c,'_base')
     if base then
         local parent_ctor = rawget(base,'_init')
-        while not parent_ctor do
-            base = rawget(base,'_base')
-            if not base then break end
-            parent_ctor = rawget(base,'_init')
-        end
         if parent_ctor then
-            rawset(obj,'super',function(obj,...)
+            obj.super = function(obj,...)
                 call_ctor(base,obj,...)
-            end)
+            end
         end
     end
     local res = c._init(obj,...)
-    rawset(obj,'super',nil)
+    obj.super = nil
     return res
 end
 
---- initializes an __instance__ upon creation.
--- @function class:_init
--- @param ... parameters passed to the constructor
--- @usage local Cat = class()
--- function Cat:_init(name)
---   --self:super(name)   -- call the ancestor initializer if needed
---   self.name = name
--- end
---
--- local pussycat = Cat("pussycat")
--- print(pussycat.name)  --> pussycat
-
---- checks whether an __instance__ is derived from some class.
--- Works the other way around as `class_of`.
--- @function instance:is_a
--- @param some_class class to check against
--- @return `true` if `instance` is derived from `some_class`
--- @usage local pussycat = Lion()  -- assuming Lion derives from Cat
--- if pussycat:is_a(Cat) then
---   -- it's true
--- end
 local function is_a(self,klass)
     local m = getmetatable(self)
     if not m then return false end --*can't be an object!
@@ -68,28 +39,10 @@ local function is_a(self,klass)
     return false
 end
 
---- checks whether an __instance__ is derived from some class.
--- Works the other way around as `is_a`.
--- @function some_class:class_of
--- @param some_instance instance to check against
--- @return `true` if `some_instance` is derived from `some_class`
--- @usage local pussycat = Lion()  -- assuming Lion derives from Cat
--- if Cat:class_of(pussycat) then
---   -- it's true
--- end
 local function class_of(klass,obj)
     if type(klass) ~= 'table' or not rawget(klass,'is_a') then return false end
     return klass.is_a(obj,klass)
 end
-
---- cast an object to another class.
--- It is not clever (or safe!) so use carefully.
--- @param some_instance the object to be changed
--- @function some_class:cast
-local function cast (klass, obj)
-    return setmetatable(obj,klass)
-end
-
 
 local function _class_tostring (obj)
     local mt = obj._class
@@ -101,31 +54,21 @@ local function _class_tostring (obj)
     return str
 end
 
-local function tupdate(td,ts,dont_override)
+local function tupdate(td,ts)
     for k,v in pairs(ts) do
-        if not dont_override or td[k] == nil then
-            td[k] = v
-        end
+        td[k] = v
     end
 end
 
 local function _class(base,c_arg,c)
-    -- the class `c` will be the metatable for all its objects,
+    c = c or {}     -- a new class instance, which is the metatable for all objects of this type
+    -- the class will be the metatable for all its objects,
     -- and they will look up their methods in it.
-    local mt = {}   -- a metatable for the class to support __call and _handler
-    -- can define class by passing it a plain table of methods
-    local plain = type(base) == 'table' and not getmetatable(base)
-    if plain then
-        c = base
-        base = c._base
-    else
-        c = c or {}
-    end
-   
+    local mt = {}   -- a metatable for the class instance
+
     if type(base) == 'table' then
         -- our new class is a shallow copy of the base class!
-        -- but be careful not to wipe out any methods we have been given at this point!
-        tupdate(c,base,plain)
+        tupdate(c,base)
         c._base = base
         -- inherit the 'not found' handler, if present
         if rawget(c,'_handler') then mt.__index = c._handler end
@@ -135,9 +78,7 @@ local function _class(base,c_arg,c)
 
     c.__index = c
     setmetatable(c,mt)
-    if not plain then
-        c._init = nil
-    end
+    c._init = nil
 
     if base and rawget(base,'_class_init') then
         base._class_init(c,c_arg)
@@ -145,9 +86,7 @@ local function _class(base,c_arg,c)
 
     -- expose a ctor which can be called by <classname>(<args>)
     mt.__call = function(class_tbl,...)
-        local obj
-        if rawget(c,'_create') then obj = c._create(...) end
-        if not obj then obj = {} end
+        local obj = {}
         setmetatable(obj,c)
 
         if rawget(c,'_init') then -- explicit constructor
@@ -171,17 +110,12 @@ local function _class(base,c_arg,c)
         return obj
     end
     -- Call Class.catch to set a handler for methods/properties not found in the class!
-    c.catch = function(self, handler)
-        if type(self) == "function" then
-            -- called using . instead of :
-            handler = self
-        end
+    c.catch = function(handler)
         c._handler = handler
         mt.__index = handler
     end
     c.is_a = is_a
     c.class_of = class_of
-    c.cast = cast
     c._class = c
 
     return c
@@ -189,13 +123,10 @@ end
 
 --- create a new class, derived from a given base class.
 -- Supporting two class creation syntaxes:
--- either `Name = class(base)` or `class.Name(base)`.
--- The first form returns the class directly and does not set its `_name`.
--- The second form creates a variable `Name` in the current environment set
--- to the class, and also sets `_name`.
+-- either `Name = class(base)` or `class.Name(base)`
 -- @function class
 -- @param base optional base class
--- @param c_arg optional parameter to class constructor
+-- @param c_arg optional parameter to class ctor
 -- @param c optional table to be used as class
 local class
 class = setmetatable({},{
@@ -207,8 +138,7 @@ class = setmetatable({},{
             io.stderr:write('require("pl.class").class is deprecated. Use require("pl.class")\n')
             return class
         end
-        compat = compat or require 'pl.compat'
-        local env = compat.getfenv(2)
+        local env = _G
         return function(...)
             local c = _class(...)
             c._name = key

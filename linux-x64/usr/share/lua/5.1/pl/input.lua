@@ -11,13 +11,15 @@
 local strfind = string.find
 local strsub = string.sub
 local strmatch = string.match
+local pairs,type,unpack,tonumber = pairs,type,unpack,tonumber
 local utils = require 'pl.utils'
-local unpack = utils.unpack
-local pairs,type,tonumber = pairs,type,tonumber
 local patterns = utils.patterns
 local io = io
 local assert_arg = utils.assert_arg
 
+--[[
+module ('pl.input',utils._module)
+]]
 
 local input = {}
 
