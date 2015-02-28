@@ -1,24 +1,24 @@
 package = "LuaFileSystem"
-version = "1.5.0-3"
+version = "1.6.3-1"
 source = {
-   url = "http://cloud.github.com/downloads/keplerproject/luafilesystem/luafilesystem-1.5.0.tar.gz"
+   url = "git://github.com/keplerproject/luafilesystem",
+   tag = "v_1_6_3",
 }
 description = {
+   summary = "File System Library for the Lua Programming Language",
    detailed = [[
       LuaFileSystem is a Lua library developed to complement the set of
       functions related to file systems offered by the standard Lua
       distribution. LuaFileSystem offers a portable way to access the
       underlying directory structure and file attributes.
    ]],
-   homepage = "http://www.keplerproject.org/luafilesystem/",
-   license = "MIT",
-   summary = "File System Library for the Lua Programming Language"
+   license = "MIT/X11",
 }
 dependencies = {
-   "lua >= 5.1, < 5.2"
+   "lua >= 5.1"
 }
 build = {
-   type = "module",
+   type = "builtin",
    modules = {
       lfs = "src/lfs.c"
    },
