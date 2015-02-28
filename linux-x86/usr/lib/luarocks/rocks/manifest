@@ -185,7 +185,7 @@ dependencies = {
       }
    },
    lua_cliargs = {
-      ['2.4-1'] = {
+      ['2.3-3'] = {
          {
             constraints = {
                {
@@ -200,13 +200,18 @@ dependencies = {
       }
    },
    luafilesystem = {
-      ['1.6.3-1'] = {
+      ['1.5.0-3'] = {
          {
             constraints = {
                {
                   op = ">=",
                   version = {
                      5, 1, string = "5.1"
+                  }
+               }, {
+                  op = "<",
+                  version = {
+                     5, 2, string = "5.2"
                   }
                }
             },
@@ -230,7 +235,7 @@ dependencies = {
       }
    },
    luassert = {
-      ['1.7.4-0'] = {
+      ['1.7.2-0'] = {
          {
             constraints = {
                {
@@ -292,7 +297,7 @@ dependencies = {
       }
    },
    penlight = {
-      ['1.3.1-1'] = {
+      ['1.0.0-1'] = {
          {
             constraints = {},
             name = "luafilesystem"
@@ -300,7 +305,7 @@ dependencies = {
       }
    },
    say = {
-      ['1.3-1'] = {
+      ['1.2-1'] = {
          {
             constraints = {
                {
@@ -416,7 +421,7 @@ modules = {
       "busted/2.0.rc4-0"
    },
    cliargs = {
-      "lua_cliargs/2.4-1"
+      "lua_cliargs/2.3-3"
    },
    coxpcall = {
       "coxpcall/1.15.0-1"
@@ -425,7 +430,7 @@ modules = {
       "dkjson/2.5-1"
    },
    lfs = {
-      "luafilesystem/1.6.3-1"
+      "luafilesystem/1.5.0-3"
    },
    lpeg = {
       "lpeg/0.12.1-1"
@@ -614,61 +619,61 @@ modules = {
       "luarocks/2.2.0-1"
    },
    luassert = {
-      "luassert/1.7.4-0"
+      "luassert/1.7.2-0"
    },
    ['luassert.assert'] = {
-      "luassert/1.7.4-0"
+      "luassert/1.7.2-0"
    },
    ['luassert.assertions'] = {
-      "luassert/1.7.4-0"
+      "luassert/1.7.2-0"
    },
    ['luassert.formatters'] = {
-      "luassert/1.7.4-0"
+      "luassert/1.7.2-0"
    },
    ['luassert.formatters.binarystring'] = {
-      "luassert/1.7.4-0"
+      "luassert/1.7.2-0"
    },
    ['luassert.languages.ar'] = {
-      "luassert/1.7.4-0"
+      "luassert/1.7.2-0"
    },
    ['luassert.languages.en'] = {
-      "luassert/1.7.4-0"
+      "luassert/1.7.2-0"
    },
    ['luassert.languages.fr'] = {
-      "luassert/1.7.4-0"
+      "luassert/1.7.2-0"
    },
    ['luassert.languages.ja'] = {
-      "luassert/1.7.4-0"
+      "luassert/1.7.2-0"
    },
    ['luassert.languages.nl'] = {
-      "luassert/1.7.4-0"
+      "luassert/1.7.2-0"
    },
    ['luassert.languages.ru'] = {
-      "luassert/1.7.4-0"
+      "luassert/1.7.2-0"
    },
    ['luassert.languages.ua'] = {
-      "luassert/1.7.4-0"
+      "luassert/1.7.2-0"
    },
    ['luassert.languages.zh'] = {
-      "luassert/1.7.4-0"
+      "luassert/1.7.2-0"
    },
    ['luassert.mock'] = {
-      "luassert/1.7.4-0"
+      "luassert/1.7.2-0"
    },
    ['luassert.modifiers'] = {
-      "luassert/1.7.4-0"
+      "luassert/1.7.2-0"
    },
    ['luassert.spy'] = {
-      "luassert/1.7.4-0"
+      "luassert/1.7.2-0"
    },
    ['luassert.state'] = {
-      "luassert/1.7.4-0"
+      "luassert/1.7.2-0"
    },
    ['luassert.stub'] = {
-      "luassert/1.7.4-0"
+      "luassert/1.7.2-0"
    },
    ['luassert.util'] = {
-      "luassert/1.7.4-0"
+      "luassert/1.7.2-0"
    },
    mediator = {
       "mediator_lua/1.1-3"
@@ -686,124 +691,118 @@ modules = {
       "nvim-client/0.0.1-11"
    },
    pl = {
-      "penlight/1.3.1-1"
+      "penlight/1.0.0-1"
    },
    ['pl.Date'] = {
-      "penlight/1.3.1-1"
+      "penlight/1.0.0-1"
    },
    ['pl.List'] = {
-      "penlight/1.3.1-1"
+      "penlight/1.0.0-1"
    },
    ['pl.Map'] = {
-      "penlight/1.3.1-1"
+      "penlight/1.0.0-1"
    },
    ['pl.MultiMap'] = {
-      "penlight/1.3.1-1"
+      "penlight/1.0.0-1"
    },
    ['pl.OrderedMap'] = {
-      "penlight/1.3.1-1"
+      "penlight/1.0.0-1"
    },
    ['pl.Set'] = {
-      "penlight/1.3.1-1"
+      "penlight/1.0.0-1"
    },
    ['pl.app'] = {
-      "penlight/1.3.1-1"
+      "penlight/1.0.0-1"
    },
    ['pl.array2d'] = {
-      "penlight/1.3.1-1"
+      "penlight/1.0.0-1"
    },
    ['pl.class'] = {
-      "penlight/1.3.1-1"
-   },
-   ['pl.compat'] = {
-      "penlight/1.3.1-1"
+      "penlight/1.0.0-1"
    },
    ['pl.comprehension'] = {
-      "penlight/1.3.1-1"
+      "penlight/1.0.0-1"
    },
    ['pl.config'] = {
-      "penlight/1.3.1-1"
+      "penlight/1.0.0-1"
    },
    ['pl.data'] = {
-      "penlight/1.3.1-1"
+      "penlight/1.0.0-1"
    },
    ['pl.dir'] = {
-      "penlight/1.3.1-1"
+      "penlight/1.0.0-1"
    },
    ['pl.file'] = {
-      "penlight/1.3.1-1"
+      "penlight/1.0.0-1"
    },
    ['pl.func'] = {
-      "penlight/1.3.1-1"
-   },
-   ['pl.import_into'] = {
-      "penlight/1.3.1-1"
+      "penlight/1.0.0-1"
    },
    ['pl.input'] = {
-      "penlight/1.3.1-1"
+      "penlight/1.0.0-1"
    },
    ['pl.lapp'] = {
-      "penlight/1.3.1-1"
+      "penlight/1.0.0-1"
    },
    ['pl.lexer'] = {
-      "penlight/1.3.1-1"
+      "penlight/1.0.0-1"
    },
    ['pl.luabalanced'] = {
-      "penlight/1.3.1-1"
+      "penlight/1.0.0-1"
    },
    ['pl.operator'] = {
-      "penlight/1.3.1-1"
+      "penlight/1.0.0-1"
    },
    ['pl.path'] = {
-      "penlight/1.3.1-1"
+      "penlight/1.0.0-1"
    },
    ['pl.permute'] = {
-      "penlight/1.3.1-1"
+      "penlight/1.0.0-1"
+   },
+   ['pl.platf.luajava'] = {
+      "penlight/1.0.0-1"
    },
    ['pl.pretty'] = {
-      "penlight/1.3.1-1"
+      "penlight/1.0.0-1"
    },
    ['pl.seq'] = {
-      "penlight/1.3.1-1"
+      "penlight/1.0.0-1"
    },
    ['pl.sip'] = {
-      "penlight/1.3.1-1"
+      "penlight/1.0.0-1"
    },
    ['pl.strict'] = {
-      "penlight/1.3.1-1"
+      "penlight/1.0.0-1"
    },
    ['pl.stringio'] = {
-      "penlight/1.3.1-1"
+      "penlight/1.0.0-1"
    },
    ['pl.stringx'] = {
-      "penlight/1.3.1-1"
+      "penlight/1.0.0-1"
    },
    ['pl.tablex'] = {
-      "penlight/1.3.1-1"
+      "penlight/1.0.0-1"
    },
    ['pl.template'] = {
-      "penlight/1.3.1-1"
+      "penlight/1.0.0-1"
    },
    ['pl.test'] = {
-      "penlight/1.3.1-1"
+      "penlight/1.0.0-1"
    },
    ['pl.text'] = {
-      "penlight/1.3.1-1"
-   },
-   ['pl.types'] = {
-      "penlight/1.3.1-1"
+      "penlight/1.0.0-1"
    },
    ['pl.utils'] = {
-      "penlight/1.3.1-1"
+      "penlight/1.0.0-1"
    },
    ['pl.xml'] = {
-      "penlight/1.3.1-1"
+      "penlight/1.0.0-1"
    },
    re = {
       "lpeg/0.12.1-1"
    },
    say = {
-      "say/1.3-1"
+      "say/1.2-1"
    }
 }
 repository = {
@@ -829,12 +828,12 @@ repository = {
             dependencies = {
                ansicolors = "1.0.2-3",
                dkjson = "2.5-1",
-               lua_cliargs = "2.4-1",
-               luafilesystem = "1.6.3-1",
-               luassert = "1.7.4-0",
+               lua_cliargs = "2.3-3",
+               luafilesystem = "1.5.0-3",
+               luassert = "1.7.2-0",
                mediator_lua = "1.1-3",
-               penlight = "1.3.1-1",
-               say = "1.3-1"
+               penlight = "1.0.0-1",
+               say = "1.2-1"
             },
             modules = {
                busted = "busted/init.lua",
@@ -922,7 +921,7 @@ repository = {
       }
    },
    lua_cliargs = {
-      ['2.4-1'] = {
+      ['2.3-3'] = {
          {
             arch = "installed",
             commands = {},
@@ -934,7 +933,7 @@ repository = {
       }
    },
    luafilesystem = {
-      ['1.6.3-1'] = {
+      ['1.5.0-3'] = {
          {
             arch = "installed",
             commands = {},
@@ -1023,12 +1022,12 @@ repository = {
       }
    },
    luassert = {
-      ['1.7.4-0'] = {
+      ['1.7.2-0'] = {
          {
             arch = "installed",
             commands = {},
             dependencies = {
-               say = "1.3-1"
+               say = "1.2-1"
             },
             modules = {
                luassert = "luassert/init.lua",
@@ -1085,12 +1084,12 @@ repository = {
       }
    },
    penlight = {
-      ['1.3.1-1'] = {
+      ['1.0.0-1'] = {
          {
             arch = "installed",
             commands = {},
             dependencies = {
-               luafilesystem = "1.6.3-1"
+               luafilesystem = "1.5.0-3"
             },
             modules = {
                pl = "pl/init.lua",
@@ -1103,14 +1102,12 @@ repository = {
                ['pl.app'] = "pl/app.lua",
                ['pl.array2d'] = "pl/array2d.lua",
                ['pl.class'] = "pl/class.lua",
-               ['pl.compat'] = "pl/compat.lua",
                ['pl.comprehension'] = "pl/comprehension.lua",
                ['pl.config'] = "pl/config.lua",
                ['pl.data'] = "pl/data.lua",
                ['pl.dir'] = "pl/dir.lua",
                ['pl.file'] = "pl/file.lua",
                ['pl.func'] = "pl/func.lua",
-               ['pl.import_into'] = "pl/import_into.lua",
                ['pl.input'] = "pl/input.lua",
                ['pl.lapp'] = "pl/lapp.lua",
                ['pl.lexer'] = "pl/lexer.lua",
@@ -1118,6 +1115,7 @@ repository = {
                ['pl.operator'] = "pl/operator.lua",
                ['pl.path'] = "pl/path.lua",
                ['pl.permute'] = "pl/permute.lua",
+               ['pl.platf.luajava'] = "pl/platf/luajava.lua",
                ['pl.pretty'] = "pl/pretty.lua",
                ['pl.seq'] = "pl/seq.lua",
                ['pl.sip'] = "pl/sip.lua",
@@ -1128,7 +1126,6 @@ repository = {
                ['pl.template'] = "pl/template.lua",
                ['pl.test'] = "pl/test.lua",
                ['pl.text'] = "pl/text.lua",
-               ['pl.types'] = "pl/types.lua",
                ['pl.utils'] = "pl/utils.lua",
                ['pl.xml'] = "pl/xml.lua"
             }
@@ -1136,7 +1133,7 @@ repository = {
       }
    },
    say = {
-      ['1.3-1'] = {
+      ['1.2-1'] = {
          {
             arch = "installed",
             commands = {},

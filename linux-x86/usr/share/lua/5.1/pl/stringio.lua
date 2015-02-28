@@ -12,13 +12,12 @@
 -- See  @{03-strings.md.File_style_I_O_on_Strings|the Guide}.
 -- @module pl.stringio
 
-local unpack = rawget(_G,'unpack') or rawget(table,'unpack')
-local getmetatable,tostring,tonumber = getmetatable,tostring,tonumber
+local getmetatable,tostring,unpack,tonumber = getmetatable,tostring,unpack,tonumber
 local concat,append = table.concat,table.insert
 
 local stringio = {}
 
--- Writer class
+--- Writer class
 local SW = {}
 SW.__index = SW
 
@@ -45,28 +44,24 @@ function SW:value()
     return concat(self.tbl)
 end
 
-function SW:__tostring()
-    return self:value()
-end
-
 function SW:close() -- for compatibility only
 end
 
 function SW:seek()
 end
 
--- Reader class
+--- Reader class
 local SR = {}
 SR.__index = SR
 
 function SR:_read(fmt)
     local i,str = self.i,self.str
     local sz = #str
-    if i > sz then return nil end
+    if i >= sz then return nil end
     local res
-    if fmt == '*l' or fmt == '*L' then
+    if fmt == nil or fmt == '*l' then
         local idx = str:find('\n',i) or (sz+1)
-        res = str:sub(i,fmt == '*l' and idx-1 or idx)
+        res = str:sub(i,idx-1)
         self.i = idx+1
     elseif fmt == '*a' then
         res = str:sub(i)
@@ -74,9 +69,9 @@ function SR:_read(fmt)
     elseif fmt == '*n' then
         local _,i2,i2,idx
         _,idx = str:find ('%s*%d+',i)
-        _,i2 = str:find ('^%.%d+',idx+1)
+        _,i2 = str:find ('%.%d+',idx+1)
         if i2 then idx = i2 end
-        _,i2 = str:find ('^[eE][%+%-]*%d+',idx+1)
+        _,i2 = str:find ('[eE][%+%-]*%d+',idx+1)
         if i2 then idx = i2 end
         local val = str:sub(i,idx)
         res = tonumber(val)
@@ -91,10 +86,11 @@ function SR:_read(fmt)
 end
 
 function SR:read(...)
-    if select('#',...) == 0 then
-        return self:_read('*l')
+    local fmts = {...}
+    if #fmts <= 1 then
+        return self:_read(fmts[1])
     else
-        local res, fmts = {},{...}
+        local res = {}
         for i = 1, #fmts do
             res[i] = self:_read(fmts[i])
         end
@@ -117,17 +113,9 @@ function SR:seek(whence,offset)
     return self.i
 end
 
-function SR:lines(...)
-    local n, args = select('#',...)
-    if n > 0 then
-        args = {...}
-    end
+function SR:lines()
     return function()
-        if n == 0 then
-            return self:_read '*l'
-        else
-            return self:read(unpack(args))
-        end
+        return self:read()
     end
 end
 
@@ -148,8 +136,8 @@ function stringio.open(s)
     return setmetatable({str=s,i=1},SR)
 end
 
-function stringio.lines(s,...)
-    return stringio.open(s):lines(...)
+function stringio.lines(s)
+    return stringio.open(s):lines()
 end
 
 return stringio

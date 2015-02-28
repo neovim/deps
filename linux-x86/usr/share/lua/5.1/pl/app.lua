@@ -1,12 +1,14 @@
 --- Application support functions.
 -- See @{01-introduction.md.Application_Support|the Guide}
 --
--- Dependencies: `pl.utils`, `pl.path`
+-- Dependencies: `pl.utils`, `pl.path`, `lfs`
 -- @module pl.app
 
 local io,package,require = _G.io, _G.package, _G.require
 local utils = require 'pl.utils'
 local path = require 'pl.path'
+local lfs = require 'lfs'
+
 
 local app = {}
 
@@ -26,7 +28,7 @@ end
 function app.require_here (base)
     local p = path.dirname(check_script_name())
     if not path.isabs(p) then
-        p = path.join(path.currentdir(),p)
+        p = path.join(lfs.currentdir(),p)
     end
     if p:sub(-1,-1) ~= path.sep then
         p = p..path.sep
@@ -53,7 +55,7 @@ function app.appfile (file)
     local name,ext = path.splitext(sname)
     local dir = path.join(path.expanduser('~'),'.'..name)
     if not path.isdir(dir) then
-        local ret = path.mkdir(dir)
+        local ret = lfs.mkdir(dir)
         if not ret then return utils.raise ('cannot create '..dir) end
     end
     return path.join(dir,file)
@@ -73,33 +75,12 @@ function app.platform()
     end
 end
 
---- return the full command-line used to invoke this script.
--- Any extra flags occupy slots, so that `lua -lpl` gives us `{[-2]='lua',[-1]='-lpl'}`
--- @return command-line
--- @return name of Lua program used
-function app.lua ()
-    local args = _G.arg or error "not in a main program"
-    local imin = 0
-    for i in pairs(args) do
-        if i < imin then imin = i end
-    end
-    local cmd, append = {}, table.insert
-    for i = imin,-1 do
-        local a = args[i]
-        if a:match '%s' then
-            a = '"'..a..'"'
-        end
-        append(cmd,a)
-    end
-    return table.concat(cmd,' '),args[imin]
-end
-
 --- parse command-line arguments into flags and parameters.
--- Understands GNU-style command-line flags; short (`-f`) and long (`--flag`).
--- These may be given a value with either '=' or ':' (`-k:2`,`--alpha=3.2`,`-n2`);
+-- Understands GNU-style command-line flags; short (-f) and long (--flag).
+-- These may be given a value with either '=' or ':' (-k:2,--alpha=3.2,-n2);
 -- note that a number value can be given without a space.
--- Multiple short args can be combined like so: ( `-abcd`).
--- @param args an array of strings (default is the global `arg`)
+-- Multiple short args can be combined like so: (-abcd).
+-- @param args an array of strings (default is the global 'arg')
 -- @param flags_with_values any flags that take values, e.g. <code>{out=true}</code>
 -- @return a table of flags (flag=value pairs)
 -- @return an array of parameters
@@ -129,8 +110,8 @@ function app.parse_args (args,flags_with_values)
                 flags[v] = args[i+1]
                 i = i + 1
             else
-                -- a value can also be indicated with =
-                local var,val =  utils.splitv (v,'=')
+                -- a value can be indicated with = or :
+                local var,val =  utils.splitv (v,'[=:]')
                 var = var or v
                 val = val or true
                 if not is_long then

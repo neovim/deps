@@ -21,9 +21,9 @@ local type,select,setmetatable,getmetatable,rawset = type,select,setmetatable,ge
 local concat,append = table.concat,table.insert
 local max = math.max
 local print,tostring = print,tostring
-local utils = require 'pl.utils'
-local pairs,ipairs,loadstring,rawget,unpack  = pairs,ipairs,loadstring,rawget,utils.unpack
+local pairs,ipairs,loadstring,rawget,unpack  = pairs,ipairs,loadstring,rawget,unpack
 local _G = _G
+local utils = require 'pl.utils'
 local tablex = require 'pl.tablex'
 local map = tablex.map
 local _DEBUG = rawget(_G,'_DEBUG')
@@ -290,7 +290,7 @@ function func.instantiate (e)
     rep = repr(e)
     local fstr = ('return function(%s) return function(%s) return %s end end'):format(consts,parms,rep)
     if _DEBUG then print(fstr) end
-    fun,err = utils.load(fstr,'fun')
+    fun,err = loadstring(fstr,'fun')
     if not fun then return nil,err end
     fun = fun()  -- get wrapper
     fun = fun(unpack(values)) -- call wrapper (values could be empty)
@@ -311,13 +311,13 @@ end
 utils.add_function_factory(_PEMT,func.I)
 
 --- bind the first parameter of the function to a value.
--- @function func.bind1
+-- @class function
+-- @name func.curry
 -- @param fn a function of one or more arguments
 -- @param p a value
 -- @return a function of one less argument
--- @usage (bind1(math.max,10))(20) == math.max(10,20)
-func.bind1 = utils.bind1
-func.curry = func.bind1
+-- @usage (curry(math.max,10))(20) == math.max(10,20)
+func.curry = utils.bind1
 
 --- create a function which chains two functions.
 -- @param f a function of at least one argument
@@ -366,7 +366,7 @@ return function (%s)
 end
 ]]):format(bvalues,parms,holders)
     if _DEBUG then print(fstr) end
-    local res,err = utils.load(fstr)
+    local res,err = loadstring(fstr)
     res = res()
     return res(fn,unpack(values))
 end

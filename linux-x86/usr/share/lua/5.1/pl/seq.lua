@@ -1,21 +1,22 @@
 --- Manipulating iterators as sequences.
 -- See @{07-functional.md.Sequences|The Guide}
 --
--- Dependencies: `pl.utils`, `pl.types`, `debug`
+-- Dependencies: `pl.utils`, `debug`
 -- @module pl.seq
 
 local next,assert,type,pairs,tonumber,type,setmetatable,getmetatable,_G = next,assert,type,pairs,tonumber,type,setmetatable,getmetatable,_G
-local strfind,strmatch,format = string.find,string.match,string.format
+local strfind = string.find
+local strmatch = string.match
+local format = string.format
 local mrandom = math.random
 local remove,tsort,tappend = table.remove,table.sort,table.insert
 local io = io
 local utils = require 'pl.utils'
-local callable = require 'pl.types'.is_callable
 local function_arg = utils.function_arg
 local _List = utils.stdmt.List
 local _Map = utils.stdmt.Map
 local assert_arg = utils.assert_arg
-local debug = require 'debug'
+require 'debug'
 
 local seq = {}
 
@@ -57,8 +58,6 @@ function seq.matching(s)
   end
 end
 
-local nexti
-
 --- sequence adaptor for a table.   Note that if any generic function is
 -- passed a table, it will automatically use seq.list()
 -- @param t a list-like table
@@ -66,18 +65,15 @@ local nexti
 -- @usage for x in list(t) do...end
 function seq.list(t)
   assert_arg(1,t,'table')
-  if not nexti then
-    nexti = ipairs{}
-  end
-  local key,value = 0
+  local key,value
   return function()
-    key,value = nexti(t,key)
+    key,value = next(t,key)
     return value
   end
 end
 
 --- return the keys of the table.
--- @param t an arbitrary table
+-- @param t a list-like table
 -- @return iterator over keys
 function seq.keys(t)
   assert_arg(1,t,'table')
@@ -155,10 +151,9 @@ end
 -- @usage copy(list(ls)) is equal to ls
 -- @usage copy(list {1,2,3}) == List{1,2,3}
 function seq.copy(iter)
-    local res,k = {},1
+    local res = {}
     for v in default_iter(iter) do
-        res[k] = v
-        k = k + 1
+        tappend(res,v)
     end
     setmetatable(res,_List)
     return res
@@ -171,10 +166,9 @@ end
 -- @usage copy2(ipairs{10,20,30}) == {{1,10},{2,20},{3,30}}
 -- @return a list-like table
 function seq.copy2 (iter,i1,i2)
-    local res,k = {},1
+    local res = {}
     for v1,v2 in iter,i1,i2 do
-        res[k] = {v1,v2}
-        k = k + 1
+        tappend(res,{v1,v2})
     end
     return res
 end
@@ -240,9 +234,9 @@ function seq.zip(iter1,iter2)
     end
 end
 
---- Makes a table where the key/values are the values and value counts of the sequence.
--- This version works with 'hashable' values like strings and numbers.
--- `pl.tablex.count_map` is more general.
+--- A table where the key/values are the values and value counts of the sequence.
+-- This version works with 'hashable' values like strings and numbers. <br>
+-- pl.tablex.count_map is more general.
 -- @param iter a sequence
 -- @return a map-like table
 -- @return a table
@@ -251,9 +245,9 @@ function seq.count_map(iter)
     local t = {}
     local v
     for s in default_iter(iter) do
-        v = t[s]
-        if v then t[s] = v + 1
-        else t[s] = 1 end
+          v = t[s]
+          if v then t[s] = v + 1
+          else t[s] = 1 end
     end
     return setmetatable(t,_Map)
 end
@@ -263,15 +257,15 @@ end
 -- @param returns_table true if we return a table, not a sequence
 -- @return a sequence or a table; defaults to a sequence.
 function seq.unique(iter,returns_table)
-    local t = seq.count_map(iter)
-    local res,k = {},1
-    for key in pairs(t) do res[k] = key; k = k + 1 end
-    table.sort(res)
-    if returns_table then
-        return res
-    else
-        return list(res)
-    end
+  local t = seq.count_map(iter)
+  local res = {}
+  for k in pairs(t) do tappend(res,k) end
+  table.sort(res)
+  if returns_table then
+    return res
+  else
+    return list(res)
+  end
 end
 
 --- print out a sequence iter with a separator.
@@ -343,7 +337,7 @@ function seq.map(fn,iter,arg)
     end
 end
 
---- filter a sequence using a predicate function.
+--- filter a sequence using a predicate function
 -- @param iter a sequence of one or two values
 -- @param pred a boolean function; may take two arguments
 -- @param arg optional argument to pass to function.
@@ -407,7 +401,7 @@ function seq.skip (iter,n)
     return iter
 end
 
---- a sequence with a sequence count and the original value.
+--- a sequence with a sequence count and the original value. <br>
 -- enum(copy(ls)) is a roundabout way of saying ipairs(ls).
 -- @param iter a single or double valued sequence
 -- @return sequence of (i,v), i = 1..n and v is from iter.
@@ -466,6 +460,7 @@ end
 ---------------------- Sequence Adapters ---------------------
 
 local SMT
+local callable = utils.is_callable
 
 local function SW (iter,...)
     if callable(iter) then
@@ -489,9 +484,9 @@ local overrides = {
 
 SMT = {
     __index = function (tbl,key)
-        local fn = overrides[key] or seq[key]
-        if fn then
-            return function(sw,...) return SW(fn(sw.iter,...)) end
+        local s = overrides[key] or seq[key]
+        if s then
+            return function(sw,...) return SW(s(sw.iter,...)) end
         else
             return function(sw,...) return SW(mapmethod(sw.iter,key,...)) end
         end
@@ -513,26 +508,10 @@ setmetatable(seq,{
 })
 
 --- create a wrapped iterator over all lines in the file.
--- @param f either a filename, file-like object, or 'STDIN' (for standard input)
--- @param ... for Lua 5.2 only, optional format specifiers, as in `io.read`.
+-- @param f either a filename or nil (for standard input)
 -- @return a sequence wrapper
-function seq.lines (f,...)
-    local n = select('#',...)
-    local iter,obj
-    if f == 'STDIN' then
-        f = io.stdin
-    elseif type(f) == 'string' then
-        iter,obj = io.lines(f,...)
-    elseif not f.read then
-        error("Pass either a string or a file-like object",2)
-    end
-    if not iter then
-        iter,obj = f:lines(...)
-    end
-    if obj then -- LuaJIT version returns a function operating on a file
-        local lines,file = iter,obj
-        iter = function() return lines(file) end
-    end
+function seq.lines (f)
+    local iter = f and io.lines(f) or io.lines()
     return SW(iter)
 end
 
