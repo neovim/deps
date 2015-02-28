@@ -1,5 +1,4 @@
 -- module will return a stub module table
-local assert = require 'luassert.assert'
 local spy = require 'luassert.spy'
 local util = require 'luassert.util'
 local stubfunc = function() end
@@ -46,4 +45,4 @@ return setmetatable( stub, {
       -- NOTE: this deviates from spy, which has no __call method
       return stub.new(...)
     end })
-
+  

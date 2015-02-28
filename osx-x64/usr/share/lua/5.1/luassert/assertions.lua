@@ -79,29 +79,12 @@ local function has_error(state, arguments)
   local err_expected = arguments[2]
   assert(util.callable(func), s("assertion.internal.badargtype", { "error", "function, or callable object", type(func) }))
   local ok, err_actual = pcall(func)
-  arguments.nofmt = {}
-  arguments.n = 2
-  arguments[1] = (ok and '(no error)' or err_actual)
-  arguments[2] = (err_expected == nil and '(error)' or err_expected)
-  arguments.nofmt[1] = ok
-  arguments.nofmt[2] = (err_expected == nil)
-
+  arguments[1] = err_actual
+  arguments[2] = err_expected
   if ok or err_expected == nil then
     return not ok
-  end
-  if type(err_expected) == 'string' then
-    -- err_actual must be (convertible to) a string
-    local mt = getmetatable(err_actual)
-    if mt and mt.__tostring then
-      err_actual = tostring(err_actual)
-    end
-    if type(err_actual) == 'string' then
-      -- we expect err_expected to be a substring of err_actual
-      return err_actual:find(err_expected, nil, true) ~= nil
-    end
-  elseif type(err_expected) == 'number' then
-      -- we expect err_expected to be at the end of err_actual
-      return err_actual:match('.*%s+' .. err_expected .. '$') ~= nil
+  elseif type(err_actual) == 'string' and type(err_expected) == 'string' then
+    return err_actual:find(err_expected, nil, true) ~= nil
   end
   return same(state, {err_expected, err_actual, ["n"] = 2})
 end

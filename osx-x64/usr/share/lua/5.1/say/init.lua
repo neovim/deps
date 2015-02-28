@@ -1,5 +1,3 @@
-local unpack = table.unpack or unpack
-
 local registry = { }
 local current_namespace
 local fallback_namespace
@@ -56,6 +54,8 @@ local __meta = {
 s:set_fallback('en')
 s:set_namespace('en')
 
-s._registry = registry
+if _TEST then
+  s._registry = registry -- force different name to make sure with _TEST behaves exactly as without _TEST
+end
 
 return setmetatable(s, __meta)

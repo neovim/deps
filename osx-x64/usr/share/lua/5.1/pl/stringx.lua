@@ -8,15 +8,15 @@
 --
 -- Dependencies: `pl.utils`
 -- @module pl.stringx
-local utils = require 'pl.utils'
 local string = string
 local find = string.find
-local type,setmetatable,getmetatable,ipairs,unpack = type,setmetatable,getmetatable,ipairs,utils.unpack
+local type,setmetatable,getmetatable,ipairs,unpack = type,setmetatable,getmetatable,ipairs,unpack
 local error,tostring = error,tostring
 local gsub = string.gsub
 local rep = string.rep
 local sub = string.sub
 local concat = table.concat
+local utils = require 'pl.utils'
 local escape = utils.escape
 local ceil = math.ceil
 local _G = _G
@@ -36,10 +36,6 @@ local function assert_nonempty_string(n,s)
 end
 
 local stringx = {}
-
-------------------
--- String Predicates
--- @section predicates
 
 --- does s only contain alphabetic characters?.
 -- @param s a string
@@ -83,6 +79,15 @@ function stringx.isupper(s)
     return find(s,'^[%u%s]+$') == 1
 end
 
+--- concatenate the strings using this string as a delimiter.
+-- @param self the string
+-- @param seq a table of strings or numbers
+-- @usage (' '):join {1,2,3} == '1 2 3'
+function stringx.join (self,seq)
+    assert_string(1,self)
+    return concat(seq,self)
+end
+
 --- does string start with the substring?.
 -- @param self the string
 -- @param s2 a string
@@ -124,19 +129,7 @@ function stringx.endswith(s,send)
     end
 end
 
---- Strings and Lists
--- @section lists
-
---- concatenate the strings using this string as a delimiter.
--- @param self the string
--- @param seq a table of strings or numbers
--- @usage (' '):join {1,2,3} == '1 2 3'
-function stringx.join (self,seq)
-    assert_string(1,self)
-    return concat(seq,self)
-end
-
---- break string into a list of lines
+-- break string into a list of lines
 -- @param self the string
 -- @param keepends (currently not used)
 function stringx.splitlines (self,keepends)
@@ -145,29 +138,6 @@ function stringx.splitlines (self,keepends)
     -- we are currently hacking around a problem with utils.split (see stringx.split)
     if #res == 0 then res = {''} end
     return setmetatable(res,list_MT)
-end
-
---- split a string into a list of strings using a delimiter.
--- @class function
--- @name split
--- @param self the string
--- @param re a delimiter (defaults to whitespace)
--- @param n maximum number of results
--- @usage #(('one two'):split()) == 2
--- @usage ('one,two,three'):split(',') == List{'one','two','three'}
--- @usage ('one,two,three'):split(',',2) == List{'one','two,three'}
-function stringx.split(self,re,n)
-    local s = self
-    local plain = true
-    if not re then -- default spaces
-        s = lstrip(s)
-        plain = false
-    end
-    local res = usplit(s,re,plain,n)
-    if re and re ~= '' and find(s,re,-#re,true) then
-        res[#res+1] = ""
-    end
-	return setmetatable(res,list_MT)
 end
 
 local function tab_expand (self,n)
@@ -192,9 +162,6 @@ function stringx.expandtabs(self,n)
     end
     return table.concat(res,'\n')
 end
-
---- Finding and Replacing
--- @section find
 
 --- find index of first instance of sub in s from the left.
 -- @param self the string
@@ -233,6 +200,39 @@ function stringx.replace(s,old,new,n)
     return (gsub(s,escape(old),new:gsub('%%','%%%%'),n))
 end
 
+--- split a string into a list of strings using a delimiter.
+-- @class function
+-- @name split
+-- @param self the string
+-- @param re a delimiter (defaults to whitespace)
+-- @param n maximum number of results
+-- @usage #(('one two'):split()) == 2
+-- @usage ('one,two,three'):split(',') == List{'one','two','three'}
+-- @usage ('one,two,three'):split(',',2) == List{'one','two,three'}
+function stringx.split(self,re,n)
+    local s = self
+    local plain = true
+    if not re then -- default spaces
+        s = lstrip(s)
+        plain = false
+    end
+    local res = usplit(s,re,plain,n)
+    if re and re ~= '' and find(s,re,-#re,true) then
+        res[#res+1] = ""
+    end
+	return setmetatable(res,list_MT)
+end
+
+--- split a string using a pattern. Note that at least one value will be returned!
+-- @param self the string
+-- @param re a Lua string pattern (defaults to whitespace)
+-- @return the parts of the string
+-- @usage  a,b = line:splitv('=')
+function stringx.splitv (self,re)
+    assert_string(1,self)
+    return utils.splitv(self,re)
+end
+
 local function copy(self)
     return self..''
 end
@@ -245,9 +245,6 @@ function stringx.count(self,sub)
     local i,k = _find_all(self,sub,1)
     return k
 end
-
---- Stripping and Justifying
--- @section strip
 
 local function _just(s,w,ch,left,right)
     local n = #s
@@ -325,8 +322,7 @@ end
 
 --- trim any whitespace on the left of s.
 -- @param self the string
--- @param chrs default any whitespace character (%s),
---             can be a string of characters to be trimmed
+-- @param chrs default space, can be a string of characters to be trimmed
 function stringx.lstrip(self,chrs)
     assert_string(1,self)
     return _strip(self,true,false,chrs)
@@ -335,8 +331,7 @@ lstrip = stringx.lstrip
 
 --- trim any whitespace on the right of s.
 -- @param s the string
--- @param chrs default any whitespace character (%s),
---             can be a string of characters to be trimmed
+-- @param chrs default space, can be a string of characters to be trimmed
 function stringx.rstrip(s,chrs)
     assert_string(1,s)
     return _strip(s,false,true,chrs)
@@ -344,24 +339,10 @@ end
 
 --- trim any whitespace on both left and right of s.
 -- @param self the string
--- @param chrs default any whitespace character (%s),
---             can be a string of characters to be trimmed
+-- @param chrs default space, can be a string of characters to be trimmed
 function stringx.strip(self,chrs)
     assert_string(1,self)
     return _strip(self,true,true,chrs)
-end
-
---- Partioning Strings
--- @section partioning
-
---- split a string using a pattern. Note that at least one value will be returned!
--- @param self the string
--- @param re a Lua string pattern (defaults to whitespace)
--- @return the parts of the string
--- @usage  a,b = line:splitv('=')
-function stringx.splitv (self,re)
-    assert_string(1,self)
-    return utils.splitv(self,re)
 end
 
 -- The partition functions split a string  using a delimiter into three parts:
@@ -409,9 +390,6 @@ function stringx.at(self,idx)
     assert_arg(2,idx,'number')
     return sub(self,idx,idx)
 end
-
---- Miscelaneous
--- @section misc
 
 --- return an interator over all lines in a string
 -- @param self the string

@@ -1,7 +1,7 @@
 --- MultiMap, a Map which has multiple values per key.
 --
 -- Dependencies: `pl.utils`, `pl.class`, `pl.tablex`, `pl.List`
--- @classmod pl.MultiMap
+-- @module pl.MultiMap
 
 local classes = require 'pl.class'
 local tablex = require 'pl.tablex'
@@ -11,6 +11,7 @@ local List = require 'pl.List'
 local index_by,tsort,concat = tablex.index_by,table.sort,table.concat
 local append,extend,slice = List.append,List.extend,List.slice
 local append = table.insert
+local is_type = utils.is_type
 
 local class = require 'pl.class'
 local Map = require 'pl.Map'
