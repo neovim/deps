@@ -155,7 +155,7 @@ dependencies = {
       }
    },
    lpeg = {
-      ['0.12.1-1'] = {
+      ['0.12.2-1'] = {
          {
             constraints = {
                {
@@ -428,7 +428,7 @@ modules = {
       "luafilesystem/1.6.3-1"
    },
    lpeg = {
-      "lpeg/0.12.1-1"
+      "lpeg/0.12.2-1"
    },
    ['luarocks.add'] = {
       "luarocks/2.2.0-1"
@@ -794,7 +794,7 @@ modules = {
       "penlight/1.0.0-1"
    },
    re = {
-      "lpeg/0.12.1-1"
+      "lpeg/0.12.2-1"
    },
    say = {
       "say/1.2-1"
@@ -891,7 +891,7 @@ repository = {
       }
    },
    lpeg = {
-      ['0.12.1-1'] = {
+      ['0.12.2-1'] = {
          {
             arch = "installed",
             commands = {},

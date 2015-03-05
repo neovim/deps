@@ -1,8 +1,8 @@
 package = "LPeg"
-version = "0.12.1-1"
+version = "0.12.2-1"
 source = {
-   url = "http://www.inf.puc-rio.br/~roberto/lpeg/lpeg-0.12.1.tar.gz",
-   md5 = "acfca4d7075b82d5195e1b3d947904da"
+   url = "http://www.inf.puc-rio.br/~roberto/lpeg/lpeg-0.12.2.tar.gz",
+   md5 = "fabb614eb46e370d4f6b8fd82d17ca7e",
 }
 description = {
    summary = "Parsing Expression Grammars For Lua",
