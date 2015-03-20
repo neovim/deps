@@ -40,7 +40,7 @@ struct raw_ref {
 
     bool operator== (const raw_ref& x) const
     {
-        return size == x.size && memcmp(ptr, x.ptr, size) == 0;
+        return size == x.size && std::memcmp(ptr, x.ptr, size) == 0;
     }
 
     bool operator!= (const raw_ref& x) const
@@ -50,13 +50,13 @@ struct raw_ref {
 
     bool operator< (const raw_ref& x) const
     {
-        if(size == x.size) { return memcmp(ptr, x.ptr, size) < 0; }
+        if(size == x.size) { return std::memcmp(ptr, x.ptr, size) < 0; }
         else { return size < x.size; }
     }
 
     bool operator> (const raw_ref& x) const
     {
-        if(size == x.size) { return memcmp(ptr, x.ptr, size) > 0; }
+        if(size == x.size) { return std::memcmp(ptr, x.ptr, size) > 0; }
         else { return size > x.size; }
     }
 };
@@ -64,31 +64,31 @@ struct raw_ref {
 }  // namespace type
 
 
-inline object const& operator>> (object const& o, type::raw_ref& v)
+inline msgpack::object const& operator>> (msgpack::object const& o, msgpack::type::raw_ref& v)
 {
-    if(o.type != type::BIN) { throw type_error(); }
+    if(o.type != msgpack::type::BIN) { throw msgpack::type_error(); }
     v.ptr  = o.via.bin.ptr;
     v.size = o.via.bin.size;
     return o;
 }
 
 template <typename Stream>
-inline packer<Stream>& operator<< (packer<Stream>& o, const type::raw_ref& v)
+inline msgpack::packer<Stream>& operator<< (msgpack::packer<Stream>& o, const msgpack::type::raw_ref& v)
 {
     o.pack_bin(v.size);
     o.pack_bin_body(v.ptr, v.size);
     return o;
 }
 
-inline void operator<< (object& o, const type::raw_ref& v)
+inline void operator<< (msgpack::object& o, const msgpack::type::raw_ref& v)
 {
-    o.type = type::BIN;
+    o.type = msgpack::type::BIN;
     o.via.bin.ptr = v.ptr;
     o.via.bin.size = v.size;
 }
 
-inline void operator<< (object::with_zone& o, const type::raw_ref& v)
-    { static_cast<object&>(o) << v; }
+inline void operator<< (msgpack::object::with_zone& o, const msgpack::type::raw_ref& v)
+    { static_cast<msgpack::object&>(o) << v; }
 
 
 }  // MSGPACK_API_VERSION_NAMESPACE(v1)

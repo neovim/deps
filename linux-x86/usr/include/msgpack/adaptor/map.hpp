@@ -1,7 +1,7 @@
 //
 // MessagePack for C++ static resolution routine
 //
-// Copyright (C) 2008-2009 FURUHASHI Sadayuki
+// Copyright (C) 2008-2015 FURUHASHI Sadayuki
 //
 //    Licensed under the Apache License, Version 2.0 (the "License");
 //    you may not use this file except in compliance with the License.
@@ -20,6 +20,8 @@
 
 #include "msgpack/versioning.hpp"
 #include "msgpack/object_fwd.hpp"
+#include "msgpack/adaptor/check_container_size.hpp"
+
 #include <map>
 #include <vector>
 #include <algorithm>
@@ -45,12 +47,12 @@ namespace detail {
 
 
 template <typename K, typename V>
-inline object const& operator>> (object const& o, type::assoc_vector<K,V>& v)
+inline msgpack::object const& operator>> (msgpack::object const& o, type::assoc_vector<K,V>& v)
 {
-    if(o.type != type::MAP) { throw type_error(); }
+    if(o.type != msgpack::type::MAP) { throw msgpack::type_error(); }
     v.resize(o.via.map.size);
-    object_kv* p = o.via.map.ptr;
-    object_kv* const pend = o.via.map.ptr + o.via.map.size;
+    msgpack::object_kv* p = o.via.map.ptr;
+    msgpack::object_kv* const pend = o.via.map.ptr + o.via.map.size;
     std::pair<K, V>* it(&v.front());
     for(; p < pend; ++p, ++it) {
         p->key.convert(it->first);
@@ -61,11 +63,12 @@ inline object const& operator>> (object const& o, type::assoc_vector<K,V>& v)
 }
 
 template <typename Stream, typename K, typename V>
-inline packer<Stream>& operator<< (packer<Stream>& o, const type::assoc_vector<K,V>& v)
+inline msgpack::packer<Stream>& operator<< (msgpack::packer<Stream>& o, const type::assoc_vector<K,V>& v)
 {
-    o.pack_map(v.size());
+    uint32_t size = checked_get_container_size(v.size());
+    o.pack_map(size);
     for(typename type::assoc_vector<K,V>::const_iterator it(v.begin()), it_end(v.end());
-            it != it_end; ++it) {
+        it != it_end; ++it) {
         o.pack(it->first);
         o.pack(it->second);
     }
@@ -73,21 +76,22 @@ inline packer<Stream>& operator<< (packer<Stream>& o, const type::assoc_vector<K
 }
 
 template <typename K, typename V>
-inline void operator<< (object::with_zone& o, const type::assoc_vector<K,V>& v)
+inline void operator<< (msgpack::object::with_zone& o, const type::assoc_vector<K,V>& v)
 {
-    o.type = type::MAP;
+    o.type = msgpack::type::MAP;
     if(v.empty()) {
         o.via.map.ptr  = nullptr;
         o.via.map.size = 0;
     } else {
-        object_kv* p = static_cast<object_kv*>(o.zone.allocate_align(sizeof(object_kv)*v.size()));
-        object_kv* const pend = p + v.size();
+        uint32_t size = checked_get_container_size(v.size());
+        msgpack::object_kv* p = static_cast<msgpack::object_kv*>(o.zone.allocate_align(sizeof(msgpack::object_kv)*size));
+        msgpack::object_kv* const pend = p + size;
         o.via.map.ptr  = p;
-        o.via.map.size = v.size();
+        o.via.map.size = size;
         typename type::assoc_vector<K,V>::const_iterator it(v.begin());
         do {
-            p->key = object(it->first, o.zone);
-            p->val = object(it->second, o.zone);
+            p->key = msgpack::object(it->first, o.zone);
+            p->val = msgpack::object(it->second, o.zone);
             ++p;
             ++it;
         } while(p < pend);
@@ -96,11 +100,11 @@ inline void operator<< (object::with_zone& o, const type::assoc_vector<K,V>& v)
 
 
 template <typename K, typename V>
-inline object const& operator>> (object const& o, std::map<K, V>& v)
+inline msgpack::object const& operator>> (msgpack::object const& o, std::map<K, V>& v)
 {
-    if(o.type != type::MAP) { throw type_error(); }
-    object_kv* p(o.via.map.ptr);
-    object_kv* const pend(o.via.map.ptr + o.via.map.size);
+    if(o.type != msgpack::type::MAP) { throw msgpack::type_error(); }
+    msgpack::object_kv* p(o.via.map.ptr);
+    msgpack::object_kv* const pend(o.via.map.ptr + o.via.map.size);
     std::map<K, V> tmp;
     for(; p != pend; ++p) {
         K key;
@@ -119,11 +123,12 @@ inline object const& operator>> (object const& o, std::map<K, V>& v)
 }
 
 template <typename Stream, typename K, typename V>
-inline packer<Stream>& operator<< (packer<Stream>& o, const std::map<K,V>& v)
+inline msgpack::packer<Stream>& operator<< (msgpack::packer<Stream>& o, const std::map<K,V>& v)
 {
-    o.pack_map(v.size());
+    uint32_t size = checked_get_container_size(v.size());
+    o.pack_map(size);
     for(typename std::map<K,V>::const_iterator it(v.begin()), it_end(v.end());
-            it != it_end; ++it) {
+        it != it_end; ++it) {
         o.pack(it->first);
         o.pack(it->second);
     }
@@ -131,21 +136,22 @@ inline packer<Stream>& operator<< (packer<Stream>& o, const std::map<K,V>& v)
 }
 
 template <typename K, typename V>
-inline void operator<< (object::with_zone& o, const std::map<K,V>& v)
+inline void operator<< (msgpack::object::with_zone& o, const std::map<K,V>& v)
 {
-    o.type = type::MAP;
+    o.type = msgpack::type::MAP;
     if(v.empty()) {
         o.via.map.ptr  = nullptr;
         o.via.map.size = 0;
     } else {
-        object_kv* p = static_cast<object_kv*>(o.zone.allocate_align(sizeof(object_kv)*v.size()));
-        object_kv* const pend = p + v.size();
+        uint32_t size = checked_get_container_size(v.size());
+        msgpack::object_kv* p = static_cast<msgpack::object_kv*>(o.zone.allocate_align(sizeof(msgpack::object_kv)*size));
+        msgpack::object_kv* const pend = p + size;
         o.via.map.ptr  = p;
-        o.via.map.size = v.size();
+        o.via.map.size = size;
         typename std::map<K,V>::const_iterator it(v.begin());
         do {
-            p->key = object(it->first, o.zone);
-            p->val = object(it->second, o.zone);
+            p->key = msgpack::object(it->first, o.zone);
+            p->val = msgpack::object(it->second, o.zone);
             ++p;
             ++it;
         } while(p < pend);
@@ -154,11 +160,11 @@ inline void operator<< (object::with_zone& o, const std::map<K,V>& v)
 
 
 template <typename K, typename V>
-inline object const& operator>> (object const& o, std::multimap<K, V>& v)
+inline msgpack::object const& operator>> (msgpack::object const& o, std::multimap<K, V>& v)
 {
-    if(o.type != type::MAP) { throw type_error(); }
-    object_kv* p(o.via.map.ptr);
-    object_kv* const pend(o.via.map.ptr + o.via.map.size);
+    if(o.type != msgpack::type::MAP) { throw msgpack::type_error(); }
+    msgpack::object_kv* p(o.via.map.ptr);
+    msgpack::object_kv* const pend(o.via.map.ptr + o.via.map.size);
     std::multimap<K, V> tmp;
     for(; p != pend; ++p) {
         std::pair<K, V> value;
@@ -171,11 +177,12 @@ inline object const& operator>> (object const& o, std::multimap<K, V>& v)
 }
 
 template <typename Stream, typename K, typename V>
-inline packer<Stream>& operator<< (packer<Stream>& o, const std::multimap<K,V>& v)
+inline msgpack::packer<Stream>& operator<< (msgpack::packer<Stream>& o, const std::multimap<K,V>& v)
 {
-    o.pack_map(v.size());
+    uint32_t size = checked_get_container_size(v.size());
+    o.pack_map(size);
     for(typename std::multimap<K,V>::const_iterator it(v.begin()), it_end(v.end());
-            it != it_end; ++it) {
+        it != it_end; ++it) {
         o.pack(it->first);
         o.pack(it->second);
     }
@@ -183,21 +190,22 @@ inline packer<Stream>& operator<< (packer<Stream>& o, const std::multimap<K,V>& 
 }
 
 template <typename K, typename V>
-inline void operator<< (object::with_zone& o, const std::multimap<K,V>& v)
+inline void operator<< (msgpack::object::with_zone& o, const std::multimap<K,V>& v)
 {
-    o.type = type::MAP;
+    o.type = msgpack::type::MAP;
     if(v.empty()) {
         o.via.map.ptr  = nullptr;
         o.via.map.size = 0;
     } else {
-        object_kv* p = static_cast<object_kv*>(o.zone.allocate_align(sizeof(object_kv)*v.size()));
-        object_kv* const pend = p + v.size();
+        uint32_t size = checked_get_container_size(v.size());
+        msgpack::object_kv* p = static_cast<msgpack::object_kv*>(o.zone.allocate_align(sizeof(msgpack::object_kv)*size));
+        msgpack::object_kv* const pend = p + size;
         o.via.map.ptr  = p;
-        o.via.map.size = v.size();
+        o.via.map.size = size;
         typename std::multimap<K,V>::const_iterator it(v.begin());
         do {
-            p->key = object(it->first, o.zone);
-            p->val = object(it->second, o.zone);
+            p->key = msgpack::object(it->first, o.zone);
+            p->val = msgpack::object(it->second, o.zone);
             ++p;
             ++it;
         } while(p < pend);

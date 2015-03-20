@@ -1,7 +1,7 @@
 //
 // MessagePack for C++ static resolution routine
 //
-// Copyright (C) 2008-2009 FURUHASHI Sadayuki
+// Copyright (C) 2008-2015 FURUHASHI Sadayuki
 //
 //    Licensed under the Apache License, Version 2.0 (the "License");
 //    you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@
 
 #include "msgpack/versioning.hpp"
 #include "msgpack/object_fwd.hpp"
+#include "msgpack/adaptor/check_container_size.hpp"
 
 #include <set>
 
@@ -28,11 +29,11 @@ namespace msgpack {
 MSGPACK_API_VERSION_NAMESPACE(v1) {
 
 template <typename T>
-inline object const& operator>> (object const& o, std::set<T>& v)
+inline msgpack::object const& operator>> (msgpack::object const& o, std::set<T>& v)
 {
-    if(o.type != type::ARRAY) { throw type_error(); }
-    object* p = o.via.array.ptr + o.via.array.size;
-    object* const pbegin = o.via.array.ptr;
+    if(o.type != msgpack::type::ARRAY) { throw msgpack::type_error(); }
+    msgpack::object* p = o.via.array.ptr + o.via.array.size;
+    msgpack::object* const pbegin = o.via.array.ptr;
     std::set<T> tmp;
     while(p > pbegin) {
         --p;
@@ -43,31 +44,33 @@ inline object const& operator>> (object const& o, std::set<T>& v)
 }
 
 template <typename Stream, typename T>
-inline packer<Stream>& operator<< (packer<Stream>& o, const std::set<T>& v)
+inline msgpack::packer<Stream>& operator<< (msgpack::packer<Stream>& o, const std::set<T>& v)
 {
-    o.pack_array(v.size());
+    uint32_t size = checked_get_container_size(v.size());
+    o.pack_array(size);
     for(typename std::set<T>::const_iterator it(v.begin()), it_end(v.end());
-            it != it_end; ++it) {
+        it != it_end; ++it) {
         o.pack(*it);
     }
     return o;
 }
 
 template <typename T>
-inline void operator<< (object::with_zone& o, const std::set<T>& v)
+inline void operator<< (msgpack::object::with_zone& o, const std::set<T>& v)
 {
-    o.type = type::ARRAY;
+    o.type = msgpack::type::ARRAY;
     if(v.empty()) {
         o.via.array.ptr = nullptr;
         o.via.array.size = 0;
     } else {
-        object* p = static_cast<object*>(o.zone.allocate_align(sizeof(object)*v.size()));
-        object* const pend = p + v.size();
+        uint32_t size = checked_get_container_size(v.size());
+        msgpack::object* p = static_cast<msgpack::object*>(o.zone.allocate_align(sizeof(msgpack::object)*size));
+        msgpack::object* const pend = p + size;
         o.via.array.ptr = p;
-        o.via.array.size = v.size();
+        o.via.array.size = size;
         typename std::set<T>::const_iterator it(v.begin());
         do {
-            *p = object(*it, o.zone);
+            *p = msgpack::object(*it, o.zone);
             ++p;
             ++it;
         } while(p < pend);
@@ -76,11 +79,11 @@ inline void operator<< (object::with_zone& o, const std::set<T>& v)
 
 
 template <typename T>
-inline object const& operator>> (object const& o, std::multiset<T>& v)
+inline msgpack::object const& operator>> (msgpack::object const& o, std::multiset<T>& v)
 {
-    if(o.type != type::ARRAY) { throw type_error(); }
-    object* p = o.via.array.ptr + o.via.array.size;
-    object* const pbegin = o.via.array.ptr;
+    if(o.type != msgpack::type::ARRAY) { throw msgpack::type_error(); }
+    msgpack::object* p = o.via.array.ptr + o.via.array.size;
+    msgpack::object* const pbegin = o.via.array.ptr;
     std::multiset<T> tmp;
     while(p > pbegin) {
         --p;
@@ -91,31 +94,33 @@ inline object const& operator>> (object const& o, std::multiset<T>& v)
 }
 
 template <typename Stream, typename T>
-inline packer<Stream>& operator<< (packer<Stream>& o, const std::multiset<T>& v)
+inline msgpack::packer<Stream>& operator<< (msgpack::packer<Stream>& o, const std::multiset<T>& v)
 {
-    o.pack_array(v.size());
+    uint32_t size = checked_get_container_size(v.size());
+    o.pack_array(size);
     for(typename std::multiset<T>::const_iterator it(v.begin()), it_end(v.end());
-            it != it_end; ++it) {
+        it != it_end; ++it) {
         o.pack(*it);
     }
     return o;
 }
 
 template <typename T>
-inline void operator<< (object::with_zone& o, const std::multiset<T>& v)
+inline void operator<< (msgpack::object::with_zone& o, const std::multiset<T>& v)
 {
-    o.type = type::ARRAY;
+    o.type = msgpack::type::ARRAY;
     if(v.empty()) {
         o.via.array.ptr = nullptr;
         o.via.array.size = 0;
     } else {
-        object* p = static_cast<object*>(o.zone.allocate_align(sizeof(object)*v.size()));
-        object* const pend = p + v.size();
+        uint32_t size = checked_get_container_size(v.size());
+        msgpack::object* p = static_cast<msgpack::object*>(o.zone.allocate_align(sizeof(msgpack::object)*size));
+        msgpack::object* const pend = p + size;
         o.via.array.ptr = p;
-        o.via.array.size = v.size();
+        o.via.array.size = size;
         typename std::multiset<T>::const_iterator it(v.begin());
         do {
-            *p = object(*it, o.zone);
+            *p = msgpack::object(*it, o.zone);
             ++p;
             ++it;
         } while(p < pend);

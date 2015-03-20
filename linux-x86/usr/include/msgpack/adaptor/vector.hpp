@@ -20,6 +20,8 @@
 
 #include "msgpack/versioning.hpp"
 #include "msgpack/object_fwd.hpp"
+#include "msgpack/adaptor/check_container_size.hpp"
+
 #include <vector>
 
 namespace msgpack {
@@ -27,13 +29,13 @@ namespace msgpack {
 MSGPACK_API_VERSION_NAMESPACE(v1) {
 
 template <typename T>
-inline object const& operator>> (object const& o, std::vector<T>& v)
+inline msgpack::object const& operator>> (msgpack::object const& o, std::vector<T>& v)
 {
-    if(o.type != type::ARRAY) { throw type_error(); }
+    if(o.type != msgpack::type::ARRAY) { throw msgpack::type_error(); }
     v.resize(o.via.array.size);
     if(o.via.array.size > 0) {
-        object* p = o.via.array.ptr;
-        object* const pend = o.via.array.ptr + o.via.array.size;
+        msgpack::object* p = o.via.array.ptr;
+        msgpack::object* const pend = o.via.array.ptr + o.via.array.size;
         T* it = &v[0];
         do {
             p->convert(*it);
@@ -45,9 +47,10 @@ inline object const& operator>> (object const& o, std::vector<T>& v)
 }
 
 template <typename Stream, typename T>
-inline packer<Stream>& operator<< (packer<Stream>& o, const std::vector<T>& v)
+inline msgpack::packer<Stream>& operator<< (msgpack::packer<Stream>& o, const std::vector<T>& v)
 {
-    o.pack_array(v.size());
+    uint32_t size = checked_get_container_size(v.size());
+    o.pack_array(size);
     for(typename std::vector<T>::const_iterator it(v.begin()), it_end(v.end());
             it != it_end; ++it) {
         o.pack(*it);
@@ -56,20 +59,21 @@ inline packer<Stream>& operator<< (packer<Stream>& o, const std::vector<T>& v)
 }
 
 template <typename T>
-inline void operator<< (object::with_zone& o, const std::vector<T>& v)
+inline void operator<< (msgpack::object::with_zone& o, const std::vector<T>& v)
 {
-    o.type = type::ARRAY;
+    o.type = msgpack::type::ARRAY;
     if(v.empty()) {
         o.via.array.ptr = nullptr;
         o.via.array.size = 0;
     } else {
-        object* p = static_cast<object*>(o.zone.allocate_align(sizeof(object)*v.size()));
-        object* const pend = p + v.size();
+        uint32_t size = checked_get_container_size(v.size());
+        msgpack::object* p = static_cast<msgpack::object*>(o.zone.allocate_align(sizeof(msgpack::object)*size));
+        msgpack::object* const pend = p + size;
         o.via.array.ptr = p;
-        o.via.array.size = v.size();
+        o.via.array.size = size;
         typename std::vector<T>::const_iterator it(v.begin());
         do {
-            *p = object(*it, o.zone);
+            *p = msgpack::object(*it, o.zone);
             ++p;
             ++it;
         } while(p < pend);
