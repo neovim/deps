@@ -1,7 +1,7 @@
 //
 // MessagePack for C++ static resolution routine
 //
-// Copyright (C) 2008-2009 FURUHASHI Sadayuki
+// Copyright (C) 2015 KONDO Takatoshi
 //
 //    Licensed under the Apache License, Version 2.0 (the "License");
 //    you may not use this file except in compliance with the License.
@@ -15,8 +15,8 @@
 //    See the License for the specific language governing permissions and
 //    limitations under the License.
 //
-#ifndef MSGPACK_TYPE_BOOL_HPP
-#define MSGPACK_TYPE_BOOL_HPP
+#ifndef MSGPACK_TYPE_VECTOR_BOOL_FWD_HPP
+#define MSGPACK_TYPE_VECTOR_BOOL_FWD_HPP
 
 #include "msgpack/versioning.hpp"
 #include "msgpack/object_fwd.hpp"
@@ -26,33 +26,15 @@ namespace msgpack {
 
 MSGPACK_API_VERSION_NAMESPACE(v1) {
 
-inline msgpack::object const& operator>> (msgpack::object const& o, bool& v)
-{
-    if(o.type != msgpack::type::BOOLEAN) { throw msgpack::type_error(); }
-    v = o.via.boolean;
-    return o;
-}
+object const& operator>> (object const& o, std::vector<bool>& v);
 
 template <typename Stream>
-inline msgpack::packer<Stream>& operator<< (msgpack::packer<Stream>& o, const bool& v)
-{
-    if(v) { o.pack_true(); }
-    else { o.pack_false(); }
-    return o;
-}
+packer<Stream>& operator<< (packer<Stream>& o, const std::vector<bool>& v);
 
-inline void operator<< (msgpack::object& o, bool v)
-{
-    o.type = msgpack::type::BOOLEAN;
-    o.via.boolean = v;
-}
-
-inline void operator<< (msgpack::object::with_zone& o, bool v)
-    { static_cast<msgpack::object&>(o) << v; }
-
+void operator<< (object::with_zone& o, const std::vector<bool>& v);
 
 }  // MSGPACK_API_VERSION_NAMESPACE(v1)
 
 }  // namespace msgpack
 
-#endif // MSGPACK_TYPE_BOOL_HPP
+#endif // MSGPACK_TYPE_VECTOR_BOOL_FWD_HPP
