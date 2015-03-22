@@ -4,7 +4,7 @@ libdir=/opt/neovim-deps/osx-x64/usr/lib
 includedir=${prefix}/include
 
 Name: libuv
-Version: 1.2.0
+Version: 1.4.2
 Description: multi-platform support library with a focus on asynchronous I/O.
 
 Libs: -L${libdir} -luv -lpthread -ldl 
