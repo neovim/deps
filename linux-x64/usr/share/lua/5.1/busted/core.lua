@@ -1,17 +1,18 @@
-local metatype = function(obj)
-  local otype = type(obj)
-  if otype == 'table' then
-    local mt = getmetatable(obj)
-    if mt and mt.__type then
-      return mt.__type
-    end
-  end
-  return otype
-end
+local getfenv = require 'busted.compatibility'.getfenv
+local setfenv = require 'busted.compatibility'.setfenv
+local unpack = require 'busted.compatibility'.unpack
+local path = require 'pl.path'
+local pretty = require 'pl.pretty'
+local throw = error
 
 local failureMt = {
   __index = {},
-  __tostring = function(e) return e.message end,
+  __tostring = function(e) return tostring(e.message) end,
+  __type = 'failure'
+}
+
+local failureMtNoString = {
+  __index = {},
   __type = 'failure'
 }
 
@@ -21,32 +22,44 @@ local pendingMt = {
   __type = 'pending'
 }
 
-local getfenv = require 'busted.compatibility'.getfenv
-local setfenv = require 'busted.compatibility'.setfenv
-local throw = error
+local function metatype(obj)
+  local otype = type(obj)
+  return otype == 'table' and (getmetatable(obj) or {}).__type or otype
+end
+
+local function hasToString(obj)
+  return type(obj) == 'string' or (getmetatable(obj) or {}).__tostring
+end
+
+local function isCallable(obj)
+    return (type(obj) == 'function' or (getmetatable(obj) or {}).__call)
+end
 
 return function()
   local mediator = require 'mediator'()
 
   local busted = {}
-  busted.version = '2.0.rc3-0'
+  busted.version = '2.0.rc6-0'
 
   local root = require 'busted.context'()
   busted.context = root.ref()
 
   local environment = require 'busted.environment'(busted.context)
 
+  busted.modules = {}
   busted.executors = {}
   local executors = {}
+  local eattributes = {}
 
   busted.status = require 'busted.status'
 
-  busted.getTrace = function(element, level, msg)
+  function busted.getTrace(element, level, msg)
     level = level or  3
 
+    local thisdir = path.dirname(debug.getinfo(1, 'Sl').source)
     local info = debug.getinfo(level, 'Sl')
     while info.what == 'C' or info.short_src:match('luassert[/\\].*%.lua$') or
-          info.short_src:match('busted[/\\].*%.lua$') do
+          (info.source:sub(1,1) == '@' and thisdir == path.dirname(info.source)) do
       level = level + 1
       info = debug.getinfo(level, 'Sl')
     end
@@ -58,10 +71,20 @@ return function()
     return file.getTrace(file.name, info)
   end
 
-  busted.rewriteMessage = function(element, message)
+  function busted.rewriteMessage(element, message, trace)
     local file = busted.getFile(element)
+    local msg = hasToString(message) and tostring(message)
+    msg = msg or (message ~= nil and pretty.write(message) or 'Nil error')
+    msg = (file.rewriteMessage and file.rewriteMessage(file.name, msg) or msg)
 
-    return file.rewriteMessage and file.rewriteMessage(file.name, message) or message
+    local hasFileLine = msg:match('^[^\n]-:%d+: .*')
+    if not hasFileLine then
+      local trace = trace or busted.getTrace(element, 3, message)
+      local fileline = trace.short_src .. ':' .. trace.currentline .. ': '
+      msg = fileline .. msg
+    end
+
+    return msg
   end
 
   function busted.publish(...)
@@ -72,8 +95,12 @@ return function()
     return mediator:subscribe(...)
   end
 
+  function busted.unsubscribe(...)
+    return mediator:removeSubscriber(...)
+  end
+
   function busted.getFile(element)
-    local current, parent = element, busted.context.parent(element)
+    local parent = busted.context.parent(element)
 
     while parent do
       if parent.file then
@@ -100,10 +127,12 @@ return function()
   end
 
   function busted.fail(msg, level)
-    local _, emsg = pcall(error, msg, level+2)
+    local rawlevel = (type(level) ~= 'number' or level <= 0) and level
+    local level = level or 1
+    local _, emsg = pcall(throw, msg, rawlevel or level+2)
     local e = { message = emsg }
-    setmetatable(e, failureMt)
-    throw(e, level+1)
+    setmetatable(e, hasToString(msg) and failureMt or failureMtNoString)
+    throw(e, rawlevel or level+1)
   end
 
   function busted.pending(msg)
@@ -114,16 +143,16 @@ return function()
 
   function busted.replaceErrorWithFail(callable)
     local env = {}
-    local f = getmetatable(callable).__call or callable
+    local f = (getmetatable(callable) or {}).__call or callable
     setmetatable(env, { __index = getfenv(f) })
     env.error = busted.fail
     setfenv(f, env)
   end
 
-  function busted.wrapEnv(callable)
-    if (type(callable) == 'function' or getmetatable(callable).__call) then
+  function busted.wrap(callable)
+    if isCallable(callable) then
       -- prioritize __call if it exists, like in files
-      environment.wrap(getmetatable(callable).__call or callable)
+      environment.wrap((getmetatable(callable) or {}).__call or callable)
     end
   end
 
@@ -134,9 +163,9 @@ return function()
 
     local ret = { xpcall(run, function(msg)
       local errType = metatype(msg)
-      status = (errType == 'string' and 'error' or errType)
-      message = busted.rewriteMessage(element, tostring(msg))
+      status = ((errType == 'pending' or errType == 'failure') and errType or 'error')
       trace = busted.getTrace(element, 3, msg)
+      message = busted.rewriteMessage(element, msg, trace)
     end) }
 
     if not ret[1] then
@@ -148,13 +177,37 @@ return function()
     return unpack(ret)
   end
 
-  function busted.register(descriptor, executor)
-    executors[descriptor] = executor
+  function busted.exportApi(key, value)
+    busted.modules[key] = value
+  end
+
+  function busted.export(key, value)
+    busted.exportApi(key, value)
+    environment.set(key, value)
+  end
+
+  function busted.register(descriptor, executor, attributes)
+    local alias = nil
+    if type(executor) == 'string' then
+      alias = descriptor
+      descriptor = executor
+      executor = executors[descriptor]
+      attributes = attributes or eattributes[descriptor]
+      executors[alias] = executor
+      eattributes[alias] = attributes
+    else
+      if executor ~= nil and not isCallable(executor) then
+        attributes = executor
+        executor = nil
+      end
+      executors[descriptor] = executor
+      eattributes[descriptor] = attributes
+    end
 
     local publisher = function(name, fn)
       if not fn and type(name) == 'function' then
         fn = name
-        name = nil
+        name = alias
       end
 
       local trace
@@ -164,18 +217,24 @@ return function()
         trace = busted.getTrace(ctx, 3, name)
       end
 
-      busted.publish({ 'register', descriptor }, name, fn, trace)
+      local publish = function(f)
+        busted.publish({ 'register', descriptor }, name, f, trace, attributes)
+      end
+
+      if fn then publish(fn) else return publish end
     end
 
-    busted.executors[descriptor] = publisher
+    local edescriptor = alias or descriptor
+    busted.executors[edescriptor] = publisher
     if descriptor ~= 'file' then
-      environment.set(descriptor, publisher)
+      busted.export(edescriptor, publisher)
     end
 
-    busted.subscribe({ 'register', descriptor }, function(name, fn, trace)
+    busted.subscribe({ 'register', descriptor }, function(name, fn, trace, attributes)
       local ctx = busted.context.get()
       local plugin = {
         descriptor = descriptor,
+        attributes = attributes or {},
         name = name,
         run = fn,
         trace = trace
@@ -195,8 +254,8 @@ return function()
     if not current then current = busted.context.get() end
     for _, v in pairs(busted.context.children(current)) do
       local executor = executors[v.descriptor]
-      if executor then
-        busted.safe(v.descriptor, function() return executor(v) end, v)
+      if executor and not busted.skipAll then
+        busted.safe(v.descriptor, function() executor(v) end, v)
       end
     end
   end
