@@ -1,0 +1,14 @@
+rock_manifest = {
+   doc = {
+      ['index.html'] = "d6625f3edd01562b6cdef1ea535746fe"
+   },
+   lua = {
+      lub = {
+         ['Autoload.lua'] = "b01e99f6d4af184f039e886989f1f820",
+         ['Dir.lua'] = "ba8a5cac6ffd80de20422e14cba73569",
+         ['Template.lua'] = "5fa000523fb1f6b428ae2e655d988e91",
+         ['init.lua'] = "ba617496262cd024a392f3d7dab111de"
+      }
+   },
+   ['lub-1.0.7-1.rockspec'] = "5126779e5f49392e686a8a39dfe49342"
+}
