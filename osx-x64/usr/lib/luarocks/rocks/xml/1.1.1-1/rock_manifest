@@ -1,0 +1,17 @@
+rock_manifest = {
+   doc = {
+      ['index.html'] = "fc7b06a5764e1ccfef406f3f3d183b26"
+   },
+   lib = {
+      xml = {
+         ['core.so'] = "82ad166cd3339aa56b58fbf2710015c3"
+      }
+   },
+   lua = {
+      xml = {
+         ['Parser.lua'] = "014cb4cf042bf4513207ddfa73ca2182",
+         ['init.lua'] = "cbcb8190e0b2d0db80041da236c0f6c1"
+      }
+   },
+   ['xml-1.1.1-1.rockspec'] = "0208e1c7db9cc079caccccb3b6f50766"
+}

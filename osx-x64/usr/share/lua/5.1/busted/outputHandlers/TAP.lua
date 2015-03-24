@@ -1,10 +1,9 @@
 local pretty = require 'pl.pretty'
-local tablex = require 'pl.tablex'
 
 return function(options, busted)
   local handler = require 'busted.outputHandlers.base'(busted)
 
-  handler.suiteEnd = function(name, parent)
+  handler.suiteEnd = function()
     local total = handler.successesCount + handler.errorsCount + handler.failuresCount
     print('1..' .. total)
 
@@ -14,12 +13,13 @@ return function(options, busted)
 
     for i,t in pairs(handler.successes) do
       counter = counter + 1
-      print( success:format( counter, t.name ))
+      print(success:format(counter, t.name))
     end
 
-    for i,t in pairs(handler.failures) do
+    local showFailure = function(t)
       counter = counter + 1
       local message = t.message
+      local trace = t.trace or {}
 
       if message == nil then
         message = 'Nil error'
@@ -27,9 +27,20 @@ return function(options, busted)
         message = pretty.write(message)
       end
 
-      print( failure:format( counter, t.name ))
+      print(failure:format(counter, t.name))
       print('# ' .. t.element.trace.short_src .. ' @ ' .. t.element.trace.currentline)
-      print('# Failure message: ' .. message:gsub('\n', '\n# ' ))
+      if t.randomseed then print('# Random seed: ' .. t.randomseed) end
+      print('# Failure message: ' .. message:gsub('\n', '\n# '))
+      if options.verbose and trace.traceback then
+        print('# ' .. trace.traceback:gsub('^\n', '', 1):gsub('\n', '\n# '))
+      end
+    end
+
+    for i,t in pairs(handler.errors) do
+      showFailure(t)
+    end
+    for i,t in pairs(handler.failures) do
+      showFailure(t)
     end
 
     return nil, true
