@@ -36,12 +36,12 @@ rock_manifest = {
    },
    lib = {
       mime = {
-         ['core.so'] = "fd3aef8e6ae08a1d287f4f970049fe20"
+         ['core.so'] = "bd93f8db37fff89dc9ecab933c5e5481"
       },
       socket = {
-         ['core.so'] = "78cf163469ac6260e713ca777c792679",
-         ['serial.so'] = "b4b7b9be6b482d5a10bc6e2cc8d753c4",
-         ['unix.so'] = "6745a3dc9650caa7a17dbc72003939e9"
+         ['core.so'] = "3542796404a80ecc66bd55fd2b8b72c7",
+         ['serial.so'] = "f4de2c502fd3626d13cf8231a4516575",
+         ['unix.so'] = "764d42c24dea0b239a12bf399d10854a"
       }
    },
    lua = {
