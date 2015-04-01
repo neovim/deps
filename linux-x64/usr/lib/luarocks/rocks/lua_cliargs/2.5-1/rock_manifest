@@ -5,7 +5,7 @@ rock_manifest = {
       ['lunadoc.css'] = "b467d250ca6283e53420851f3022ef27"
    },
    lua = {
-      ['cliargs.lua'] = "139d42508a6be6bc415359a3ba610355"
+      ['cliargs.lua'] = "dd71a5017aef31b72fce61adec103398"
    },
-   ['lua_cliargs-2.5-0.rockspec'] = "a0620719654d4aada47f151f150d46a9"
+   ['lua_cliargs-2.5-1.rockspec'] = "3bc474fddeee9a8a1d60ff76a2a95d13"
 }
