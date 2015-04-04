@@ -56,7 +56,7 @@ return function(options)
   end
 
   -- If auto-insulate is disabled, re-register file without insulation
-  if cliArgs['no-auto-insulate'] then
+  if not cliArgs['auto-insulate'] then
     busted.register('file', 'file', {})
   end
 
@@ -78,7 +78,7 @@ return function(options)
   -- watch for test errors and failures
   local failures = 0
   local errors = 0
-  local quitOnError = cliArgs['no-keep-going']
+  local quitOnError = not cliArgs['keep-going']
 
   busted.subscribe({ 'error', 'output' }, function(element, parent, message)
     io.stderr:write(appName .. ': error: Cannot load output library: ' .. element.name .. '\n' .. message .. '\n')
@@ -115,16 +115,16 @@ return function(options)
     arguments = cliArgs.Xoutput
   }
 
-  local outputHandler = outputHandlerLoader(cliArgs.output, outputHandlerOptions, busted, options.defaultOutput)
+  local outputHandler = outputHandlerLoader(busted, cliArgs.output, outputHandlerOptions, options.defaultOutput)
   outputHandler:subscribe(outputHandlerOptions)
 
   if cliArgs['enable-sound'] then
-    require 'busted.outputHandlers.sound'(outputHandlerOptions, busted)
+    require 'busted.outputHandlers.sound'(outputHandlerOptions)
   end
 
   -- Set up randomization options
-  busted.sort = cliArgs['sort-tests'] or cliArgs.sort
-  busted.randomize = cliArgs['shuffle-tests'] or cliArgs.shuffle
+  busted.sort = cliArgs['sort-tests']
+  busted.randomize = cliArgs['shuffle-tests']
   busted.randomseed = tonumber(cliArgs.seed) or os.time()
 
   -- Set up tag and test filter options
@@ -134,11 +134,11 @@ return function(options)
     filter = cliArgs.filter,
     filterOut = cliArgs['filter-out'],
     list = cliArgs.list,
-    nokeepgoing = cliArgs['no-keep-going'],
+    nokeepgoing = not cliArgs['keep-going'],
   }
 
   -- Load tag and test filters
-  filterLoader(filterLoaderOptions, busted)
+  filterLoader(busted, filterLoaderOptions)
 
   -- Set up helper script
   if cliArgs.helper and cliArgs.helper ~= '' then
@@ -148,27 +148,29 @@ return function(options)
       arguments = cliArgs.Xhelper
     }
 
-    helperLoader(cliArgs.helper, helperOptions, busted)
+    helperLoader(busted, cliArgs.helper, helperOptions)
   end
 
   -- Set up test loader options
   local testFileLoaderOptions = {
     verbose = cliArgs.verbose,
-    sort = cliArgs['sort-files'] or cliArgs.sort,
-    shuffle = cliArgs['shuffle-files'] or cliArgs.shuffle,
-    recursive = not cliArgs['no-recursive'],
+    sort = cliArgs['sort-files'],
+    shuffle = cliArgs['shuffle-files'],
+    recursive = cliArgs['recursive'],
     seed = busted.randomseed
   }
 
   -- Load test directory
   local rootFiles = cliArgs.ROOT or { fileName }
   local pattern = cliArgs.pattern
-  local testFileLoader = require 'busted.modules.test_file_loader'(busted, cliArgs.loaders, testFileLoaderOptions)
-  local fileList = testFileLoader(rootFiles, pattern)
+  local testFileLoader = require 'busted.modules.test_file_loader'(busted, cliArgs.loaders)
+  testFileLoader(rootFiles, pattern, testFileLoaderOptions)
 
+  -- If running standalone, setup test file to be compatible with live coding
   if not cliArgs.ROOT then
     local ctx = busted.context.get()
-    local file = busted.context.children(ctx)[1]
+    local children = busted.context.children(ctx)
+    local file = children[#children]
     getmetatable(file.run).__call = info.func
   end
 

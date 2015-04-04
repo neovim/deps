@@ -33,8 +33,8 @@ dependencies = {
                {
                   op = ">=",
                   version = {
-                     2, 4, revision = 1,
-                     string = "2.4-1"
+                     2, 5, revision = 0,
+                     string = "2.5-0"
                   }
                }
             },
@@ -479,6 +479,9 @@ modules = {
       "busted/scm-0"
    },
    ['busted.outputHandlers.base'] = {
+      "busted/scm-0"
+   },
+   ['busted.outputHandlers.gtest'] = {
       "busted/scm-0"
    },
    ['busted.outputHandlers.json'] = {
@@ -1009,6 +1012,7 @@ repository = {
                ['busted.modules.test_file_loader'] = "busted/modules/test_file_loader.lua",
                ['busted.outputHandlers.TAP'] = "busted/outputHandlers/TAP.lua",
                ['busted.outputHandlers.base'] = "busted/outputHandlers/base.lua",
+               ['busted.outputHandlers.gtest'] = "busted/outputHandlers/gtest.lua",
                ['busted.outputHandlers.json'] = "busted/outputHandlers/json.lua",
                ['busted.outputHandlers.junit'] = "busted/outputHandlers/junit.lua",
                ['busted.outputHandlers.plainTerminal'] = "busted/outputHandlers/plainTerminal.lua",
