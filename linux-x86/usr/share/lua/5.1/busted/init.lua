@@ -3,9 +3,9 @@ local function init(busted)
 
   local file = function(file)
     busted.wrap(file.run)
-    busted.publish({ 'file', 'start' }, file.name)
+    busted.publish({ 'file', 'start' }, file)
     block.execute('file', file)
-    busted.publish({ 'file', 'end' }, file.name)
+    busted.publish({ 'file', 'end' }, file)
   end
 
   local describe = function(describe)
@@ -91,8 +91,13 @@ local function init(busted)
   busted.exportApi('subscribe', busted.subscribe)
   busted.exportApi('unsubscribe', busted.unsubscribe)
 
-  busted.replaceErrorWithFail(assert)
-  busted.replaceErrorWithFail(assert.is_true)
+  busted.exportApi('bindfenv', busted.bindfenv)
+  busted.exportApi('fail', busted.fail)
+  busted.exportApi('parent', busted.context.parent)
+  busted.exportApi('version', busted.version)
+
+  busted.bindfenv(assert, 'error', busted.fail)
+  busted.bindfenv(assert.is_true, 'error', busted.fail)
 
   return busted
 end
@@ -103,7 +108,7 @@ return setmetatable({}, {
 
     return setmetatable(self, {
       __index = function(self, key)
-        return busted.modules[key]
+        return busted.api[key]
       end,
 
       __newindex = function(self, key, value)

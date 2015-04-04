@@ -13,7 +13,7 @@ return function(busted)
         ctx[k] = v
       end
 
-      for _, child in pairs(children) do
+      for _, child in ipairs(children) do
         for descriptor, _ in pairs(busted.executors) do
           child[descriptor] = nil
         end
@@ -31,7 +31,7 @@ return function(busted)
       end
 
       local root = busted.context.get()
-      busted.publish({ 'suite', 'start' }, i, runs)
+      busted.publish({ 'suite', 'start' }, i, runs, busted.randomize and busted.randomseed or nil)
       if block.setup(root) then
         busted.execute()
       end
