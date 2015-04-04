@@ -19,7 +19,7 @@ description = {
 }
 dependencies = {
   'lua >= 5.1',
-  'lua_cliargs >= 2.4-1',
+  'lua_cliargs >= 2.5-0',
   'luafilesystem >= 1.5.0',
   'dkjson >= 2.1.0',
   'say >= 1.3-0',
@@ -61,6 +61,7 @@ build = {
     ['busted.outputHandlers.TAP']             = 'busted/outputHandlers/TAP.lua',
     ['busted.outputHandlers.json']            = 'busted/outputHandlers/json.lua',
     ['busted.outputHandlers.junit']           = 'busted/outputHandlers/junit.lua',
+    ['busted.outputHandlers.gtest']           = 'busted/outputHandlers/gtest.lua',
     ['busted.outputHandlers.sound']           = 'busted/outputHandlers/sound.lua',
 
     ['busted.languages.en']                   = 'busted/languages/en.lua',
