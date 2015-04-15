@@ -97,8 +97,8 @@ dependencies = {
                {
                   op = ">=",
                   version = {
-                     1, 0, 0, revision = 1,
-                     string = "1.0.0-1"
+                     1, 3, 2, revision = 2,
+                     string = "1.3.2-2"
                   }
                }
             },
@@ -114,6 +114,16 @@ dependencies = {
                }
             },
             name = "mediator_lua"
+         }, {
+            constraints = {
+               {
+                  op = ">=",
+                  version = {
+                     2, 0, 1, string = "2.0.1"
+                  }
+               }
+            },
+            name = "luasocket"
          }
       }
    },
@@ -326,7 +336,7 @@ dependencies = {
       }
    },
    penlight = {
-      ['1.0.0-1'] = {
+      ['1.3.2-2'] = {
          {
             constraints = {},
             name = "luafilesystem"
@@ -800,112 +810,121 @@ modules = {
       "nvim-client/0.0.1-11"
    },
    pl = {
-      "penlight/1.0.0-1"
+      "penlight/1.3.2-2"
    },
    ['pl.Date'] = {
-      "penlight/1.0.0-1"
+      "penlight/1.3.2-2"
    },
    ['pl.List'] = {
-      "penlight/1.0.0-1"
+      "penlight/1.3.2-2"
    },
    ['pl.Map'] = {
-      "penlight/1.0.0-1"
+      "penlight/1.3.2-2"
    },
    ['pl.MultiMap'] = {
-      "penlight/1.0.0-1"
+      "penlight/1.3.2-2"
    },
    ['pl.OrderedMap'] = {
-      "penlight/1.0.0-1"
+      "penlight/1.3.2-2"
    },
    ['pl.Set'] = {
-      "penlight/1.0.0-1"
+      "penlight/1.3.2-2"
    },
    ['pl.app'] = {
-      "penlight/1.0.0-1"
+      "penlight/1.3.2-2"
    },
    ['pl.array2d'] = {
-      "penlight/1.0.0-1"
+      "penlight/1.3.2-2"
    },
    ['pl.class'] = {
-      "penlight/1.0.0-1"
+      "penlight/1.3.2-2"
+   },
+   ['pl.compat'] = {
+      "penlight/1.3.2-2"
    },
    ['pl.comprehension'] = {
-      "penlight/1.0.0-1"
+      "penlight/1.3.2-2"
    },
    ['pl.config'] = {
-      "penlight/1.0.0-1"
+      "penlight/1.3.2-2"
    },
    ['pl.data'] = {
-      "penlight/1.0.0-1"
+      "penlight/1.3.2-2"
    },
    ['pl.dir'] = {
-      "penlight/1.0.0-1"
+      "penlight/1.3.2-2"
    },
    ['pl.file'] = {
-      "penlight/1.0.0-1"
+      "penlight/1.3.2-2"
    },
    ['pl.func'] = {
-      "penlight/1.0.0-1"
+      "penlight/1.3.2-2"
+   },
+   ['pl.import_into'] = {
+      "penlight/1.3.2-2"
    },
    ['pl.input'] = {
-      "penlight/1.0.0-1"
+      "penlight/1.3.2-2"
    },
    ['pl.lapp'] = {
-      "penlight/1.0.0-1"
+      "penlight/1.3.2-2"
    },
    ['pl.lexer'] = {
-      "penlight/1.0.0-1"
+      "penlight/1.3.2-2"
    },
    ['pl.luabalanced'] = {
-      "penlight/1.0.0-1"
+      "penlight/1.3.2-2"
    },
    ['pl.operator'] = {
-      "penlight/1.0.0-1"
+      "penlight/1.3.2-2"
    },
    ['pl.path'] = {
-      "penlight/1.0.0-1"
+      "penlight/1.3.2-2"
    },
    ['pl.permute'] = {
-      "penlight/1.0.0-1"
-   },
-   ['pl.platf.luajava'] = {
-      "penlight/1.0.0-1"
+      "penlight/1.3.2-2"
    },
    ['pl.pretty'] = {
-      "penlight/1.0.0-1"
+      "penlight/1.3.2-2"
    },
    ['pl.seq'] = {
-      "penlight/1.0.0-1"
+      "penlight/1.3.2-2"
    },
    ['pl.sip'] = {
-      "penlight/1.0.0-1"
+      "penlight/1.3.2-2"
    },
    ['pl.strict'] = {
-      "penlight/1.0.0-1"
+      "penlight/1.3.2-2"
    },
    ['pl.stringio'] = {
-      "penlight/1.0.0-1"
+      "penlight/1.3.2-2"
    },
    ['pl.stringx'] = {
-      "penlight/1.0.0-1"
+      "penlight/1.3.2-2"
    },
    ['pl.tablex'] = {
-      "penlight/1.0.0-1"
+      "penlight/1.3.2-2"
    },
    ['pl.template'] = {
-      "penlight/1.0.0-1"
+      "penlight/1.3.2-2"
    },
    ['pl.test'] = {
-      "penlight/1.0.0-1"
+      "penlight/1.3.2-2"
    },
    ['pl.text'] = {
-      "penlight/1.0.0-1"
+      "penlight/1.3.2-2"
+   },
+   ['pl.types'] = {
+      "penlight/1.3.2-2"
+   },
+   ['pl.url'] = {
+      "penlight/1.3.2-2"
    },
    ['pl.utils'] = {
-      "penlight/1.0.0-1"
+      "penlight/1.3.2-2"
    },
    ['pl.xml'] = {
-      "penlight/1.0.0-1"
+      "penlight/1.3.2-2"
    },
    re = {
       "lpeg/0.12.2-1"
@@ -975,9 +994,10 @@ repository = {
                ['lua-term'] = "0.1-1",
                lua_cliargs = "2.5-1",
                luafilesystem = "1.6.3-1",
+               luasocket = "3.0rc1-2",
                luassert = "1.7.4-0",
                mediator_lua = "1.1-3",
-               penlight = "1.0.0-1",
+               penlight = "1.3.2-2",
                say = "1.3-0"
             },
             modules = {
@@ -1293,7 +1313,7 @@ repository = {
       }
    },
    penlight = {
-      ['1.0.0-1'] = {
+      ['1.3.2-2'] = {
          {
             arch = "installed",
             commands = {},
@@ -1311,12 +1331,14 @@ repository = {
                ['pl.app'] = "pl/app.lua",
                ['pl.array2d'] = "pl/array2d.lua",
                ['pl.class'] = "pl/class.lua",
+               ['pl.compat'] = "pl/compat.lua",
                ['pl.comprehension'] = "pl/comprehension.lua",
                ['pl.config'] = "pl/config.lua",
                ['pl.data'] = "pl/data.lua",
                ['pl.dir'] = "pl/dir.lua",
                ['pl.file'] = "pl/file.lua",
                ['pl.func'] = "pl/func.lua",
+               ['pl.import_into'] = "pl/import_into.lua",
                ['pl.input'] = "pl/input.lua",
                ['pl.lapp'] = "pl/lapp.lua",
                ['pl.lexer'] = "pl/lexer.lua",
@@ -1324,7 +1346,6 @@ repository = {
                ['pl.operator'] = "pl/operator.lua",
                ['pl.path'] = "pl/path.lua",
                ['pl.permute'] = "pl/permute.lua",
-               ['pl.platf.luajava'] = "pl/platf/luajava.lua",
                ['pl.pretty'] = "pl/pretty.lua",
                ['pl.seq'] = "pl/seq.lua",
                ['pl.sip'] = "pl/sip.lua",
@@ -1335,6 +1356,8 @@ repository = {
                ['pl.template'] = "pl/template.lua",
                ['pl.test'] = "pl/test.lua",
                ['pl.text'] = "pl/text.lua",
+               ['pl.types'] = "pl/types.lua",
+               ['pl.url'] = "pl/url.lua",
                ['pl.utils'] = "pl/utils.lua",
                ['pl.xml'] = "pl/xml.lua"
             }
