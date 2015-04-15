@@ -9,9 +9,41 @@ local append = table.insert
 local concat = table.concat
 local utils = require 'pl.utils'
 local lexer = require 'pl.lexer'
+local quote_string = require'pl.stringx'.quote_string
 local assert_arg = utils.assert_arg
 
+--AAS
+--Perhaps this could be evolved into part of a "Compat5.3" library some day. 
+--I didn't think that it was time for that, however.
+local tostring = tostring
+if _VERSION == "Lua 5.3" then
+    local _tostring = tostring
+    tostring = function(s)
+        if type(s) == "number" then
+            return ("%.f"):format(s)
+        else
+            return _tostring(s)
+        end
+    end
+
+end
+
 local pretty = {}
+
+local function save_string_index ()
+    local SMT = getmetatable ''
+    if SMT then
+        SMT.old__index = SMT.__index
+        SMT.__index = nil
+    end
+    return SMT
+end
+
+local function restore_string_index (SMT)
+    if SMT then
+        SMT.__index = SMT.old__index
+    end
+end
 
 --- read a string representation of a Lua table.
 -- Uses load(), but tries to be cautious about loading arbitrary code!
@@ -19,40 +51,58 @@ local pretty = {}
 -- before or after the curly braces. A comment may occur beforehand.
 -- An empty environment is used, and
 -- any occurance of the keyword 'function' will be considered a problem.
--- If `plain` is set, then the string is 'free form' Lua statements, evaluated
 -- in the given environment - the return value may be `nil`.
--- @param s {string} string of the form '{...}', with perhaps some whitespace
---		before or after the curly braces.
+-- @string s string of the form '{...}', with perhaps some whitespace
+-- before or after the curly braces.
 -- @return a table
 function pretty.read(s)
     assert_arg(1,s,'string')
     if s:find '^%s*%-%-' then -- may start with a comment..
         s = s:gsub('%-%-.-\n','')
     end
-    if not s:find '^%s*%b{}%s*$' then return nil,"not a Lua table" end
+    if not s:find '^%s*{' then return nil,"not a Lua table" end
     if s:find '[^\'"%w_]function[^\'"%w_]' then
         local tok = lexer.lua(s)
         for t,v in tok do
             if t == 'keyword' then
-                return nil,"cannot have Lua keywords in table definition"
+                return nil,"cannot have functions in table definition"
             end
         end
     end
     s = 'return '..s
-    local chunk,err = utils.load(s,'tbl','t',env or {})
+    local chunk,err = utils.load(s,'tbl','t',{})
     if not chunk then return nil,err end
-    return chunk()
+    local SMT = save_string_index()
+    local ok,ret = pcall(chunk)
+    restore_string_index(SMT)
+    if ok then return ret
+    else
+        return nil,ret
+    end
 end
 
--- read a Lua chunk.
--- @param s Lua code
+--- read a Lua chunk.
+-- @string s Lua code
 -- @param env optional environment
+-- @bool paranoid prevent any looping constructs and disable string methods
 -- @return the environment
-function pretty.load (s, env)
+function pretty.load (s, env, paranoid)
     env = env or {}
+    if paranoid then
+        local tok = lexer.lua(s)
+        for t,v in tok do
+            if t == 'keyword'
+                and (v == 'for' or v == 'repeat' or v == 'function' or v == 'goto')
+            then
+                return nil,"looping not allowed"
+            end
+        end
+    end
     local chunk,err = utils.load(s,'tbl','t',env)
     if not chunk then return nil,err end
+    local SMT = paranoid and save_string_index()
     local ok,err = pcall(chunk)
+    restore_string_index(SMT)
     if not ok then return nil,err end
     return env
 end
@@ -60,12 +110,35 @@ end
 local function quote_if_necessary (v)
     if not v then return ''
     else
-        if v:find ' ' then v = '"'..v..'"' end
+        --AAS
+        if v:find ' ' then v = quote_string(v) end
     end
     return v
 end
 
 local keywords
+
+local function is_identifier (s)
+    return type(s) == 'string' and s:find('^[%a_][%w_]*$') and not keywords[s]
+end
+
+local function quote (s)
+    if type(s) == 'table' then
+        return pretty.write(s,'')
+    else
+        --AAS
+        return quote_string(s)-- ('%q'):format(tostring(s))
+    end
+end
+
+local function index (numkey,key)
+    --AAS
+    if not numkey then 
+        key = quote(key) 
+         key = key:find("^%[") and (" " .. key .. " ") or key
+    end
+    return '['..key..']'
+end
 
 
 ---	Create a string representation of a Lua table.
@@ -73,17 +146,17 @@ local keywords
 --  extra value. Normally puts out one item per line, using
 --  the provided indent; set the second parameter to '' if
 --  you want output on one line.
---	@param tbl {table} Table to serialize to a string.
---	@param space {string} (optional) The indent to use.
---		Defaults to two spaces; make it the empty string for no indentation
---	@param not_clever {bool} (optional) Use for plain output, e.g {['key']=1}.
---		Defaults to false.
+--	@tab tbl Table to serialize to a string.
+--	@string space (optional) The indent to use.
+--	Defaults to two spaces; make it the empty string for no indentation
+--	@bool not_clever (optional) Use for plain output, e.g {['key']=1}.
+--	Defaults to false.
 --  @return a string
 --  @return a possible error message
 function pretty.write (tbl,space,not_clever)
     if type(tbl) ~= 'table' then
         local res = tostring(tbl)
-        if type(tbl) == 'string' then res = '"'..res..'"' end
+        if type(tbl) == 'string' then return quote(tbl) end
         return res, 'not a table'
     end
     if not keywords then
@@ -96,9 +169,6 @@ function pretty.write (tbl,space,not_clever)
     local line = ''
     local tables = {}
 
-    local function is_identifier (s)
-        return (s:find('^[%a_][%w_]*$')) and not keywords[s]
-    end
 
     local function put(s)
         if #s > 0 then
@@ -124,14 +194,6 @@ function pretty.write (tbl,space,not_clever)
         end
     end
 
-    local function quote (s)
-        return ('%q'):format(tostring(s))
-    end
-
-    local function index (numkey,key)
-        if not numkey then key = quote(key) end
-        return '['..key..']'
-    end
 
     local writeit
     writeit = function (t,oldindent,indent)
@@ -139,11 +201,13 @@ function pretty.write (tbl,space,not_clever)
         if tp ~= 'string' and  tp ~= 'table' then
             putln(quote_if_necessary(tostring(t))..',')
         elseif tp == 'string' then
-            if t:find('\n') then
-                putln('[[\n'..t..']],')
-            else
-                putln(quote(t)..',')
-            end
+            -- if t:find('\n') then
+            --     putln('[[\n'..t..']],')
+            -- else
+            --     putln(quote(t)..',')
+            -- end
+            --AAS
+            putln(quote_string(t) ..",")
         elseif tp == 'table' then
             if tables[t] then
                 putln('<cycle>,')
@@ -176,6 +240,7 @@ function pretty.write (tbl,space,not_clever)
                     end
                 end
             end
+            tables[t] = nil
             eat_last_comma()
             putln(oldindent..'},')
         else
@@ -190,7 +255,7 @@ end
 ---	Dump a Lua table out to a file or stdout.
 --	@param t {table} The table to write to a file or stdout.
 --	@param ... {string} (optional) File name to write too. Defaults to writing
---		to stdout.
+--	to stdout.
 function pretty.dump (t,...)
     if select('#',...)==0 then
         print(pretty.write(t))
@@ -205,7 +270,9 @@ local memp,nump = {'B','KiB','MiB','GiB'},{'','K','M','B'}
 local comma
 function comma (val)
     local thou = math.floor(val/1000)
-    if thou > 0 then return comma(thou)..','..(val % 1000)
+    --AAS
+    if thou > 0 then return comma(tostring(thou))..','.. tostring(val % 1000)
+    -- if thou > 0 then return comma(thou)..','..(val % 1000)
     else return tostring(val) end
 end
 
