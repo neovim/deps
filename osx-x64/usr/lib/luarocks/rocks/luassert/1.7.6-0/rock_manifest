@@ -1,0 +1,35 @@
+rock_manifest = {
+   doc = {
+      LICENSE = "005de8f8f73245c988a708cf1cace960",
+      ['README.md'] = "e7d2ff161e4f80f99ac03977df01141b"
+   },
+   lua = {
+      luassert = {
+         ['assert.lua'] = "e6a368c8599dda72b1e2fb8b7f6c4fa5",
+         ['assertions.lua'] = "8e361a247255f87133b1ebc96676eca9",
+         ['compatibility.lua'] = "4a94670cab03edf2a1888c81cc722294",
+         formatters = {
+            ['binarystring.lua'] = "1cf3fba0573869e42fe1374f3919b2db",
+            ['init.lua'] = "913b996f13cd7f7c0bbc2e0bc3d3f954"
+         },
+         ['init.lua'] = "c4a33109af0a0f5d6257873f9ebdd45d",
+         languages = {
+            ['ar.lua'] = "ba9ad0979beab828f8729e6235361860",
+            ['en.lua'] = "cb959b8d11d8383f4da12dac9db6f6e7",
+            ['fr.lua'] = "cba5e983f3497bb5a9a94109344b4c44",
+            ['ja.lua'] = "694d78f0f7c95593334d67f43f38193c",
+            ['nl.lua'] = "e2c3a947c2eb5a8a6472d91da0615f0d",
+            ['ru.lua'] = "93878834ffaeface85c6557bc97e421c",
+            ['ua.lua'] = "84dab88033b2814f5b23c1eb70b9eeee",
+            ['zh.lua'] = "1621445b0bd9628587ebfeeac6fd2711"
+         },
+         ['mock.lua'] = "0cf03425fea556014923e6d7088f99af",
+         ['modifiers.lua'] = "86adced69ccf80b195efa711e45a4d2c",
+         ['spy.lua'] = "880c184d63134722a046393f7b58c8a6",
+         ['state.lua'] = "5dc266843a9a8dc66e12c0a40e2ea494",
+         ['stub.lua'] = "93ff066ea31fde5cd3ee0b6663a7cfa9",
+         ['util.lua'] = "76efe8fc038eb256977ed50746cae5cf"
+      }
+   },
+   ['luassert-1.7.6-0.rockspec'] = "d12bd1d6b6c46bf8bb765da31c4c51d4"
+}
