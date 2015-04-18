@@ -1,9 +1,0 @@
-rock_manifest = {
-   doc = {
-      ['README.md'] = "74b97b8b03bf88eee140600e723e245c"
-   },
-   lua = {
-      ['mediator.lua'] = "008fbc350f4962ba1de486b47df54e28"
-   },
-   ['mediator_lua-1.1-3.rockspec'] = "08a43e296f25c1ada0e20e1c1713d540"
-}

@@ -2,7 +2,7 @@ rock_manifest = {
    bin = {
       busted = "239ad9ed580817e3396db52163a1a924"
    },
-   ['busted-scm-0.rockspec'] = "c779049e150545c64de2ba2e5a59aa05",
+   ['busted-scm-0.rockspec'] = "30e36bc13ab16275115dca24cc3a91f9",
    doc = {
       LICENSE = "cabb1471206ff05b6b3e0e0af73dbd33",
       ['README.md'] = "c2ebfe652deeaf9a5652ee54f094a9d7"
