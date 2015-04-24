@@ -1,6 +1,6 @@
 commands = {
    busted = {
-      "busted/scm-0"
+      "busted/2.0.rc8-0"
    },
    luarocks = {
       "luarocks/2.2.0-1"
@@ -16,8 +16,23 @@ commands = {
    }
 }
 dependencies = {
+   ansicolors = {
+      ['1.0.2-3'] = {
+         {
+            constraints = {
+               {
+                  op = ">=",
+                  version = {
+                     5, 1, string = "5.1"
+                  }
+               }
+            },
+            name = "lua"
+         }
+      }
+   },
    busted = {
-      ['scm-0'] = {
+      ['2.0.rc8-0'] = {
          {
             constraints = {
                {
@@ -81,6 +96,17 @@ dependencies = {
                }
             },
             name = "luassert"
+         }, {
+            constraints = {
+               {
+                  op = ">=",
+                  version = {
+                     1, 0, revision = 1,
+                     string = "1.0-1"
+                  }
+               }
+            },
+            name = "ansicolors"
          }, {
             constraints = {
                {
@@ -398,125 +424,128 @@ modules = {
    MessagePack = {
       "lua-messagepack/0.3.2-1"
    },
+   ansicolors = {
+      "ansicolors/1.0.2-3"
+   },
    busted = {
-      "busted/scm-0"
+      "busted/2.0.rc8-0"
    },
    ['busted.block'] = {
-      "busted/scm-0"
+      "busted/2.0.rc8-0"
    },
    ['busted.compatibility'] = {
-      "busted/scm-0"
+      "busted/2.0.rc8-0"
    },
    ['busted.context'] = {
-      "busted/scm-0"
+      "busted/2.0.rc8-0"
    },
    ['busted.core'] = {
-      "busted/scm-0"
+      "busted/2.0.rc8-0"
    },
    ['busted.done'] = {
-      "busted/scm-0"
+      "busted/2.0.rc8-0"
    },
    ['busted.environment'] = {
-      "busted/scm-0"
+      "busted/2.0.rc8-0"
    },
    ['busted.execute'] = {
-      "busted/scm-0"
+      "busted/2.0.rc8-0"
    },
    ['busted.languages.ar'] = {
-      "busted/scm-0"
+      "busted/2.0.rc8-0"
    },
    ['busted.languages.de'] = {
-      "busted/scm-0"
+      "busted/2.0.rc8-0"
    },
    ['busted.languages.en'] = {
-      "busted/scm-0"
+      "busted/2.0.rc8-0"
    },
    ['busted.languages.es'] = {
-      "busted/scm-0"
+      "busted/2.0.rc8-0"
    },
    ['busted.languages.fr'] = {
-      "busted/scm-0"
+      "busted/2.0.rc8-0"
    },
    ['busted.languages.ja'] = {
-      "busted/scm-0"
+      "busted/2.0.rc8-0"
    },
    ['busted.languages.nl'] = {
-      "busted/scm-0"
+      "busted/2.0.rc8-0"
    },
    ['busted.languages.ru'] = {
-      "busted/scm-0"
+      "busted/2.0.rc8-0"
    },
    ['busted.languages.th'] = {
-      "busted/scm-0"
+      "busted/2.0.rc8-0"
    },
    ['busted.languages.ua'] = {
-      "busted/scm-0"
+      "busted/2.0.rc8-0"
    },
    ['busted.languages.zh'] = {
-      "busted/scm-0"
+      "busted/2.0.rc8-0"
    },
    ['busted.modules.cli'] = {
-      "busted/scm-0"
+      "busted/2.0.rc8-0"
    },
    ['busted.modules.configuration_loader'] = {
-      "busted/scm-0"
+      "busted/2.0.rc8-0"
    },
    ['busted.modules.files.lua'] = {
-      "busted/scm-0"
+      "busted/2.0.rc8-0"
    },
    ['busted.modules.files.moonscript'] = {
-      "busted/scm-0"
+      "busted/2.0.rc8-0"
    },
    ['busted.modules.files.terra'] = {
-      "busted/scm-0"
+      "busted/2.0.rc8-0"
    },
    ['busted.modules.filter_loader'] = {
-      "busted/scm-0"
+      "busted/2.0.rc8-0"
    },
    ['busted.modules.helper_loader'] = {
-      "busted/scm-0"
+      "busted/2.0.rc8-0"
    },
    ['busted.modules.luacov'] = {
-      "busted/scm-0"
+      "busted/2.0.rc8-0"
    },
    ['busted.modules.output_handler_loader'] = {
-      "busted/scm-0"
+      "busted/2.0.rc8-0"
    },
    ['busted.modules.test_file_loader'] = {
-      "busted/scm-0"
+      "busted/2.0.rc8-0"
    },
    ['busted.outputHandlers.TAP'] = {
-      "busted/scm-0"
+      "busted/2.0.rc8-0"
    },
    ['busted.outputHandlers.base'] = {
-      "busted/scm-0"
+      "busted/2.0.rc8-0"
    },
    ['busted.outputHandlers.gtest'] = {
-      "busted/scm-0"
+      "busted/2.0.rc8-0"
    },
    ['busted.outputHandlers.json'] = {
-      "busted/scm-0"
+      "busted/2.0.rc8-0"
    },
    ['busted.outputHandlers.junit'] = {
-      "busted/scm-0"
+      "busted/2.0.rc8-0"
    },
    ['busted.outputHandlers.plainTerminal'] = {
-      "busted/scm-0"
+      "busted/2.0.rc8-0"
    },
    ['busted.outputHandlers.sound'] = {
-      "busted/scm-0"
+      "busted/2.0.rc8-0"
    },
    ['busted.outputHandlers.utfTerminal'] = {
-      "busted/scm-0"
+      "busted/2.0.rc8-0"
    },
    ['busted.runner'] = {
-      "busted/scm-0"
+      "busted/2.0.rc8-0"
    },
    ['busted.status'] = {
-      "busted/scm-0"
+      "busted/2.0.rc8-0"
    },
    ['busted.utils'] = {
-      "busted/scm-0"
+      "busted/2.0.rc8-0"
    },
    cliargs = {
       "lua_cliargs/2.5-1"
@@ -985,14 +1014,27 @@ modules = {
    }
 }
 repository = {
+   ansicolors = {
+      ['1.0.2-3'] = {
+         {
+            arch = "installed",
+            commands = {},
+            dependencies = {},
+            modules = {
+               ansicolors = "ansicolors.lua"
+            }
+         }
+      }
+   },
    busted = {
-      ['scm-0'] = {
+      ['2.0.rc8-0'] = {
          {
             arch = "installed",
             commands = {
                busted = "busted"
             },
             dependencies = {
+               ansicolors = "1.0.2-3",
                dkjson = "2.5-1",
                ['lua-term'] = "0.1-1",
                lua_cliargs = "2.5-1",

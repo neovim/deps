@@ -1,0 +1,10 @@
+rock_manifest = {
+   ['ansicolors-1.0.2-3.rockspec'] = "cf624a9707bf45657d08b36d7b3f95dc",
+   doc = {
+      COPYING = "0991c334c3189b30297768b083ba03fa",
+      ['README.textile'] = "c7986d9ce61bdc8890fe7fcbcb44cff0"
+   },
+   lua = {
+      ['ansicolors.lua'] = "2014719a5e29d83ea3b7776eb5075b56"
+   }
+}
