@@ -10,8 +10,8 @@ rock_manifest = {
    lua = {
       xml = {
          ['Parser.lua'] = "014cb4cf042bf4513207ddfa73ca2182",
-         ['init.lua'] = "cbcb8190e0b2d0db80041da236c0f6c1"
+         ['init.lua'] = "cb9eac11c39becef594d268c887209ac"
       }
    },
-   ['xml-1.1.1-1.rockspec'] = "0208e1c7db9cc079caccccb3b6f50766"
+   ['xml-1.1.2-1.rockspec'] = "a0db2a32b6e7bedda3e8cfafe22c6ef9"
 }

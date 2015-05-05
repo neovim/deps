@@ -341,7 +341,7 @@ dependencies = {
       }
    },
    ['nvim-client'] = {
-      ['0.0.1-11'] = {
+      ['0.0.1-12'] = {
          {
             constraints = {
                {
@@ -385,7 +385,7 @@ dependencies = {
       }
    },
    xml = {
-      ['1.1.1-1'] = {
+      ['1.1.2-1'] = {
          {
             constraints = {
                {
@@ -830,16 +830,16 @@ modules = {
       "luasocket/3.0rc1-2"
    },
    ['nvim.async_session'] = {
-      "nvim-client/0.0.1-11"
+      "nvim-client/0.0.1-12"
    },
    ['nvim.loop'] = {
-      "nvim-client/0.0.1-11"
+      "nvim-client/0.0.1-12"
    },
    ['nvim.msgpack_stream'] = {
-      "nvim-client/0.0.1-11"
+      "nvim-client/0.0.1-12"
    },
    ['nvim.session'] = {
-      "nvim-client/0.0.1-11"
+      "nvim-client/0.0.1-12"
    },
    pl = {
       "penlight/1.3.2-2"
@@ -1004,13 +1004,13 @@ modules = {
       "lua-term/0.1-1"
    },
    xml = {
-      "xml/1.1.1-1"
+      "xml/1.1.2-1"
    },
    ['xml.Parser'] = {
-      "xml/1.1.1-1"
+      "xml/1.1.2-1"
    },
    ['xml.core'] = {
-      "xml/1.1.1-1"
+      "xml/1.1.2-1"
    }
 }
 repository = {
@@ -1341,7 +1341,7 @@ repository = {
       }
    },
    ['nvim-client'] = {
-      ['0.0.1-11'] = {
+      ['0.0.1-12'] = {
          {
             arch = "installed",
             commands = {},
@@ -1423,7 +1423,7 @@ repository = {
       }
    },
    xml = {
-      ['1.1.1-1'] = {
+      ['1.1.2-1'] = {
          {
             arch = "installed",
             commands = {},
