@@ -1,0 +1,41 @@
+=pod
+
+=head1 NAME
+
+unibi_name_bool, unibi_name_num, unibi_name_str, unibi_short_name_bool, unibit_short_name_num, unibi_short_name_str - translate capability enums to names
+
+=head1 SYNOPSIS
+
+ #include <unibilium.h>
+ 
+ const char *unibi_name_bool(enum unibi_boolean b);
+ const char *unibi_name_num(enum unibi_numeric n);
+ const char *unibi_name_str(enum unibi_string s);
+ 
+ const char *unibi_short_name_bool(enum unibi_boolean b);
+ const char *unibi_short_name_num(enum unibi_numeric n);
+ const char *unibi_short_name_str(enum unibi_string s);
+
+=head1 DESCRIPTION
+
+These functions return the names of capabilities as strings. By default long
+names ("variable names") are returned; the C<unibi_short_name_*> variants use
+the shorter "capnames".
+
+=head1 EXAMPLE
+
+ #include <stdio.h>
+ #include <unibilium.h>
+ 
+ int main(void) {
+   printf("%s - %s\n", unibi_name_bool(unibi_has_status_line), unibi_short_name_bool(unibi_has_status_line));
+   /* Output:
+      has_status_line - hs
+   */
+ }
+
+=head1 SEE ALSO
+
+L<unibilium.h(3)>
+
+=cut
