@@ -1,6 +1,6 @@
 /*
 
-Copyright 2008, 2010, 2012, 2013 Lukas Mai.
+Copyright 2008, 2010, 2012, 2013, 2015 Lukas Mai.
 
 This file is part of unibilium.
 
@@ -924,6 +924,27 @@ void unibi_del_ext_str(unibi_term *t, size_t i) {
 }
 
 
+unibi_var_t unibi_var_from_num(int i) {
+    unibi_var_t v;
+    v.i = i;
+    return v;
+}
+
+unibi_var_t unibi_var_from_str(char *p) {
+    unibi_var_t v;
+    assert(p != NULL);
+    v.p = p;
+    return v;
+}
+
+int unibi_num_from_var(unibi_var_t v) {
+    return v.i;
+}
+
+const char *unibi_str_from_var(unibi_var_t v) {
+    return v.p;
+}
+
 static void dput(
     char t,
     const char *fmt,
@@ -939,14 +960,14 @@ static void dput(
 #define BITTY(A, B, C) (!!(A) << 0 | !!(B) << 1 | !!(C) << 2)
 
     switch (BITTY(t == 's', w != -1, p != -1)) {
-        case BITTY(0, 0, 0): snprintf(buf, sizeof buf, fmt, x.i); break;
-        case BITTY(0, 0, 1): snprintf(buf, sizeof buf, fmt, p, x.i); break;
-        case BITTY(0, 1, 0): snprintf(buf, sizeof buf, fmt, w, x.i); break;
-        case BITTY(0, 1, 1): snprintf(buf, sizeof buf, fmt, w, p, x.i); break;
-        case BITTY(1, 0, 0): snprintf(buf, sizeof buf, fmt, x.p); break;
-        case BITTY(1, 0, 1): snprintf(buf, sizeof buf, fmt, p, x.p); break;
-        case BITTY(1, 1, 0): snprintf(buf, sizeof buf, fmt, w, x.p); break;
-        case BITTY(1, 1, 1): snprintf(buf, sizeof buf, fmt, w, p, x.p); break;
+        case BITTY(0, 0, 0): snprintf(buf, sizeof buf, fmt,       unibi_num_from_var(x)); break;
+        case BITTY(0, 0, 1): snprintf(buf, sizeof buf, fmt,    p, unibi_num_from_var(x)); break;
+        case BITTY(0, 1, 0): snprintf(buf, sizeof buf, fmt, w,    unibi_num_from_var(x)); break;
+        case BITTY(0, 1, 1): snprintf(buf, sizeof buf, fmt, w, p, unibi_num_from_var(x)); break;
+        case BITTY(1, 0, 0): snprintf(buf, sizeof buf, fmt,       unibi_str_from_var(x)); break;
+        case BITTY(1, 0, 1): snprintf(buf, sizeof buf, fmt,    p, unibi_str_from_var(x)); break;
+        case BITTY(1, 1, 0): snprintf(buf, sizeof buf, fmt, w,    unibi_str_from_var(x)); break;
+        case BITTY(1, 1, 1): snprintf(buf, sizeof buf, fmt, w, p, unibi_str_from_var(x)); break;
     }
 
 #undef BITTY
@@ -980,7 +1001,7 @@ void unibi_format(
 
 #define POP() (sp ? stack[--sp] : zero)
 #define PUSH(X) do { if (sp < COUNTOF(stack)) { stack[sp++] = (X); } } while (0)
-#define PUSHi(N) do { unibi_var_t tmp_; tmp_.i = (N); PUSH(tmp_); } while (0)
+#define PUSHi(N) do { unibi_var_t tmp_ = unibi_var_from_num(N); PUSH(tmp_); } while (0)
 
     while (*fmt) {
         {
@@ -1079,7 +1100,7 @@ void unibi_format(
                 if (flags & FlagLft) { *g++ = '-'; }
                 if (flags & FlagZro) { *g++ = '0'; }
                 if (width != -1) { *g++ = '*'; }
-                if (prec != -1) { *g++ = '.'; *g++ = '*'; }
+                if (prec  != -1) { *g++ = '.'; *g++ = '*'; }
                 *g++ = *v;
                 *g = '\0';
                 dput(*v, gen, width, prec, POP(), out, ctx1);
@@ -1107,14 +1128,14 @@ void unibi_format(
 
             case 'c': {
                 unsigned char c;
-                c = POP().i;
-                out(ctx1, (char *)&c, 1);
+                c = unibi_num_from_var(POP());
+                out(ctx1, (const char *)&c, 1);
                 break;
             }
 
             case 's': {
-                char *s;
-                s = POP().p;
+                const char *s;
+                s = unibi_str_from_var(POP());
                 out(ctx1, s, strlen(s));
                 break;
             }
@@ -1130,11 +1151,11 @@ void unibi_format(
 
             case 'P':
                 if (*fmt >= 'a' && *fmt <= 'z') {
-                    ++fmt;
                     var_dyn[*fmt - 'a'] = POP();
+                    fmt++;
                 } else if (*fmt >= 'A' && *fmt <= 'Z') {
-                    ++fmt;
                     var_static[*fmt - 'A'] = POP();
+                    fmt++;
                 } else {
                     out(ctx1, fmt - 2, 2);
                 }
@@ -1142,11 +1163,11 @@ void unibi_format(
 
             case 'g':
                 if (*fmt >= 'a' && *fmt <= 'z') {
-                    ++fmt;
                     PUSH(var_dyn[*fmt - 'a']);
+                    fmt++;
                 } else if (*fmt >= 'A' && *fmt <= 'Z') {
-                    ++fmt;
                     PUSH(var_static[*fmt - 'A']);
+                    fmt++;
                 } else {
                     out(ctx1, fmt - 2, 2);
                 }
@@ -1173,19 +1194,19 @@ void unibi_format(
             }
 
             case 'l':
-                PUSHi(strlen(POP().p));
+                PUSHi(strlen(unibi_str_from_var(POP())));
                 break;
 
             case 'i':
-                ++param[0].i;
-                ++param[1].i;
+                param[0] = unibi_var_from_num(unibi_num_from_var(param[0]) + 1);
+                param[1] = unibi_var_from_num(unibi_num_from_var(param[1]) + 1);
                 break;
 
             case '?':
                 break;
 
             case 't': {
-                int c = POP().i;
+                int c = unibi_num_from_var(POP());
                 if (!c) {
                     size_t nesting = 0;
                     for (; *fmt; ++fmt) {
@@ -1193,12 +1214,15 @@ void unibi_format(
                             ++fmt;
                             if (*fmt == '?') {
                                 ++nesting;
-                            } else if (*fmt == ';' || *fmt == 'e') {
+                            } else if (*fmt == ';') {
                                 if (!nesting) {
                                     ++fmt;
                                     break;
                                 }
                                 --nesting;
+                            } else if (*fmt == 'e' && !nesting) {
+                                ++fmt;
+                                break;
                             } else if (!*fmt) {
                                 break;
                             }
@@ -1237,7 +1261,7 @@ void unibi_format(
         unibi_var_t x, y; \
         y = POP(); \
         x = POP(); \
-        PUSHi(x.i O y.i); \
+        PUSHi(unibi_num_from_var(x) O unibi_num_from_var(y)); \
     } break
 
             ARITH2('+', +);
@@ -1258,7 +1282,7 @@ void unibi_format(
 
 #define ARITH1(C, O) \
     case (C): \
-        PUSHi(O POP().i); \
+        PUSHi(O unibi_num_from_var(POP())); \
         break
 
             ARITH1('!', !);

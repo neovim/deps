@@ -2,7 +2,7 @@
 
 This file (it has no associated documentation) is under the MIT license:
 
-Copyright (c) 2012 Lukas Mai
+Copyright (c) 2012, 2015 Lukas Mai
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -64,29 +64,9 @@ int main(void) {
     unsigned test_counter = 0;
 
     say("#include <unibilium.h>");
-    say("#include <stdio.h>");
     say("#include <errno.h>");
     say("#include <string.h>");
-    say("#include <stdlib.h>");
-    say("");
-    say("static unsigned test_counter;");
-    say("");
-    say("static void plan(unsigned n) {");
-    say("    printf(\"1..%u\\n\", n);");
-    say("}");
-    say("");
-    say("static void ok(int b, const char *s) {");
-    say("    printf(\"%sok %u - %s\\n\", b ? \"\" : \"not \", test_counter++, s);");
-    say("}");
-    say("");
-    say("static void bail_out(const char *s) {");
-    say("    printf(\"Bail out! %s\\n\", s);");
-    say("    exit(EXIT_FAILURE);");
-    say("}");
-    say("");
-    say("static void diag(const char *s) {");
-    say("    printf(\"# %s\\n\", s);");
-    say("}");
+    say("#include \"test-simple.c.inc\"");
     say("");
     say_("const char terminfo[] = {");
     for (size_t i = 0; i < r; i++) {
@@ -101,10 +81,12 @@ int main(void) {
     say("static void setup(void);");
     say("");
     say("int main(void) {");
+    say("    int e;");
+    say("    unibi_term *dt;");
+    say("");
     say("    setup();");
     say("");
-    say("    int e;");
-    say("    unibi_term *dt = unibi_dummy();");
+    say("    dt = unibi_dummy();");
     say("    e = errno;");
     say("    ok(dt != NULL, \"dummy constructed\");");
     test_counter++;
@@ -119,14 +101,14 @@ int main(void) {
     say("        bail_out(strerror(e));");
     say("    }");
     say("");
-    say("    diag(\"terminal name\");");
+    say("    note(\"terminal name\");");
     {
         const char *name = unibi_get_name(ut);
         printf("    ok(strcmp(unibi_get_name(ut), \"");
         print_str_esc(name, 0);
-        printf("\") == 0, \"terminal name = \\\"");
+        printf("\") == 0, \"terminal name = \\\"%%s\\\"\", \"");
         print_str_esc(name, 1);
-        printf("\\\"\");\n");
+        printf("\");\n");
         test_counter++;
         printf("    unibi_set_name(dt, \"");
         print_str_esc(name, 0);
@@ -151,9 +133,9 @@ int main(void) {
         say("NULL};");
         say("        const char **aliases = unibi_get_aliases(ut);");
         for (i = 0; aliases[i]; i++) {
-            printf("        ok(strcmp(aliases[%zu], def_aliases[%zu]) == 0, \"terminal alias #%zu = \\\"", i, i, i);
+            printf("        ok(strcmp(aliases[%zu], def_aliases[%zu]) == 0, \"terminal alias #%zu = \\\"%%s\\\"\", \"", i, i, i);
             print_str_esc(aliases[i], 0);
-            printf("\\\"\");\n");
+            printf("\");\n");
             test_counter++;
         }
         printf("        ok(aliases[%zu] == NULL, \"terminal alias #%zu = null\");\n", i, i);
@@ -162,7 +144,7 @@ int main(void) {
         say("    }");
     }
     say("");
-    say("    diag(\"boolean capabilities\");");
+    say("    note(\"boolean capabilities\");");
     for (enum unibi_boolean i = unibi_boolean_begin_ + 1; i < unibi_boolean_end_; i++) {
         int b = unibi_get_bool(ut, i);
         const char *c = unibi_name_bool(i);
@@ -173,7 +155,7 @@ int main(void) {
         }
     }
     say("");
-    say("    diag(\"numeric capabilities\");");
+    say("    note(\"numeric capabilities\");");
     for (enum unibi_numeric i = unibi_numeric_begin_ + 1; i < unibi_numeric_end_; i++) {
         short v = unibi_get_num(ut, i);
         const char *c = unibi_name_num(i);
@@ -184,16 +166,16 @@ int main(void) {
         }
     }
     say("");
-    say("    diag(\"string capabilities\");");
+    say("    note(\"string capabilities\");");
     for (enum unibi_string i = unibi_string_begin_ + 1; i < unibi_string_end_; i++) {
         const char *s = unibi_get_str(ut, i);
         const char *c = unibi_name_str(i);
         if (s) {
             printf("    ok(strcmp(unibi_get_str(ut, unibi_%s), \"", c);
             print_str_esc(s, 0);
-            printf("\") == 0, \"%s = \\\"", c);
+            printf("\") == 0, \"%s = \\\"%%s\\\"\", \"", c);
             print_str_esc(s, 1);
-            printf("\\\"\");\n");
+            printf("\");\n");
             printf("    unibi_set_str(dt, unibi_%s, \"", c);
             print_str_esc(s, 0);
             printf("\");\n");
@@ -203,7 +185,7 @@ int main(void) {
         test_counter++;
     }
     say("");
-    say("    diag(\"extended boolean capabilities\");");
+    say("    note(\"extended boolean capabilities\");");
     {
         const size_t n_ext = unibi_count_ext_bool(ut);
 
@@ -220,9 +202,9 @@ int main(void) {
             printf("        ok(%zu < n_ext && strcmp(unibi_get_ext_bool_name(ut, %zu), \"", i, i);
             test_counter++;
             print_str_esc(c, 0);
-            printf("\") == 0, \"ext_bool[%zu].name = \\\"", i);
+            printf("\") == 0, \"ext_bool[%zu].name = \\\"%%s\\\"\", \"", i);
             print_str_esc(c, 1);
-            printf("\\\"\");\n");
+            printf("\");\n");
             printf("        unibi_add_ext_bool(dt, \"");
             print_str_esc(c, 0);
             printf("\", %d);\n", b);
@@ -230,7 +212,7 @@ int main(void) {
         say("    }");
     }
     say("");
-    say("    diag(\"extended numeric capabilities\");");
+    say("    note(\"extended numeric capabilities\");");
     {
         const size_t n_ext = unibi_count_ext_num(ut);
 
@@ -247,9 +229,9 @@ int main(void) {
             printf("        ok(%zu < n_ext && strcmp(unibi_get_ext_num_name(ut, %zu), \"", i, i);
             test_counter++;
             print_str_esc(c, 0);
-            printf("\") == 0, \"ext_num[%zu].name = \\\"", i);
+            printf("\") == 0, \"ext_num[%zu].name = \\\"%%s\\\"\", \"", i);
             print_str_esc(c, 1);
-            printf("\\\"\");\n");
+            printf("\");\n");
             printf("        unibi_add_ext_num(dt, \"");
             print_str_esc(c, 0);
             printf("\", %hd);\n", v);
@@ -257,7 +239,7 @@ int main(void) {
         say("    }");
     }
     say("");
-    say("    diag(\"extended string capabilities\");");
+    say("    note(\"extended string capabilities\");");
     {
         const size_t n_ext = unibi_count_ext_str(ut);
 
@@ -273,9 +255,9 @@ int main(void) {
             if (s) {
                 printf("strcmp(unibi_get_ext_str(ut, %zu), \"", i);
                 print_str_esc(s, 0);
-                printf("\") == 0, \"ext_str[%zu].value = \\\"", i);
+                printf("\") == 0, \"ext_str[%zu].value = \\\"%%s\\\"\", \"", i);
                 print_str_esc(s, 1);
-                printf("\\\"\");\n");
+                printf("\");\n");
                 printf("        unibi_add_ext_str(dt, \"");
                 print_str_esc(c, 0);
                 printf("\", \"");
@@ -291,9 +273,9 @@ int main(void) {
             printf("        ok(%zu < n_ext && strcmp(unibi_get_ext_str_name(ut, %zu), \"", i, i);
             test_counter++;
             print_str_esc(c, 0);
-            printf("\") == 0, \"ext_str[%zu].name = \\\"", i);
+            printf("\") == 0, \"ext_str[%zu].name = \\\"%%s\\\"\", \"", i);
             print_str_esc(c, 1);
-            printf("\\\"\");\n");
+            printf("\");\n");
         }
         say("    }");
     }
@@ -331,10 +313,7 @@ int main(void) {
 
     say("");
     say("static void setup(void) {");
-    say("    setvbuf(stdout, NULL, _IOLBF, 0);");
-    say("");
     printf("    plan(%u);\n", test_counter);
-    say("    test_counter = 1;");
     say("}");
 
     return 0;
