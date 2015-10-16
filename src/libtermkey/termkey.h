@@ -8,8 +8,8 @@ extern "C" {
 #include <stdint.h>
 #include <stdlib.h>
 
-#define TERMKEY_VERSION_MAJOR @@VERSION_MAJOR@@
-#define TERMKEY_VERSION_MINOR @@VERSION_MINOR@@
+#define TERMKEY_VERSION_MAJOR 0
+#define TERMKEY_VERSION_MINOR 18
 
 #define TERMKEY_CHECK_VERSION \
         termkey_check_version(TERMKEY_VERSION_MAJOR, TERMKEY_VERSION_MINOR)
