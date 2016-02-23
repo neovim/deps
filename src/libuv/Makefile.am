@@ -200,6 +200,7 @@ test_run_tests_SOURCES = test/blackhole-server.c \
                          test/test-poll-closesocket.c \
                          test/test-poll.c \
                          test/test-process-title.c \
+                         test/test-queue-foreach-delete.c \
                          test/test-ref.c \
                          test/test-run-nowait.c \
                          test/test-run-once.c \
@@ -280,6 +281,7 @@ endif
 
 if AIX
 libuv_la_CFLAGS += -D_ALL_SOURCE -D_XOPEN_SOURCE=500 -D_LINUX_SOURCE_COMPAT
+include_HEADERS += include/uv-aix.h
 libuv_la_SOURCES += src/unix/aix.c
 endif
 
