@@ -128,7 +128,7 @@ static void dump_cell(const VTermScreenCell *cell, const VTermScreenCell *prevce
       break;
   }
 
-  for(int i = 0; cell->chars[i]; i++) {
+  for(int i = 0; i < VTERM_MAX_CHARS_PER_CELL && cell->chars[i]; i++) {
     char bytes[6];
     bytes[fill_utf8(cell->chars[i], bytes)] = 0;
     printf("%s", bytes);
@@ -199,8 +199,11 @@ static VTermScreenCallbacks cb_screen = {
 
 int main(int argc, char *argv[])
 {
+  rows = 25;
+  cols = 80;
+
   int opt;
-  while((opt = getopt(argc, argv, "f:")) != -1) {
+  while((opt = getopt(argc, argv, "f:l:c:")) != -1) {
     switch(opt) {
       case 'f':
         if(streq(optarg, "plain"))
@@ -212,6 +215,18 @@ int main(int argc, char *argv[])
           exit(1);
         }
         break;
+
+      case 'l':
+        rows = atoi(optarg);
+        if(!rows)
+          rows = 25;
+        break;
+
+      case 'c':
+        cols = atoi(optarg);
+        if(!cols)
+          cols = 80;
+        break;
     }
   }
 
@@ -222,10 +237,9 @@ int main(int argc, char *argv[])
     exit(1);
   }
 
-  rows = 25;
-  cols = 80;
-
   vt = vterm_new(rows, cols);
+  vterm_set_utf8(vt, true);
+
   vts = vterm_obtain_screen(vt);
   vterm_screen_set_callbacks(vts, &cb_screen, NULL);
 

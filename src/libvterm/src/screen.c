@@ -304,10 +304,10 @@ static int scrollrect(VTermRect rect, int downward, int rightward, void *user)
 {
   VTermScreen *screen = user;
 
-  vterm_scroll_rect(rect, downward, rightward,
-      moverect_internal, erase_internal, screen);
-
   if(screen->damage_merge != VTERM_DAMAGE_SCROLL) {
+    vterm_scroll_rect(rect, downward, rightward,
+        moverect_internal, erase_internal, screen);
+
     vterm_screen_flush_damage(screen);
 
     vterm_scroll_rect(rect, downward, rightward,
@@ -340,10 +340,14 @@ static int scrollrect(VTermRect rect, int downward, int rightward, void *user)
     screen->pending_scroll_rightward = rightward;
   }
 
+  vterm_scroll_rect(rect, downward, rightward,
+      moverect_internal, erase_internal, screen);
+
   if(screen->damaged.start_row == -1)
     return 1;
 
   if(rect_contains(&rect, &screen->damaged)) {
+    /* Scroll region entirely contains the damage; just move it */
     vterm_rect_move(&screen->damaged, -downward, -rightward);
     rect_clip(&screen->damaged, &rect);
   }
@@ -836,6 +840,16 @@ void vterm_screen_set_callbacks(VTermScreen *screen, const VTermScreenCallbacks 
 void *vterm_screen_get_cbdata(VTermScreen *screen)
 {
   return screen->cbdata;
+}
+
+void vterm_screen_set_unrecognised_fallbacks(VTermScreen *screen, const VTermParserCallbacks *fallbacks, void *user)
+{
+  vterm_state_set_unrecognised_fallbacks(screen->state, fallbacks, user);
+}
+
+void *vterm_screen_get_unrecognised_fbdata(VTermScreen *screen)
+{
+  return vterm_state_get_unrecognised_fbdata(screen->state);
 }
 
 void vterm_screen_flush_damage(VTermScreen *screen)

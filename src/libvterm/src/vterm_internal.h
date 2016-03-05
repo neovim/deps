@@ -11,9 +11,10 @@
 # define INTERNAL
 #endif
 
-#define DEBUG_LOG(...)
 #ifdef DEBUG
 # define DEBUG_LOG(...) fprintf(stderr, __VA_ARGS__)
+#else
+# define DEBUG_LOG(...)
 #endif
 
 typedef struct VTermEncoding VTermEncoding;
@@ -49,6 +50,9 @@ struct VTermState
 
   const VTermStateCallbacks *callbacks;
   void *cbdata;
+
+  const VTermParserCallbacks *fallbacks;
+  void *fbdata;
 
   int rows;
   int cols;
@@ -102,6 +106,7 @@ struct VTermState
     int origin:1;
     int screen:1;
     int leftrightmargin:1;
+    int bracketpaste:1;
   } mode;
 
   VTermEncodingInstance encoding[4], encoding_utf8;

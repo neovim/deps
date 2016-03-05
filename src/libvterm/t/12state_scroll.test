@@ -33,7 +33,14 @@ PUSH "\n"
   scrollrect 0..10,0..80 => +1,+0
   ?cursor = 9,0
 
+!Linefeed outside DECSTBM
+PUSH "\e[20H"
+  ?cursor = 19,0
+PUSH "\n"
+  ?cursor = 20,0
+
 !Index in DECSTBM
+PUSH "\e[10H"
 PUSH "\e[9;10r"
 PUSH "\eM"
   ?cursor = 8,0
@@ -67,6 +74,9 @@ PUSH "\eP\$qr\e\\"
 PUSH "\eP\$qs\e\\"
   output "\eP1\$r10;40s\e\\"
 
+!Setting invalid DECSLRM with !DECVSSM is still rejected
+PUSH "\e[?69l\e[;0s\e[?69h"
+
 RESET
 
 !Scroll Down
@@ -76,6 +86,8 @@ PUSH "\e[S"
 PUSH "\e[2S"
   scrollrect 0..25,0..80 => +2,+0
   ?cursor = 0,0
+PUSH "\e[100S"
+  scrollrect 0..25,0..80 => +25,+0
 
 !Scroll Up
 PUSH "\e[T"
@@ -84,6 +96,8 @@ PUSH "\e[T"
 PUSH "\e[2T"
   scrollrect 0..25,0..80 => -2,+0
   ?cursor = 0,0
+PUSH "\e[100T"
+  scrollrect 0..25,0..80 => -25,+0
 
 !SD/SU in DECSTBM
 PUSH "\e[5;20r"
@@ -105,6 +119,12 @@ PUSH "\e[S"
 PUSH "\e[?69l"
 PUSH "\e[S"
   scrollrect 2..10,0..80 => +1,+0
+
+!Invalid boundaries
+RESET
+
+PUSH "\e[100;105r\eD"
+PUSH "\e[5;2r\eD"
 
 RESET
 WANTSTATE -s+me

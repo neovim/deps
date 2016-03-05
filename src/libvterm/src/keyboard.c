@@ -30,6 +30,10 @@ void vterm_keyboard_unichar(VTerm *vt, uint32_t c, VTermModifier mod)
     case '\\': case ']': case '^': case '_':
       needs_CSIu = 0;
       break;
+    /* Shift-space needs CSIu */
+    case ' ':
+      needs_CSIu = !!(mod & VTERM_MOD_SHIFT);
+      break;
     /* All other characters needs CSIu except for letters a-z */
     default:
       needs_CSIu = (c < 'a' || c > 'z');
@@ -207,4 +211,16 @@ void vterm_keyboard_key(VTerm *vt, VTermKey key, VTermModifier mod)
     else
       goto case_LITERAL;
   }
+}
+
+void vterm_keyboard_start_paste(VTerm *vt)
+{
+  if(vt->state->mode.bracketpaste)
+    vterm_push_output_sprintf_ctrl(vt, C1_CSI, "200~");
+}
+
+void vterm_keyboard_end_paste(VTerm *vt)
+{
+  if(vt->state->mode.bracketpaste)
+    vterm_push_output_sprintf_ctrl(vt, C1_CSI, "201~");
 }

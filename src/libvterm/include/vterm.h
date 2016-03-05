@@ -147,6 +147,9 @@ size_t vterm_output_read(VTerm *vt, char *buffer, size_t len);
 void vterm_keyboard_unichar(VTerm *vt, uint32_t c, VTermModifier mod);
 void vterm_keyboard_key(VTerm *vt, VTermKey key, VTermModifier mod);
 
+void vterm_keyboard_start_paste(VTerm *vt);
+void vterm_keyboard_end_paste(VTerm *vt);
+
 void vterm_mouse_move(VTerm *vt, int row, int col, VTermModifier mod);
 void vterm_mouse_button(VTerm *vt, int button, bool pressed, VTermModifier mod);
 
@@ -211,6 +214,10 @@ VTermState *vterm_obtain_state(VTerm *vt);
 void  vterm_state_set_callbacks(VTermState *state, const VTermStateCallbacks *callbacks, void *user);
 void *vterm_state_get_cbdata(VTermState *state);
 
+// Only invokes control, csi, osc, dcs
+void  vterm_state_set_unrecognised_fallbacks(VTermState *state, const VTermParserCallbacks *fallbacks, void *user);
+void *vterm_state_get_unrecognised_fbdata(VTermState *state);
+
 void vterm_state_reset(VTermState *state, int hard);
 void vterm_state_get_cursorpos(const VTermState *state, VTermPos *cursorpos);
 void vterm_state_get_default_colors(const VTermState *state, VTermColor *default_fg, VTermColor *default_bg);
@@ -259,6 +266,10 @@ VTermScreen *vterm_obtain_screen(VTerm *vt);
 
 void  vterm_screen_set_callbacks(VTermScreen *screen, const VTermScreenCallbacks *callbacks, void *user);
 void *vterm_screen_get_cbdata(VTermScreen *screen);
+
+// Only invokes control, csi, osc, dcs
+void  vterm_screen_set_unrecognised_fallbacks(VTermScreen *screen, const VTermParserCallbacks *fallbacks, void *user);
+void *vterm_screen_get_unrecognised_fbdata(VTermScreen *screen);
 
 void vterm_screen_enable_altscreen(VTermScreen *screen, int altscreen);
 

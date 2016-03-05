@@ -10,6 +10,10 @@ endif
 
 override CFLAGS +=-Wall -Iinclude -std=c99
 
+ifeq ($(shell uname),SunOS)
+  override CFLAGS +=-D__EXTENSIONS__ -D_XPG6 -D__XOPEN_OR_POSIX
+endif
+
 ifeq ($(DEBUG),1)
   override CFLAGS +=-ggdb -DDEBUG
 endif
@@ -38,6 +42,8 @@ VERSION_MINOR=0
 VERSION_CURRENT=0
 VERSION_REVISION=0
 VERSION_AGE=0
+
+VERSION=0
 
 PREFIX=/usr/local
 BINDIR=$(PREFIX)/bin
@@ -76,7 +82,7 @@ t/harness: t/harness.lo $(LIBRARY)
 
 .PHONY: test
 test: $(LIBRARY) t/harness
-	for T in $(wildcard t/[0-9]*.test); do echo "** $$T **"; perl t/run-test.pl $$T $(if $(VALGRIND),--valgrind) || exit 1; done
+	for T in `ls t/[0-9]*.test`; do echo "** $$T **"; perl t/run-test.pl $$T $(if $(VALGRIND),--valgrind) || exit 1; done
 
 .PHONY: clean
 clean:
@@ -91,7 +97,7 @@ install-inc:
 	install -d $(DESTDIR)$(INCDIR)
 	install -m644 $(HFILES) $(DESTDIR)$(INCDIR)
 	install -d $(DESTDIR)$(LIBDIR)/pkgconfig
-	sed -e "s,@PREFIX@,$(PREFIX)," -e "s,@LIBDIR@,$(LIBDIR)," <vterm.pc.in >$(DESTDIR)$(LIBDIR)/pkgconfig/vterm.pc
+	sed -e "s,@PREFIX@,$(PREFIX)," -e "s,@LIBDIR@,$(LIBDIR)," -e "s,@VERSION@,$(VERSION)," <vterm.pc.in >$(DESTDIR)$(LIBDIR)/pkgconfig/vterm.pc
 
 install-lib: $(LIBRARY)
 	install -d $(DESTDIR)$(LIBDIR)
@@ -108,7 +114,7 @@ VERSION=$(VERSION_MAJOR).$(VERSION_MINOR)
 
 DISTDIR=libvterm-$(VERSION)
 
-distdir:
+distdir: $(INCFILES)
 	mkdir __distdir
 	cp LICENSE __distdir
 	mkdir __distdir/src
