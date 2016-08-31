@@ -33,6 +33,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <limits.h> /* PATH_MAX */
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -127,8 +128,8 @@
 static ssize_t uv__fs_fdatasync(uv_fs_t* req) {
 #if defined(__linux__) || defined(__sun) || defined(__NetBSD__)
   return fdatasync(req->file);
-#elif defined(__APPLE__) && defined(F_FULLFSYNC)
-  return fcntl(req->file, F_FULLFSYNC);
+#elif defined(__APPLE__) && defined(SYS_fdatasync)
+  return syscall(SYS_fdatasync, req->file);
 #else
   return fsync(req->file);
 #endif
@@ -205,6 +206,13 @@ skip:
 # else
   return futimes(req->file, tv);
 # endif
+#elif defined(_AIX71)
+  struct timespec ts[2];
+  ts[0].tv_sec  = req->atime;
+  ts[0].tv_nsec = (unsigned long)(req->atime * 1000000) % 1000000 * 1000;
+  ts[1].tv_sec  = req->mtime;
+  ts[1].tv_nsec = (unsigned long)(req->mtime * 1000000) % 1000000 * 1000;
+  return futimens(req->file, ts);
 #else
   errno = ENOSYS;
   return -1;
@@ -362,9 +370,10 @@ out:
   if (dents != NULL) {
     int i;
 
+    /* Memory was allocated using the system allocator, so use free() here. */
     for (i = 0; i < n; i++)
-      uv__free(dents[i]);
-    uv__free(dents);
+      free(dents[i]);
+    free(dents);
   }
   errno = saved_errno;
 
@@ -383,7 +392,7 @@ static ssize_t uv__fs_pathmax_size(const char* path) {
 #if defined(PATH_MAX)
     return PATH_MAX;
 #else
-    return 4096;
+#error "PATH_MAX undefined in the current platform"
 #endif
   }
 
@@ -749,13 +758,13 @@ static void uv__to_stat(struct stat* src, uv_stat_t* dst) {
   dst->st_gen = src->st_gen;
 #elif defined(__ANDROID__)
   dst->st_atim.tv_sec = src->st_atime;
-  dst->st_atim.tv_nsec = src->st_atime_nsec;
+  dst->st_atim.tv_nsec = src->st_atimensec;
   dst->st_mtim.tv_sec = src->st_mtime;
-  dst->st_mtim.tv_nsec = src->st_mtime_nsec;
+  dst->st_mtim.tv_nsec = src->st_mtimensec;
   dst->st_ctim.tv_sec = src->st_ctime;
-  dst->st_ctim.tv_nsec = src->st_ctime_nsec;
+  dst->st_ctim.tv_nsec = src->st_ctimensec;
   dst->st_birthtim.tv_sec = src->st_ctime;
-  dst->st_birthtim.tv_nsec = src->st_ctime_nsec;
+  dst->st_birthtim.tv_nsec = src->st_ctimensec;
   dst->st_flags = 0;
   dst->st_gen = 0;
 #elif !defined(_AIX) && (       \
@@ -858,9 +867,14 @@ static ssize_t uv__fs_buf_iter(uv_fs_t* req, uv__fs_buf_iter_processor process) 
     total += result;
   }
 
+  if (errno == EINTR && total == -1)
+    return total;
+
   if (bufs != req->bufsml)
     uv__free(bufs);
+
   req->bufs = NULL;
+  req->nbufs = 0;
 
   return total;
 }

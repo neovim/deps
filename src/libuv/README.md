@@ -60,6 +60,11 @@ Build documentation as HTML:
 
     $ make html
 
+Build documentation as HTML and live reload it when it changes (this requires
+sphinx-autobuild to be installed and is only supported on Unix):
+
+    $ make livehtml
+
 Build documentation as man pages:
 
     $ make man
@@ -156,10 +161,15 @@ project tree manually:
 
 ### Unix
 
-Run:
+For Debug builds (recommended) run:
 
     $ ./gyp_uv.py -f make
     $ make -C out
+
+For Release builds run:
+
+    $ ./gyp_uv.py -f make
+    $ BUILDTYPE=Release make -C out
 
 Run `./gyp_uv.py -f make -Dtarget_arch=x32` to build [x32][] binaries.
 
@@ -243,3 +253,4 @@ See the [guidelines for contributing][].
 [Visual Studio Express 2010]: http://www.microsoft.com/visualstudio/eng/products/visual-studio-2010-express
 [guidelines for contributing]: https://github.com/libuv/libuv/blob/master/CONTRIBUTING.md
 [libuv_banner]: https://raw.githubusercontent.com/libuv/libuv/master/img/banner.png
+[x32]: https://en.wikipedia.org/wiki/X32_ABI
