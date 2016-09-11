@@ -86,8 +86,8 @@ static void luv_getaddrinfo_cb(uv_getaddrinfo_t* req, int status, struct addrinf
     luv_pushaddrinfo(L, res);
     nargs = 2;
   }
-  luv_fulfill_req(L, req->data, nargs);
-  luv_cleanup_req(L, req->data);
+  luv_fulfill_req(L, (luv_req_t*)req->data, nargs);
+  luv_cleanup_req(L, (luv_req_t*)req->data);
   req->data = NULL;
   if (res) uv_freeaddrinfo(res);
 }
@@ -106,7 +106,6 @@ static int luv_getaddrinfo(lua_State* L) {
   else service = luaL_checkstring(L, 2);
   if (!lua_isnoneornil(L, 3)) luaL_checktype(L, 3, LUA_TTABLE);
   else hints = NULL;
-  ref = lua_isnoneornil(L, 4) ? LUA_NOREF : luv_check_continuation(L, 4);
   if (hints) {
     // Initialize the hints
     memset(hints, 0, sizeof(*hints));
@@ -163,13 +162,17 @@ static int luv_getaddrinfo(lua_State* L) {
     if (lua_toboolean(L, -1)) hints->ai_flags |=  AI_ADDRCONFIG;
     lua_pop(L, 1);
 
+#ifdef AI_V4MAPPED
     lua_getfield(L, 3, "v4mapped");
     if (lua_toboolean(L, -1)) hints->ai_flags |=  AI_V4MAPPED;
     lua_pop(L, 1);
+#endif
 
+#ifdef AI_ALL
     lua_getfield(L, 3, "all");
     if (lua_toboolean(L, -1)) hints->ai_flags |=  AI_ALL;
     lua_pop(L, 1);
+#endif
 
     lua_getfield(L, 3, "numerichost");
     if (lua_toboolean(L, -1)) hints->ai_flags |=  AI_NUMERICHOST;
@@ -195,11 +198,13 @@ static int luv_getaddrinfo(lua_State* L) {
     lua_pop(L, 1);
   }
 
-  req = lua_newuserdata(L, sizeof(*req));
+  ref = luv_check_continuation(L, 4);
+  req = (uv_getaddrinfo_t*)lua_newuserdata(L, sizeof(*req));
   req->data = luv_setup_req(L, ref);
 
   ret = uv_getaddrinfo(luv_loop(L), req, ref == LUA_NOREF ? NULL : luv_getaddrinfo_cb, node, service, hints);
   if (ret < 0) {
+    luv_cleanup_req(L, (luv_req_t*)req->data);
     lua_pop(L, 1);
     return luv_error(L, ret);
   }
@@ -208,7 +213,7 @@ static int luv_getaddrinfo(lua_State* L) {
     lua_pop(L, 1);
     luv_pushaddrinfo(L, req->addrinfo);
     uv_freeaddrinfo(req->addrinfo);
-    luv_cleanup_req(L, req->data);
+    luv_cleanup_req(L, (luv_req_t*)req->data);
   }
   return 1;
 }
@@ -229,8 +234,8 @@ static void luv_getnameinfo_cb(uv_getnameinfo_t* req, int status, const char* ho
     nargs = 3;
   }
 
-  luv_fulfill_req(L, req->data, nargs);
-  luv_cleanup_req(L, req->data);
+  luv_fulfill_req(L, (luv_req_t*)req->data, nargs);
+  luv_cleanup_req(L, (luv_req_t*)req->data);
   req->data = NULL;
 }
 
@@ -287,13 +292,14 @@ static int luv_getnameinfo(lua_State* L) {
   }
   lua_pop(L, 1);
 
-  ref = lua_isnoneornil(L, 2) ? LUA_NOREF : luv_check_continuation(L, 2);
+  ref = luv_check_continuation(L, 2);
 
-  req = lua_newuserdata(L, sizeof(*req));
+  req = (uv_getnameinfo_t*)lua_newuserdata(L, sizeof(*req));
   req->data = luv_setup_req(L, ref);
 
   ret = uv_getnameinfo(luv_loop(L), req, ref == LUA_NOREF ? NULL : luv_getnameinfo_cb, (struct sockaddr*)&addr, flags);
   if (ret < 0) {
+    luv_cleanup_req(L, (luv_req_t*)req->data);
     lua_pop(L, 1);
     return luv_error(L, ret);
   }
@@ -301,9 +307,8 @@ static int luv_getnameinfo(lua_State* L) {
     lua_pop(L, 1);
     lua_pushstring(L, req->host);
     lua_pushstring(L, req->service);
-    luv_cleanup_req(L, req->data);
+    luv_cleanup_req(L, (luv_req_t*)req->data);
     return 2;
   }
   return 1;
 }
-

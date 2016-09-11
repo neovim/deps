@@ -123,6 +123,11 @@ else()
     ${LIBUVDIR}/src/unix/tty.c
     ${LIBUVDIR}/src/unix/udp.c
   )
+  if(APPLE)
+    set(SOURCES ${SOURCES}
+      ${LIBUVDIR}/src/unix/pthread-barrier.c
+    )
+  endif()
 endif()
 
 check_type_size("void*" SIZEOF_VOID_P)
@@ -135,6 +140,14 @@ if("${CMAKE_SYSTEM_NAME}" MATCHES "FreeBSD")
   set(SOURCES ${SOURCES}
     ${LIBUVDIR}/src/unix/kqueue.c
     ${LIBUVDIR}/src/unix/freebsd.c
+  )
+endif()
+
+## OpenBSD
+if("${CMAKE_SYSTEM_NAME}" MATCHES "OpenBSD")
+  set(SOURCES ${SOURCES}
+    ${LIBUVDIR}/src/unix/kqueue.c
+    ${LIBUVDIR}/src/unix/openbsd.c
   )
 endif()
 
@@ -187,6 +200,12 @@ if("${CMAKE_SYSTEM_NAME}" MATCHES "FreeBSD")
   )
 endif()
 
+if("${CMAKE_SYSTEM_NAME}" MATCHES "OpenBSD")
+  set(THREADS_PREFER_PTHREAD_FLAG ON)
+  find_package(Threads REQUIRED)
+  target_link_libraries(uv Threads::Threads)
+endif()
+
 if("${CMAKE_SYSTEM_NAME}" MATCHES "Linux")
   target_link_libraries(uv
     pthread
@@ -200,7 +219,7 @@ if(WIN32)
     psapi.lib
     iphlpapi.lib
     advapi32.lib
-    Userenv.lib
+    userenv.lib
   )
 endif()
 

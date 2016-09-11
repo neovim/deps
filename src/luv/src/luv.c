@@ -222,6 +222,8 @@ static const luaL_Reg luv_functions[] = {
   // misc.c
   {"chdir", luv_chdir},
   {"os_homedir", luv_os_homedir},
+  {"os_tmpdir", luv_os_tmpdir},
+  {"os_get_passwd", luv_os_get_passwd},
   {"cpu_info", luv_cpu_info},
   {"cwd", luv_cwd},
   {"exepath", luv_exepath},
@@ -245,6 +247,10 @@ static const luaL_Reg luv_functions[] = {
   {"uptime", luv_uptime},
   {"version", luv_version},
   {"version_string", luv_version_string},
+#ifndef _WIN32
+  {"print_all_handles", luv_print_all_handles},
+  {"print_active_handles", luv_print_active_handles},
+#endif
 
   // thread.c
   {"new_thread", luv_new_thread},
@@ -446,7 +452,7 @@ static void luv_handle_init(lua_State* L) {
 }
 
 LUALIB_API lua_State* luv_state(uv_loop_t* loop) {
-  return loop->data;
+  return (lua_State*)loop->data;
 }
 
 // TODO: find out if storing this somehow in an upvalue is faster
@@ -454,7 +460,7 @@ LUALIB_API uv_loop_t* luv_loop(lua_State* L) {
   uv_loop_t* loop;
   lua_pushstring(L, "uv_loop");
   lua_rawget(L, LUA_REGISTRYINDEX);
-  loop = lua_touserdata(L, -1);
+  loop = (uv_loop_t*)lua_touserdata(L, -1);
   lua_pop(L, 1);
   return loop;
 }
@@ -489,7 +495,7 @@ LUALIB_API int luaopen_luv (lua_State *L) {
   lua_pushcfunction(L, loop_gc);
   lua_settable(L, -3);
 
-  loop = lua_newuserdata(L, sizeof(*loop));
+  loop = (uv_loop_t*)lua_newuserdata(L, sizeof(*loop));
   ret = uv_loop_init(loop);
   if (ret < 0) {
     return luaL_error(L, "%s: %s\n", uv_err_name(ret), uv_strerror(ret));
@@ -514,6 +520,5 @@ LUALIB_API int luaopen_luv (lua_State *L) {
   luaL_newlib(L, luv_functions);
   luv_constants(L);
   lua_setfield(L, -2, "constants");
-
   return 1;
 }
