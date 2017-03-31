@@ -2,17 +2,9 @@
 //
 // Copyright (C) 2013-2015 KONDO Takatoshi
 //
-//    Licensed under the Apache License, Version 2.0 (the "License");
-//    you may not use this file except in compliance with the License.
-//    You may obtain a copy of the License at
-//
-//        http://www.apache.org/licenses/LICENSE-2.0
-//
-//    Unless required by applicable law or agreed to in writing, software
-//    distributed under the License is distributed on an "AS IS" BASIS,
-//    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-//    See the License for the specific language governing permissions and
-//    limitations under the License.
+//    Distributed under the Boost Software License, Version 1.0.
+//    (See accompanying file LICENSE_1_0.txt or copy at
+//    http://www.boost.org/LICENSE_1_0.txt)
 //
 
 // g++ -std=c++11 -O3 -g -Ipath_to_msgpack_src -Ipath_to_boost speed_test.cc -Lpath_to_boost_lib -lboost_timer -lboost_system
@@ -29,7 +21,7 @@ template <typename T, std::size_t level>
 struct vecvec {
     typedef std::vector<typename vecvec<T, level - 1>::type> type;
     static void fill(type& v, std::size_t num_of_elems, T const& val) {
-        for (int elem = 0; elem < num_of_elems; ++elem) {
+        for (std::size_t elem = 0; elem < num_of_elems; ++elem) {
             typename vecvec<T, level - 1>::type child;
             vecvec<T, level - 1>::fill(child, num_of_elems, val);
             v.push_back(child);
@@ -41,7 +33,7 @@ template <typename T>
 struct vecvec<T, 0> {
     typedef std::vector<T> type;
     static void fill(type& v, std::size_t num_of_elems, T const& val) {
-        for (int elem = 0; elem < num_of_elems; ++elem) {
+        for (std::size_t elem = 0; elem < num_of_elems; ++elem) {
             v.push_back(val);
         }
     }
@@ -50,9 +42,9 @@ struct vecvec<T, 0> {
 void test_array_of_array() {
     std::cout << "[TEST][array_of_array]" << std::endl;
     // setup
-    int const depth = 16;
+    int const depth = 4;
     std::cout << "Setting up array data..." << std::endl;
-    typename vecvec<int, depth>::type v1;
+    vecvec<int, depth>::type v1;
     vecvec<int, depth>::fill(v1, 3, 42);
 
     std::cout << "Start packing..." << std::endl;
@@ -68,20 +60,20 @@ void test_array_of_array() {
     buffer.seekg(0);
     std::string str(buffer.str());
 
-    msgpack::unpacked unpacked;
-    std::cout << "Start unpacking...by void unpack(unpacked& result, const char* data, size_t len)" << std::endl;
+    msgpack::object_handle oh;
+    std::cout << "Start unpacking...by void unpack(object_handle& oh, const char* data, size_t len)" << std::endl;
     {
         boost::timer::cpu_timer timer;
-        msgpack::unpack(unpacked, str.data(), str.size());
+        msgpack::unpack(oh, str.data(), str.size());
         std::string result = timer.format();
         std::cout << result << std::endl;
     }
     std::cout << "Unpack finished..." << std::endl;
-    typename vecvec<int, depth>::type v2;
+    vecvec<int, depth>::type v2;
     std::cout << "Start converting..." << std::endl;
     {
         boost::timer::cpu_timer timer;
-        unpacked.get().convert(&v2);
+        oh.get().convert(v2);
         std::string result = timer.format();
         std::cout << result << std::endl;
     }

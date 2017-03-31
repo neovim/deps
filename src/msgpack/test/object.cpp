@@ -1,4 +1,4 @@
-#include <msgpack_fwd.hpp>
+#include <msgpack.hpp>
 #include <gtest/gtest.h>
 
 
@@ -34,10 +34,6 @@ MSGPACK_ADD_ENUM(outer_enum_class::enum_class_test);
 
 #endif // !defined(MSGPACK_USE_CPP03)
 
-
-
-#include <msgpack.hpp>
-
 struct myclass {
     myclass() : num(0), str("default") { }
 
@@ -72,11 +68,11 @@ TEST(object, convert)
     msgpack::sbuffer sbuf;
     msgpack::pack(sbuf, m1);
 
-    msgpack::unpacked ret;
-    msgpack::unpack(ret, sbuf.data(), sbuf.size());
+    msgpack::object_handle oh =
+        msgpack::unpack(sbuf.data(), sbuf.size());
 
     myclass m2;
-    ret.get().convert(&m2);
+    oh.get().convert(m2);
 
     EXPECT_EQ(m1, m2);
 }
@@ -89,10 +85,10 @@ TEST(object, as)
     msgpack::sbuffer sbuf;
     msgpack::pack(sbuf, m1);
 
-    msgpack::unpacked ret;
-    msgpack::unpack(ret, sbuf.data(), sbuf.size());
+    msgpack::object_handle oh =
+        msgpack::unpack(sbuf.data(), sbuf.size());
 
-    EXPECT_EQ(m1, ret.get().as<myclass>());
+    EXPECT_EQ(m1, oh.get().as<myclass>());
 }
 
 TEST(object, cross_zone_copy)
@@ -193,7 +189,7 @@ TEST(object, cross_zone_copy_ext)
 
     msgpack::object::with_zone obj2(z2);
     obj2 << obj1;
-    EXPECT_EQ(obj2.via.ext.size, 1);
+    EXPECT_EQ(obj2.via.ext.size, 1u);
     EXPECT_EQ(obj2.via.ext.ptr[0], 1);
     EXPECT_EQ(obj2.via.ext.ptr[1], 2);
     EXPECT_NE(
@@ -215,7 +211,7 @@ TEST(object, cross_zone_copy_construct_ext)
     obj1.via.ext.size = 1;
 
     msgpack::object obj2(obj1, z2);
-    EXPECT_EQ(obj2.via.ext.size, 1);
+    EXPECT_EQ(obj2.via.ext.size, 1u);
     EXPECT_EQ(obj2.via.ext.ptr[0], 1);
     EXPECT_EQ(obj2.via.ext.ptr[1], 2);
     EXPECT_NE(
@@ -281,12 +277,17 @@ TEST(object, construct_primitive)
     EXPECT_EQ(msgpack::type::NEGATIVE_INTEGER, obj_int.type);
     EXPECT_EQ(-1, obj_int.via.i64);
 
-    msgpack::object obj_float(1.2);
-    EXPECT_EQ(msgpack::type::FLOAT, obj_float.type);
-    EXPECT_EQ(1.2, obj_float.via.f64);
+    msgpack::object obj_float(1.2F);
+    EXPECT_EQ(msgpack::type::FLOAT32, obj_float.type);
+    EXPECT_EQ(1.2F, obj_float.via.f64);
+
+    msgpack::object obj_double(1.2);
+    EXPECT_EQ(msgpack::type::FLOAT64, obj_double.type);
+    EXPECT_EQ(msgpack::type::FLOAT, obj_double.type);
+    EXPECT_EQ(1.2, obj_double.via.f64);
 #if defined(MSGPACK_USE_LEGACY_NAME_AS_FLOAT)
-    EXPECT_EQ(msgpack::type::DOUBLE, obj_float.type);
-    EXPECT_EQ(1.2, obj_float.via.dec);
+    EXPECT_EQ(msgpack::type::DOUBLE, obj_double.type);
+    EXPECT_EQ(1.2, obj_double.via.dec);
 #endif // MSGPACK_USE_LEGACY_NAME_AS_FLOAT
 
     msgpack::object obj_bool(true);
@@ -298,7 +299,7 @@ TEST(object, construct_enum)
 {
     msgpack::object obj(elem);
     EXPECT_EQ(msgpack::type::POSITIVE_INTEGER, obj.type);
-    EXPECT_EQ(elem, obj.via.u64);
+    EXPECT_EQ(static_cast<uint64_t>(elem), obj.via.u64);
 }
 
 #if !defined(MSGPACK_USE_CPP03)
@@ -316,7 +317,7 @@ TEST(object, construct_enum_outer)
 {
     msgpack::object obj(outer_enum::elem);
     EXPECT_EQ(msgpack::type::POSITIVE_INTEGER, obj.type);
-    EXPECT_EQ(elem, obj.via.u64);
+    EXPECT_EQ(static_cast<uint64_t>(elem), obj.via.u64);
 }
 
 #if !defined(MSGPACK_USE_CPP03)
@@ -344,3 +345,103 @@ TEST(object, construct_class_enum_outer)
 }
 
 #endif // !defined(MSGPACK_USE_CPP03)
+
+TEST(object, clone_int)
+{
+    int v = 0;
+    msgpack::object obj(v);
+    std::size_t sz1 = msgpack::aligned_zone_size(obj);
+    msgpack::object_handle h = msgpack::clone(obj);
+    EXPECT_EQ(h.get(), obj);
+    EXPECT_EQ(sz1, msgpack::aligned_zone_size(h.get()));
+    h = msgpack::clone(obj);
+    EXPECT_EQ(h.get(), obj);
+    EXPECT_EQ(sz1, msgpack::aligned_zone_size(h.get()));
+}
+
+TEST(object, clone_str)
+{
+    msgpack::zone z;
+    std::string v = "123456789";
+    msgpack::object obj(v, z);
+    std::size_t sz1 = msgpack::aligned_zone_size(obj);
+    msgpack::object_handle h = msgpack::clone(obj);
+    EXPECT_EQ(h.get(), obj);
+    EXPECT_EQ(sz1, msgpack::aligned_zone_size(h.get()));
+    h = msgpack::clone(obj);
+    EXPECT_EQ(h.get(), obj);
+    EXPECT_EQ(sz1, msgpack::aligned_zone_size(h.get()));
+}
+
+TEST(object, clone_bin)
+{
+    msgpack::zone z;
+    std::vector<char> v;
+    v.push_back('A');
+    v.push_back('B');
+    v.push_back('C');
+    msgpack::object obj(v, z);
+    std::size_t sz1 = msgpack::aligned_zone_size(obj);
+    msgpack::object_handle h = msgpack::clone(obj);
+    EXPECT_EQ(h.get(), obj);
+    EXPECT_EQ(sz1, msgpack::aligned_zone_size(h.get()));
+    h = msgpack::clone(obj);
+    EXPECT_EQ(h.get(), obj);
+    EXPECT_EQ(sz1, msgpack::aligned_zone_size(h.get()));
+}
+
+TEST(object, clone_array)
+{
+    msgpack::zone z;
+    std::vector<int> v;
+    v.push_back(1);
+    v.push_back(2);
+    v.push_back(3);
+    msgpack::object obj(v, z);
+    std::size_t sz1 = msgpack::aligned_zone_size(obj);
+    msgpack::object_handle h = msgpack::clone(obj);
+    EXPECT_EQ(h.get(), obj);
+    EXPECT_EQ(sz1, msgpack::aligned_zone_size(h.get()));
+    h = msgpack::clone(obj);
+    EXPECT_EQ(h.get(), obj);
+    EXPECT_EQ(sz1, msgpack::aligned_zone_size(h.get()));
+}
+
+TEST(object, clone_map)
+{
+    msgpack::zone z;
+    std::map<int, std::string> v;
+    v.insert(std::map<int, std::string>::value_type(1, "ABC"));
+    v.insert(std::map<int, std::string>::value_type(2, "DEF"));
+    v.insert(std::map<int, std::string>::value_type(3, "GHI"));
+    msgpack::object obj(v, z);
+    std::size_t sz1 = msgpack::aligned_zone_size(obj);
+    msgpack::object_handle h = msgpack::clone(obj);
+    EXPECT_EQ(h.get(), obj);
+    EXPECT_EQ(sz1, msgpack::aligned_zone_size(h.get()));
+    h = msgpack::clone(obj);
+    EXPECT_EQ(h.get(), obj);
+    EXPECT_EQ(sz1, msgpack::aligned_zone_size(h.get()));
+}
+
+TEST(object, pack_float)
+{
+    msgpack::object obj(1.2F);
+    std::stringstream ss1;
+    msgpack::pack(ss1, obj);
+    std::stringstream ss2;
+    msgpack::pack(ss2, 1.2F);
+    EXPECT_EQ(static_cast<size_t>(5), ss1.str().size());
+    EXPECT_EQ(ss1.str(), ss2.str());
+}
+
+TEST(object, pack_double)
+{
+    msgpack::object obj(1.2);
+    std::stringstream ss1;
+    msgpack::pack(ss1, obj);
+    std::stringstream ss2;
+    msgpack::pack(ss2, 1.2);
+    EXPECT_EQ(static_cast<size_t>(9), ss1.str().size());
+    EXPECT_EQ(ss1.str(), ss2.str());
+}

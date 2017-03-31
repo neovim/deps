@@ -15,7 +15,7 @@ TEST(streaming, basic)
     const char* const eof = input + buffer.size();
 
     msgpack::unpacker pac;
-    msgpack::unpacked result;
+    msgpack::object_handle oh;
 
     int count = 0;
     while(count < 3) {
@@ -29,8 +29,8 @@ TEST(streaming, basic)
 
         pac.buffer_consumed(len);
 
-        while(pac.next(result)) {
-            msgpack::object obj = result.get();
+        while(pac.next(oh)) {
+            msgpack::object obj = oh.get();
             switch(count++) {
             case 0:
                 EXPECT_EQ(1, obj.as<int>());
@@ -47,6 +47,9 @@ TEST(streaming, basic)
         EXPECT_TRUE(input < eof);
     }
 }
+
+// obsolete
+#if MSGPACK_DEFAULT_API_VERSION == 1
 
 TEST(streaming, basic_pointer)
 {
@@ -61,7 +64,7 @@ TEST(streaming, basic_pointer)
     const char* const eof = input + buffer.size();
 
     msgpack::unpacker pac;
-    msgpack::unpacked result;
+    msgpack::object_handle oh;
 
     int count = 0;
     while(count < 3) {
@@ -75,8 +78,15 @@ TEST(streaming, basic_pointer)
 
         pac.buffer_consumed(len);
 
-        while(pac.next(&result)) {
-            msgpack::object obj = result.get();
+#if (__GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 2))
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#endif // (__GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 2))
+        while(pac.next(&oh)) {
+#if (__GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 2))
+#pragma GCC diagnostic pop
+#endif // (__GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 2))
+            msgpack::object obj = oh.get();
             switch(count++) {
             case 0:
                 EXPECT_EQ(1, obj.as<int>());
@@ -93,6 +103,8 @@ TEST(streaming, basic_pointer)
         EXPECT_TRUE(input < eof);
     }
 }
+
+#endif // MSGPACK_DEFAULT_API_VERSION == 1
 
 #if !defined(MSGPACK_USE_CPP03)
 
@@ -109,7 +121,7 @@ TEST(streaming, move)
     const char* const eof = input + buffer.size();
 
     msgpack::unpacker pac;
-    msgpack::unpacked result;
+    msgpack::object_handle oh;
 
     int count = 0;
     while(count < 3) {
@@ -124,8 +136,8 @@ TEST(streaming, move)
 
         pac_in.buffer_consumed(len);
 
-        while(pac_in.next(result)) {
-            msgpack::object obj = result.get();
+        while(pac_in.next(oh)) {
+            msgpack::object obj = oh.get();
             switch(count++) {
             case 0:
                 EXPECT_EQ(1, obj.as<int>());
@@ -156,7 +168,7 @@ public:
         while(true) {
             pac.reserve_buffer(32*1024);
 
-            size_t len = input.readsome(pac.buffer(), pac.buffer_capacity());
+            size_t len = static_cast<size_t>(input.readsome(pac.buffer(), pac.buffer_capacity()));
 
             if(len == 0) {
                 return;
@@ -164,9 +176,9 @@ public:
 
             pac.buffer_consumed(len);
 
-            msgpack::unpacked result;
-            while(pac.next(result)) {
-                on_message(result.get(), msgpack::move(result.zone()));
+            msgpack::object_handle oh;
+            while(pac.next(oh)) {
+                on_message(oh.get(), msgpack::move(oh.zone()));
             }
 
             if(pac.message_size() > 10*1024*1024) {
@@ -207,6 +219,8 @@ TEST(streaming, event)
     handler.on_read();
 }
 
+// obsolete
+#if MSGPACK_DEFAULT_API_VERSION == 1
 
 // backward compatibility
 TEST(streaming, basic_compat)
@@ -226,7 +240,7 @@ TEST(streaming, basic_compat)
     while(count < 3) {
         pac.reserve_buffer(32*1024);
 
-        size_t len = input.readsome(pac.buffer(), pac.buffer_capacity());
+        size_t len = static_cast<size_t>(input.readsome(pac.buffer(), pac.buffer_capacity()));
         pac.buffer_consumed(len);
 
         while(pac.execute()) {
@@ -262,7 +276,7 @@ public:
         while(true) {
             pac.reserve_buffer(32*1024);
 
-            size_t len = input.readsome(pac.buffer(), pac.buffer_capacity());
+            size_t len = static_cast<size_t>(input.readsome(pac.buffer(), pac.buffer_capacity()));
 
             if(len == 0) {
                 return;
@@ -314,3 +328,5 @@ TEST(streaming, event_compat)
     handler.expect = 3;
     handler.on_read();
 }
+
+#endif // !defined(MSGPACK_USE_CPP03)

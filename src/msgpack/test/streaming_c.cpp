@@ -61,15 +61,15 @@ TEST(streaming, basic)
                 switch(count++) {
                 case 0:
                     EXPECT_EQ(MSGPACK_OBJECT_POSITIVE_INTEGER, obj.type);
-                    EXPECT_EQ(1, obj.via.u64);
+                    EXPECT_EQ(1u, obj.via.u64);
                     break;
                 case 1:
                     EXPECT_EQ(MSGPACK_OBJECT_POSITIVE_INTEGER, obj.type);
-                    EXPECT_EQ(2, obj.via.u64);
+                    EXPECT_EQ(2u, obj.via.u64);
                     break;
                 case 2:
                     EXPECT_EQ(MSGPACK_OBJECT_POSITIVE_INTEGER, obj.type);
-                    EXPECT_EQ(3, obj.via.u64);
+                    EXPECT_EQ(3u, obj.via.u64);
                     break;
                 case 3:
                     EXPECT_EQ(MSGPACK_OBJECT_STR, obj.type);
@@ -77,7 +77,7 @@ TEST(streaming, basic)
                     break;
                 case 4:
                     EXPECT_EQ(MSGPACK_OBJECT_ARRAY, obj.type);
-                    EXPECT_EQ(1, obj.via.array.size);
+                    EXPECT_EQ(1u, obj.via.array.size);
                     e = obj.via.array.ptr[0];
                     EXPECT_EQ(MSGPACK_OBJECT_STR, e.type);
                     EXPECT_EQ(std::string("str_data",8), std::string(e.via.str.ptr, e.via.str.size));
@@ -88,14 +88,14 @@ TEST(streaming, basic)
                     break;
                 case 6:
                     EXPECT_EQ(MSGPACK_OBJECT_ARRAY, obj.type);
-                    EXPECT_EQ(1, obj.via.array.size);
+                    EXPECT_EQ(1u, obj.via.array.size);
                     e = obj.via.array.ptr[0];
                     EXPECT_EQ(MSGPACK_OBJECT_BIN, e.type);
                     EXPECT_EQ(std::string("bin_data",8), std::string(e.via.bin.ptr, e.via.bin.size));
                     break;
                 case 7:
                     EXPECT_EQ(MSGPACK_OBJECT_MAP, obj.type);
-                    EXPECT_EQ(1, obj.via.map.size);
+                    EXPECT_EQ(1u, obj.via.map.size);
                     e = obj.via.map.ptr[0].key;
                     EXPECT_EQ(MSGPACK_OBJECT_FLOAT, e.type);
                     ASSERT_FLOAT_EQ(0.4f, static_cast<float>(e.via.f64));
@@ -118,5 +118,66 @@ TEST(streaming, basic)
 
     msgpack_unpacker_destroy(&pac);
     msgpack_unpacked_destroy(&result);
+    msgpack_sbuffer_free(buffer);
+}
+
+TEST(streaming, basic_with_size)
+{
+    int ret;
+    size_t bytes;
+    size_t parsed = 0;
+    msgpack_sbuffer* buffer = msgpack_sbuffer_new();
+    msgpack_packer* pk = msgpack_packer_new(buffer, msgpack_sbuffer_write);
+    msgpack_unpacked result;
+    msgpack_unpacker *unp;
+
+    // 1, 2, 3, "str", ["str_data"], "bin", ["bin_data"], {0.3: 0.4}
+    msgpack_pack_int(pk, 1);
+    msgpack_pack_int(pk, 2);
+    msgpack_pack_int(pk, 3);
+    msgpack_pack_str(pk, 3);
+    msgpack_pack_str_body(pk, "str", 3);
+    msgpack_pack_array(pk, 1);
+    msgpack_pack_str(pk, 8);
+    msgpack_pack_str_body(pk, "str_data", 8);
+    msgpack_pack_bin(pk, 3);
+    msgpack_pack_bin_body(pk, "bin", 3);
+    msgpack_pack_array(pk, 1);
+    msgpack_pack_bin(pk, 8);
+    msgpack_pack_bin_body(pk, "bin_data", 8);
+    msgpack_pack_map(pk, 1);
+    msgpack_pack_float(pk, 0.4f);
+    msgpack_pack_double(pk, 0.8);
+    msgpack_packer_free(pk);
+
+    unp = msgpack_unpacker_new(32 * 1024);
+    msgpack_unpacked_init(&result);
+
+    const char* input = buffer->data;
+
+    while (parsed < buffer->size) {
+        memcpy(msgpack_unpacker_buffer(unp), input, 1);
+        msgpack_unpacker_buffer_consumed(unp, 1);
+        input += 1;
+
+        bytes = 0;
+        ret = msgpack_unpacker_next_with_size(unp, &result, &bytes);
+        if (ret == MSGPACK_UNPACK_CONTINUE) {
+            EXPECT_GT(bytes, static_cast<size_t>(0));
+            continue;
+        }
+
+        while (ret == MSGPACK_UNPACK_SUCCESS) {
+            EXPECT_GT(bytes, static_cast<size_t>(0));
+            parsed += bytes;
+            ret = msgpack_unpacker_next_with_size(unp, &result, &bytes);
+        }
+
+    }
+
+    EXPECT_EQ(parsed, buffer->size);
+
+    msgpack_unpacked_destroy(&result);
+    msgpack_unpacker_free(unp);
     msgpack_sbuffer_free(buffer);
 }

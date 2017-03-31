@@ -1,4 +1,4 @@
-#include <msgpack_fwd.hpp>
+#include <msgpack.hpp>
 #include <gtest/gtest.h>
 #include <cmath>
 
@@ -38,9 +38,6 @@ MSGPACK_ADD_ENUM(outer_enum_class::enum_class_test);
 
 #endif // !defined(MSGPACK_USE_CPP03)
 
-
-
-#include <msgpack.hpp>
 
 
 using namespace std;
@@ -150,7 +147,7 @@ TEST(object_with_zone, unsigned_int)
     msgpack::object obj(v, z);
     EXPECT_EQ(obj.as<unsigned int>(), v);
     v = 2;
-    EXPECT_EQ(obj.as<unsigned int>(), 1);
+    EXPECT_EQ(obj.as<unsigned int>(), 1u);
 }
 
 TEST(object_with_zone, unsigned_long)
@@ -160,7 +157,7 @@ TEST(object_with_zone, unsigned_long)
     msgpack::object obj(v, z);
     EXPECT_EQ(obj.as<unsigned long>(), v);
     v = 2;
-    EXPECT_EQ(obj.as<unsigned long>(), 1);
+    EXPECT_EQ(obj.as<unsigned long>(), 1u);
 }
 
 TEST(object_with_zone, unsigned_long_long)
@@ -170,7 +167,7 @@ TEST(object_with_zone, unsigned_long_long)
     msgpack::object obj(v, z);
     EXPECT_EQ(obj.as<unsigned long long>(), v);
     v = 2;
-    EXPECT_EQ(obj.as<unsigned long long>(), 1);
+    EXPECT_EQ(obj.as<unsigned long long>(), 1u);
 }
 
 // float
@@ -179,6 +176,7 @@ TEST(object_with_zone, float)
     float v = 1.23f;
     msgpack::zone z;
     msgpack::object obj(v, z);
+    EXPECT_EQ(obj.type, msgpack::type::FLOAT32);
     EXPECT_TRUE(fabs(obj.as<float>() - v) <= kEPS);
     v = 4.56f;
     EXPECT_TRUE(fabs(obj.as<float>() - static_cast<float>(1.23)) <= kEPS);
@@ -190,6 +188,7 @@ TEST(object_with_zone, double)
     double v = 1.23;
     msgpack::zone z;
     msgpack::object obj(v, z);
+    EXPECT_EQ(obj.type, msgpack::type::FLOAT64);
     EXPECT_TRUE(fabs(obj.as<double>() - v) <= kEPS);
     v = 4.56;
     EXPECT_TRUE(fabs(obj.as<double>() - 1.23) <= kEPS);
@@ -206,7 +205,7 @@ TEST(object_with_zone, vector)
             v1.push_back(i);
         msgpack::zone z;
         msgpack::object obj(v1, z);
-        EXPECT_EQ(obj.as<vector<int> >(), v1);
+        EXPECT_TRUE(obj.as<vector<int> >() == v1);
         v1.front() = 42;
         EXPECT_EQ(obj.as<vector<int> >().front(), 1);
     }
@@ -222,7 +221,7 @@ TEST(object_with_zone, vector_char)
             v1.push_back(static_cast<char>(i));
         msgpack::zone z;
         msgpack::object obj(v1, z);
-        EXPECT_EQ(obj.as<vector<char> >(), v1);
+        EXPECT_TRUE(obj.as<vector<char> >() == v1);
         v1.front() = 42;
         EXPECT_EQ(obj.as<vector<char> >().front(), 1);
     }
@@ -236,10 +235,43 @@ TEST(object_without_zone, vector_char)
         for (unsigned int i = 1; i < kElements; i++)
             v1.push_back(static_cast<char>(i));
         msgpack::object obj(v1);
-        EXPECT_EQ(obj.as<vector<char> >(), v1);
+        EXPECT_TRUE(obj.as<vector<char> >() == v1);
         v1.front() = 42;
         // obj refer to v1
         EXPECT_EQ(obj.as<vector<char> >().front(), 42);
+    }
+}
+
+// vector_unsgined_char
+TEST(object_with_zone, vector_unsigned_char)
+{
+    if (!msgpack::is_same<uint8_t, unsigned char>::value) return;
+    for (unsigned int k = 0; k < kLoop; k++) {
+        vector<unsigned char> v1;
+        v1.push_back(1);
+        for (unsigned int i = 1; i < kElements; i++)
+            v1.push_back(static_cast<unsigned char>(i));
+        msgpack::zone z;
+        msgpack::object obj(v1, z);
+        EXPECT_TRUE(obj.as<vector<unsigned char> >() == v1);
+        v1.front() = 42;
+        EXPECT_EQ(obj.as<vector<unsigned char> >().front(), 1);
+    }
+}
+
+TEST(object_without_zone, vector_unsigned_char)
+{
+    if (!msgpack::is_same<uint8_t, unsigned char>::value) return;
+    for (unsigned int k = 0; k < kLoop; k++) {
+        vector<unsigned char> v1;
+        v1.push_back(1);
+        for (unsigned int i = 1; i < kElements; i++)
+            v1.push_back(static_cast<unsigned char>(i));
+        msgpack::object obj(v1);
+        EXPECT_TRUE(obj.as<vector<unsigned char> >() == v1);
+        v1.front() = 42;
+        // obj refer to v1
+        EXPECT_EQ(obj.as<vector<unsigned char> >().front(), 42);
     }
 }
 
@@ -253,7 +285,7 @@ TEST(object_with_zone, list)
             v1.push_back(i);
         msgpack::zone z;
         msgpack::object obj(v1, z);
-        EXPECT_EQ(obj.as<list<int> >(), v1);
+        EXPECT_TRUE(obj.as<list<int> >() == v1);
         v1.front() = 42;
         EXPECT_EQ(obj.as<list<int> >().front(), 1);
     }
@@ -269,7 +301,7 @@ TEST(object_with_zone, deque)
             v1.push_back(i);
         msgpack::zone z;
         msgpack::object obj(v1, z);
-        EXPECT_EQ(obj.as<deque<int> >(), v1);
+        EXPECT_TRUE(obj.as<deque<int> >() == v1);
         v1.front() = 42;
         EXPECT_EQ(obj.as<deque<int> >().front(), 1);
     }
@@ -286,6 +318,8 @@ TEST(object_with_zone, string)
     EXPECT_EQ(obj.as<string>()[0], 'a');
 }
 
+#if MSGPACK_DEFAULT_API_VERSION == 1
+
 TEST(object_without_zone, string)
 {
     string v = "abc";
@@ -295,6 +329,8 @@ TEST(object_without_zone, string)
     v[0] = 'd';
     EXPECT_EQ(obj.as<string>()[0], 'd');
 }
+
+#endif // MSGPACK_DEFAULT_API_VERSION == 1
 
 // char*
 TEST(object_with_zone, char_ptr)
@@ -307,6 +343,8 @@ TEST(object_with_zone, char_ptr)
     EXPECT_EQ(obj.as<string>()[0], 'a');
 }
 
+#if MSGPACK_DEFAULT_API_VERSION == 1
+
 TEST(object_without_zone, char_ptr)
 {
     char v[] = "abc";
@@ -317,6 +355,7 @@ TEST(object_without_zone, char_ptr)
     EXPECT_EQ(obj.as<string>()[0], 'd');
 }
 
+#endif // MSGPACK_DEFAULT_API_VERSION == 1
 
 // raw_ref
 TEST(object_with_zone, raw_ref)
@@ -325,12 +364,12 @@ TEST(object_with_zone, raw_ref)
     msgpack::type::raw_ref v(s.data(), static_cast<uint32_t>(s.size()));
     msgpack::zone z;
     msgpack::object obj(v, z);
-    EXPECT_EQ(obj.as<msgpack::type::raw_ref>(), v);
+    EXPECT_TRUE(obj.as<msgpack::type::raw_ref>() == v);
     s[0] = 'd';
     // even if with_zone, not copied due to raw_ref
     // Basically, the combination raw_ref and object::wit_zone
     // is meaningless.
-    EXPECT_EQ(obj.as<msgpack::type::raw_ref>(), v);
+    EXPECT_TRUE(obj.as<msgpack::type::raw_ref>() == v);
 }
 
 TEST(object_without_zone, raw_ref)
@@ -339,9 +378,9 @@ TEST(object_without_zone, raw_ref)
     msgpack::type::raw_ref v(s.data(), static_cast<uint32_t>(s.size()));
     msgpack::zone z;
     msgpack::object obj(v);
-    EXPECT_EQ(obj.as<msgpack::type::raw_ref>(), v);
+    EXPECT_TRUE(obj.as<msgpack::type::raw_ref>() == v);
     s[0] = 'd';
-    EXPECT_EQ(obj.as<msgpack::type::raw_ref>(), v);
+    EXPECT_TRUE(obj.as<msgpack::type::raw_ref>() == v);
 }
 
 // pair
@@ -351,7 +390,7 @@ TEST(object_with_zone, pair)
     test_t v(1, "abc");
     msgpack::zone z;
     msgpack::object obj(v, z);
-    EXPECT_EQ(obj.as<test_t>(), v);
+    EXPECT_TRUE(obj.as<test_t>() == v);
     v.first = 42;
     EXPECT_EQ(obj.as<test_t>().first, 1);
 }
@@ -365,7 +404,7 @@ TEST(object_with_zone, set)
             v1.insert(i);
         msgpack::zone z;
         msgpack::object obj(v1, z);
-        EXPECT_EQ(obj.as<set<int> >(), v1);
+        EXPECT_TRUE(obj.as<set<int> >() == v1);
     }
 }
 
@@ -378,7 +417,7 @@ TEST(object_with_zone, multiset)
             v1.insert(i % (kElements / 2));
         msgpack::zone z;
         msgpack::object obj(v1, z);
-        EXPECT_EQ(obj.as<multiset<int> >(), v1);
+        EXPECT_TRUE(obj.as<multiset<int> >() == v1);
     }
 }
 
@@ -392,7 +431,7 @@ TEST(object_with_zone, map)
             v1.insert(std::make_pair(i, i*2));
         msgpack::zone z;
         msgpack::object obj(v1, z);
-        EXPECT_EQ(obj.as<test_t >(), v1);
+        EXPECT_TRUE(obj.as<test_t >() == v1);
     }
 }
 
@@ -406,7 +445,7 @@ TEST(object_with_zone, multimap)
             v1.insert(std::make_pair(i % (kElements / 2), i*2));
         msgpack::zone z;
         msgpack::object obj(v1, z);
-        EXPECT_EQ(obj.as<test_t >(), v1);
+        EXPECT_TRUE(obj.as<test_t >() == v1);
     }
 }
 
@@ -430,7 +469,7 @@ TEST(object_with_zone, msgpack_tuple_empty)
     test_t v;
     msgpack::zone z;
     msgpack::object obj(v, z);
-    EXPECT_EQ(obj.via.array.size, 0);
+    EXPECT_EQ(obj.via.array.size, 0u);
 }
 
 // TR1
@@ -657,7 +696,7 @@ TEST(object_with_zone, construct_enum)
     msgpack::zone z;
     msgpack::object obj(elem, z);
     EXPECT_EQ(msgpack::type::POSITIVE_INTEGER, obj.type);
-    EXPECT_EQ(elem, obj.via.u64);
+    EXPECT_EQ(static_cast<uint64_t>(elem), obj.via.u64);
 }
 
 #if !defined(MSGPACK_USE_CPP03)
@@ -677,7 +716,98 @@ TEST(object_with_zone, construct_enum_outer)
     msgpack::zone z;
     msgpack::object obj(outer_enum::elem, z);
     EXPECT_EQ(msgpack::type::POSITIVE_INTEGER, obj.type);
-    EXPECT_EQ(elem, obj.via.u64);
+    EXPECT_EQ(static_cast<uint64_t>(elem), obj.via.u64);
+}
+
+// User defined inheriting classes
+struct top {
+    int t;
+    MSGPACK_DEFINE(t);
+};
+
+struct mid1 : top {
+    int m1;
+    MSGPACK_DEFINE(MSGPACK_BASE(top), m1);
+};
+
+struct mid2 : top {
+    int m2;
+    MSGPACK_DEFINE(m2, MSGPACK_BASE(top));
+};
+
+struct bottom : mid1, mid2 {
+    int b;
+    MSGPACK_DEFINE(MSGPACK_BASE(mid1), MSGPACK_BASE(mid2), b);
+};
+
+TEST(object_with_zone, user_defined_non_virtual)
+{
+    bottom b;
+    b.b = 1;
+    b.m1 = 2;
+    b.m2 = 3;
+    b.mid1::t = 4;
+    b.mid2::t = 5;
+
+    msgpack::zone z;
+    msgpack::object obj(b, z);
+#if (__GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 6)) && !defined(__clang__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
+#endif // (__GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 6)) && !defined(__clang__)
+    bottom br = obj.as<bottom>();
+#if (__GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 6)) && !defined(__clang__)
+#pragma GCC diagnostic pop
+#endif // (__GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 6)) && !defined(__clang__)
+    EXPECT_EQ(b.b, br.b);
+    EXPECT_EQ(b.m1, br.m1);
+    EXPECT_EQ(b.m2, br.m2);
+    EXPECT_EQ(b.mid1::t, br.mid1::t);
+    EXPECT_EQ(b.mid2::t, br.mid2::t);
+}
+
+struct v_top {
+    int t;
+    MSGPACK_DEFINE(t);
+};
+
+struct v_mid1 : virtual v_top {
+    int m1;
+    MSGPACK_DEFINE(m1);
+};
+
+struct v_mid2 : virtual v_top {
+    int m2;
+    MSGPACK_DEFINE(m2);
+};
+
+struct v_bottom : v_mid1, v_mid2 {
+    int b;
+    MSGPACK_DEFINE(MSGPACK_BASE(v_mid1), MSGPACK_BASE(v_mid2), MSGPACK_BASE(v_top), b);
+};
+
+TEST(object_with_zone, user_defined_virtual)
+{
+    v_bottom b;
+    b.b = 1;
+    b.m1 = 2;
+    b.m2 = 3;
+    b.t = 4;
+
+    msgpack::zone z;
+    msgpack::object obj(b, z);
+#if (__GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 6)) && !defined(__clang__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
+#endif // (__GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 6)) && !defined(__clang__)
+    v_bottom br = obj.as<v_bottom>();
+#if (__GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 6)) && !defined(__clang__)
+#pragma GCC diagnostic pop
+#endif // (__GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 6)) && !defined(__clang__)
+    EXPECT_EQ(b.b, br.b);
+    EXPECT_EQ(b.m1, br.m1);
+    EXPECT_EQ(b.m2, br.m2);
+    EXPECT_EQ(b.t, br.t);
 }
 
 #if !defined(MSGPACK_USE_CPP03)
@@ -718,7 +848,7 @@ TEST(object_with_zone, array)
             v1[i] = rand();
         msgpack::zone z;
         msgpack::object obj(v1, z);
-        EXPECT_EQ(obj.as<test_t>(), v1);
+        EXPECT_TRUE(obj.as<test_t>() == v1);
         v1.front() = 42;
         EXPECT_EQ(obj.as<test_t>().front(), 1);
     }
@@ -734,7 +864,7 @@ TEST(object_with_zone, array_char)
             v1[i] = rand();
         msgpack::zone z;
         msgpack::object obj(v1, z);
-        EXPECT_EQ(obj.as<test_t>(), v1);
+        EXPECT_TRUE(obj.as<test_t>() == v1);
         v1.front() = 42;
         EXPECT_EQ(obj.as<test_t>().front(), 1);
     }
@@ -749,7 +879,41 @@ TEST(object_without_zone, array_char)
         for (unsigned int i = 1; i < kElements; i++)
             v1[i] = rand();
         msgpack::object obj(v1);
-        EXPECT_EQ(obj.as<test_t>(), v1);
+        EXPECT_TRUE(obj.as<test_t>() == v1);
+        v1.front() = 42;
+        // obj refer to v1
+        EXPECT_EQ(obj.as<test_t>().front(), 42);
+    }
+}
+
+TEST(object_with_zone, array_unsigned_char)
+{
+    if (!msgpack::is_same<uint8_t, unsigned char>::value) return;
+    typedef array<unsigned char, kElements> test_t;
+    for (unsigned int k = 0; k < kLoop; k++) {
+        test_t v1;
+        v1[0] = 1;
+        for (unsigned int i = 1; i < kElements; i++)
+            v1[i] = rand();
+        msgpack::zone z;
+        msgpack::object obj(v1, z);
+        EXPECT_TRUE(obj.as<test_t>() == v1);
+        v1.front() = 42;
+        EXPECT_EQ(obj.as<test_t>().front(), 1);
+    }
+}
+
+TEST(object_without_zone, array_unsigned_char)
+{
+    if (!msgpack::is_same<uint8_t, unsigned char>::value) return;
+    typedef array<unsigned char, kElements> test_t;
+    for (unsigned int k = 0; k < kLoop; k++) {
+        test_t v1;
+        v1[0] = 1;
+        for (unsigned int i = 1; i < kElements; i++)
+            v1[i] = rand();
+        msgpack::object obj(v1);
+        EXPECT_TRUE(obj.as<test_t>() == v1);
         v1.front() = 42;
         // obj refer to v1
         EXPECT_EQ(obj.as<test_t>().front(), 42);
@@ -765,9 +929,9 @@ TEST(object_with_zone, forward_list)
             v1.push_front(i);
         msgpack::zone z;
         msgpack::object obj(v1, z);
-        EXPECT_EQ(obj.as<forward_list<int> >(), v1);
+        EXPECT_TRUE(obj.as<forward_list<int> >() == v1);
         v1.front() = 42;
-        EXPECT_EQ(obj.as<forward_list<int> >().front(), kElements - 1);
+        EXPECT_EQ(obj.as<forward_list<int> >().front(), static_cast<int>(kElements - 1));
     }
 }
 
@@ -777,7 +941,7 @@ TEST(object_with_zone, tuple)
     test_t v(1, "abc", true);
     msgpack::zone z;
     msgpack::object obj(v, z);
-    EXPECT_EQ(obj.as<test_t>(), v);
+    EXPECT_TRUE(obj.as<test_t>() == v);
 }
 
 TEST(object_with_zone, tuple_empty)
@@ -786,7 +950,55 @@ TEST(object_with_zone, tuple_empty)
     test_t v;
     msgpack::zone z;
     msgpack::object obj(v, z);
-    EXPECT_EQ(obj.as<test_t>(), v);
+    EXPECT_TRUE(obj.as<test_t>() == v);
 }
 
-#endif
+#endif // !defined(MSGPACK_USE_CPP03)
+
+TEST(object_with_zone, ext_empty)
+{
+    msgpack::type::ext v;
+    msgpack::zone z;
+    msgpack::object obj(v, z);
+    EXPECT_TRUE(obj.as<msgpack::type::ext>() == v);
+    EXPECT_TRUE(obj.as<msgpack::type::ext_ref>() == v);
+}
+
+TEST(object_with_zone, ext)
+{
+    msgpack::type::ext v(42, 10);
+    for (int i = 0; i < 10; ++i) v.data()[i] = i;
+    msgpack::zone z;
+    msgpack::object obj(v, z);
+    EXPECT_TRUE(obj.as<msgpack::type::ext>() == v);
+    EXPECT_TRUE(obj.as<msgpack::type::ext_ref>() == v);
+}
+
+TEST(object_with_zone, ext_from_buf)
+{
+    char const buf[] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
+    msgpack::type::ext v(42, buf, sizeof(buf));
+    msgpack::zone z;
+    msgpack::object obj(v, z);
+    EXPECT_TRUE(obj.as<msgpack::type::ext>() == v);
+    EXPECT_TRUE(obj.as<msgpack::type::ext_ref>() == v);
+}
+
+TEST(object_with_zone, ext_ref_empty)
+{
+    msgpack::type::ext_ref v;
+    msgpack::zone z;
+    msgpack::object obj(v, z);
+    EXPECT_TRUE(obj.as<msgpack::type::ext>() == v);
+    EXPECT_TRUE(obj.as<msgpack::type::ext_ref>() == v);
+}
+
+TEST(object_with_zone, ext_ref_from_buf)
+{
+    char const buf[] = { 77, 1, 2, 3, 4, 5, 6, 7, 8, 9};
+    msgpack::type::ext_ref v(buf, sizeof(buf));
+    msgpack::zone z;
+    msgpack::object obj(v, z);
+    EXPECT_TRUE(obj.as<msgpack::type::ext>() == v);
+    EXPECT_TRUE(obj.as<msgpack::type::ext_ref>() == v);
+}

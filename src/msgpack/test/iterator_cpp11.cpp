@@ -26,13 +26,13 @@ TEST(iterator, vector)
     msgpack::sbuffer sbuf;
     msgpack::pack(sbuf, vec);
 
-    msgpack::unpacked ret;
-    msgpack::unpack(ret, sbuf.data(), sbuf.size());
+    msgpack::object_handle oh =
+        msgpack::unpack(sbuf.data(), sbuf.size());
 
-    auto const& msgarr = ret.get().via.array;
+    auto const& msgarr = oh.get().via.array;
     auto dist = std::distance(begin(msgarr), end(msgarr));
     auto vecSize = vec.size();
-    EXPECT_EQ(dist, vecSize);
+    EXPECT_EQ(static_cast<size_t>(dist), vecSize);
 
     vec_type::const_iterator correct = std::begin(vec);
     for (auto const& obj : msgarr) {
@@ -52,13 +52,13 @@ TEST(iterator, map)
     msgpack::sbuffer sbuf;
     msgpack::pack(sbuf, map);
 
-    msgpack::unpacked ret;
-    msgpack::unpack(ret, sbuf.data(), sbuf.size());
+    msgpack::object_handle oh =
+        msgpack::unpack(sbuf.data(), sbuf.size());
 
-    auto const& msgmap = ret.get().via.map;
+    auto const& msgmap = oh.get().via.map;
     auto dist = std::distance(begin(msgmap), end(msgmap));
     auto mapSize = map.size();
-    EXPECT_EQ(dist, mapSize);
+    EXPECT_EQ(static_cast<size_t>(dist), mapSize);
 
     for (auto const& kv : msgmap) {
         auto key = kv.key.as<unsigned int>();

@@ -16,22 +16,14 @@ then
     exit $ret
 fi
 
-if [ $1 = "cpp11" ]
+if [ "${ARCH}" == "32" ]
 then
-    if [ $2 = "32" ]
-    then
-        cmake -DMSGPACK_CXX11=ON -DMSGPACK_32BIT=ON ..
-    else
-        cmake -DMSGPACK_CXX11=ON ..
-    fi
+    export BIT32="ON"
 else
-    if [ $2 = "32" ]
-    then
-        cmake -DMSGPACK_32BIT=ON ..
-    else
-        cmake ..
-    fi
+    export BIT32="OFF"
 fi
+
+cmake -DMSGPACK_CXX11=${CXX11} -DMSGPACK_32BIT=${BIT32} -DMSGPACK_BOOST=${BOOST} -DMSGPACK_ENABLE_SHARED=${SHARED} -DMSGPACK_CHAR_SIGN=${CHAR_SIGN} -DMSGPACK_DEFAULT_API_VERSION=${API_VERSION} -DMSGPACK_USE_X3_PARSE=${X3_PARSE} ..
 
 ret=$?
 if [ $ret -ne 0 ]
@@ -63,7 +55,7 @@ then
     exit $ret
 fi
 
-if [ $2 != "32" ]
+if [ "${ARCH}" != "32" ] && [ `uname` = "Linux" ]
 then
     ctest -T memcheck | tee memcheck.log
 
