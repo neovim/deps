@@ -1,6 +1,5 @@
 --- Module implementing the LuaRocks "install" command.
 -- Installs binary rocks.
---module("luarocks.install", package.seeall)
 local install = {}
 package.loaded["luarocks.install"] = install
 
@@ -14,6 +13,7 @@ local manif = require("luarocks.manif")
 local remove = require("luarocks.remove")
 local cfg = require("luarocks.cfg")
 
+util.add_run_function(install)
 install.help_summary = "Install a rock."
 
 install.help_arguments = "{<rock>|<name> [<version>]}"
@@ -50,7 +50,7 @@ function install.install_binary_rock(rock_file, deps_mode)
       return nil, "Incompatible architecture "..arch, "arch"
    end
    if repos.is_installed(name, version) then
-      repos.delete_version(name, version)
+      repos.delete_version(name, version, deps_mode)
    end
    
    local rollback = util.schedule_function(function()
@@ -84,29 +84,18 @@ function install.install_binary_rock(rock_file, deps_mode)
       if err then return nil, err, errcode end
    end
 
-   ok, err = repos.deploy_files(name, version, repos.should_wrap_bin_scripts(rockspec))
+   ok, err = repos.deploy_files(name, version, repos.should_wrap_bin_scripts(rockspec), deps_mode)
    if err then return nil, err end
 
    util.remove_scheduled_function(rollback)
    rollback = util.schedule_function(function()
-      repos.delete_version(name, version)
+      repos.delete_version(name, version, deps_mode)
    end)
 
    ok, err = repos.run_hook(rockspec, "post_install")
    if err then return nil, err end
-   
-   ok, err = manif.update_manifest(name, version, nil, deps_mode)
-   if err then return nil, err end
-   
-   local license = ""
-   if rockspec.description.license then
-      license = ("(license: "..rockspec.description.license..")")
-   end
 
-   local root_dir = path.root_dir(cfg.rocks_dir)
-   util.printout()
-   util.printout(name.." "..version.." is now installed in "..root_dir.." "..license)
-   
+   util.announce_install(rockspec)
    util.remove_scheduled_function(rollback)
    return name, version
 end
@@ -143,7 +132,7 @@ function install.install_binary_rock_deps(rock_file, deps_mode)
    if err then return nil, err, errcode end
 
    util.printout()
-   util.printout("Succesfully installed dependencies for " ..name.." "..version)
+   util.printout("Successfully installed dependencies for " ..name.." "..version)
 
    return name, version
 end
@@ -158,8 +147,7 @@ end
 -- may also be given.
 -- @return boolean or (nil, string, exitcode): True if installation was
 -- successful, nil and an error message otherwise. exitcode is optionally returned.
-function install.run(...)
-   local flags, name, version = util.parse_flags(...)
+function install.command(flags, name, version)
    if type(name) ~= "string" then
       return nil, "Argument missing. "..util.see_help("install")
    end
@@ -168,9 +156,8 @@ function install.run(...)
    if not ok then return nil, err, cfg.errorcodes.PERMISSIONDENIED end
 
    if name:match("%.rockspec$") or name:match("%.src%.rock$") then
-      util.printout("Using "..name.."... switching to 'build' mode")
       local build = require("luarocks.build")
-      return build.run(name, util.forward_flags(flags, "local", "keep", "deps-mode", "only-deps"))
+      return build.command(flags, name)
    elseif name:match("%.rock$") then
       if flags["only-deps"] then
          ok, err = install.install_binary_rock_deps(name, deps.get_deps_mode(flags))
@@ -178,28 +165,23 @@ function install.run(...)
          ok, err = install.install_binary_rock(name, deps.get_deps_mode(flags))
       end
       if not ok then return nil, err end
-      local name, version = ok, err
+      name, version = ok, err
+
       if (not flags["only-deps"]) and (not flags["keep"]) and not cfg.keep_other_versions then
-         local ok, err = remove.remove_other_versions(name, version, flags["force"])
+         local ok, err = remove.remove_other_versions(name, version, flags["force"], flags["force-fast"])
          if not ok then util.printerr(err) end
       end
+
+      manif.check_dependencies(nil, deps.get_deps_mode(flags))
       return name, version
    else
       local search = require("luarocks.search")
-      local results, err = search.find_suitable_rock(search.make_query(name:lower(), version))
-      if err then
+      local url, err = search.find_suitable_rock(search.make_query(name:lower(), version))
+      if not url then
          return nil, err
-      elseif type(results) == "string" then
-         local url = results
-         util.printout("Installing "..url.."...")
-         return install.run(url, util.forward_flags(flags))
-      else
-         util.printout()
-         util.printerr("Could not determine which rock to install.")
-         util.title("Search results:")
-         search.print_results(results)
-         return nil, (next(results) and "Please narrow your query." or "No results found.")
       end
+      util.printout("Installing "..url)
+      return install.command(flags, url)
    end
 end
 

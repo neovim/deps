@@ -10,11 +10,11 @@ local multipart = require("luarocks.upload.multipart")
 local Api = {}
 
 local function upload_config_file()
-   local _, _, home_conf, home_ok = cfg.which_config()
-   if not home_conf then
+   local conf = cfg.which_config()
+   if not conf.user.file then
       return nil
    end
-   return (home_conf:gsub("/[^/]+$", "/upload_config.lua"))
+   return (conf.user.file:gsub("/[^/]+$", "/upload_config.lua"))
 end
 
 function Api:load_config()
@@ -106,13 +106,23 @@ end
 
 -- An ode to the multitude of JSON libraries out there...
 local function require_json()
-   for _, lib in ipairs({ "cjson", "dkjson", "json" }) do
+   local list = { "cjson", "dkjson", "json" }
+   for _, lib in ipairs(list) do
       local json_ok, json = pcall(require, lib)
       if json_ok then
+         pcall(json.use_lpeg) -- optional feature in dkjson
          return json_ok, json
       end
    end
-   return nil
+   local errmsg = "Failed loading "
+   for i, name in ipairs(list) do
+      if i == #list then
+         errmsg = errmsg .."and '"..name.."'. Use 'luarocks search <partial-name>' to search for a library and 'luarocks install <name>' to install one."
+      else
+         errmsg = errmsg .."'"..name.."', "
+      end
+   end
+   return nil, errmsg
 end
 
 local function redact_api_url(url)
@@ -126,20 +136,18 @@ if not ltn12_ok then -- If not using LuaSocket and/or LuaSec...
 function Api:request(url, params, post_params)
    local vars = cfg.variables
    local json_ok, json = require_json()
-   if not json_ok then return nil, "A JSON library is required for this command." end
+   if not json_ok then return nil, "A JSON library is required for this command. "..json end
    
    if cfg.downloader == "wget" then
-      local curl_ok = fs.execute_quiet(vars.CURL, "--version")
+      local curl_ok, err = fs.is_tool_available(vars.CURL, "curl")
       if not curl_ok then
-         return nil, "Missing network helper program 'curl'.\nMake sure 'curl' is installed and available from your path."
+         return nil, err
       end
    end
 
    if not self.config.key then
       return nil, "Must have API key before performing any actions."
    end
-   local body
-   local headers = {}
    if params and next(params) then
       url = url .. ("?" .. encode_query_string(params))
    end
@@ -192,7 +200,7 @@ local warned_luasec = false
 
 function Api:request(url, params, post_params)
    local json_ok, json = require_json()
-   if not json_ok then return nil, "A JSON library is required for this command." end
+   if not json_ok then return nil, "A JSON library is required for this command. "..json end
    local server = tostring(self.config.server)
    local http_ok, http
    local via = "luasocket"
@@ -206,7 +214,6 @@ function Api:request(url, params, post_params)
             warned_luasec = true
          end
          http_ok, http = pcall(require, "socket.http")
-         server = server:gsub("^https", "http")
          url = url:gsub("^https", "http")
          via = "luasocket"
       end
@@ -254,7 +261,7 @@ end
 
 end
 
-function api.new(flags, name)
+function api.new(flags)
    local self = {}
    setmetatable(self, { __index = Api })
    self.config = self:load_config() or {}

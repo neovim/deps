@@ -1,6 +1,5 @@
 
 --- Functions related to fetching and loading local and remote files.
---module("luarocks.fetch", package.seeall)
 local fetch = {}
 package.loaded["luarocks.fetch"] = fetch
 
@@ -37,11 +36,11 @@ function fetch.fetch_url(url, filename, cache)
    if protocol == "file" then
       return fs.absolute_name(pathname)
    elseif fetch.is_basic_protocol(protocol, true) then
-      local ok, filename = fs.download(url, filename, cache)
+      local ok, name = fs.download(url, filename, cache)
       if not ok then
          return nil, "Failed downloading "..url..(filename and " - "..filename or ""), "network"
       end
-      return filename
+      return name
    else
       return nil, "Unsupported protocol "..protocol
    end
@@ -170,8 +169,13 @@ function fetch.fetch_and_unpack_rock(rock_file, dest)
 end
 
 function fetch.url_to_base_dir(url)
+   -- for extensions like foo.tar.gz, "gz" is stripped first
+   local known_exts = {}
+   for _, ext in ipairs{"zip", "git", "tgz", "tar", "gz", "bz2"} do
+      known_exts[ext] = ""
+   end
    local base = dir.base_name(url)
-   return base:gsub("%.[^.]*$", ""):gsub("%.tar$", "")
+   return (base:gsub("%.([^.]*)$", known_exts):gsub("%.tar", ""))
 end
 
 --- Back-end function that actually loads the local rockspec.
@@ -193,16 +197,16 @@ function fetch.load_local_rockspec(filename, quick)
    end
    local globals = err
 
+   if rockspec.rockspec_format then
+      if deps.compare_versions(rockspec.rockspec_format, type_check.rockspec_format) then
+         return nil, "Rockspec format "..rockspec.rockspec_format.." is not supported, please upgrade LuaRocks."
+      end
+   end
+
    if not quick then
       local ok, err = type_check.type_check_rockspec(rockspec, globals)
       if not ok then
          return nil, filename..": "..err
-      end
-   end
-   
-   if rockspec.rockspec_format then
-      if deps.compare_versions(rockspec.rockspec_format, type_check.rockspec_format) then
-         return nil, "Rockspec format "..rockspec.rockspec_format.." is not supported, please upgrade LuaRocks."
       end
    end
 
@@ -340,7 +344,8 @@ function fetch.get_sources(rockspec, extract, dest_dir)
    if extract then
       local ok, err = fs.change_dir(store_dir)
       if not ok then return nil, err end
-      fs.unpack_archive(rockspec.source.file)
+      ok, err = fs.unpack_archive(rockspec.source.file)
+      if not ok then return nil, err end
       if not fs.exists(rockspec.source.dir) then
          return nil, "Directory "..rockspec.source.dir.." not found inside archive "..rockspec.source.file, "source.dir", source_file, store_dir
       end
@@ -366,7 +371,7 @@ function fetch.fetch_sources(rockspec, extract, dest_dir)
    local protocol = rockspec.source.protocol
    local ok, proto
    if fetch.is_basic_protocol(protocol) then
-      proto = require("luarocks.fetch")
+      proto = fetch
    else
       ok, proto = pcall(require, "luarocks.fetch."..protocol:gsub("[+-]", "_"))
       if not ok then

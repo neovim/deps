@@ -1,6 +1,5 @@
 
 --- Functions for command-line scripts.
---module("luarocks.command_line", package.seeall)
 local command_line = {}
 
 local unpack = unpack or table.unpack
@@ -14,29 +13,30 @@ local fs = require("luarocks.fs")
 
 local program = util.this_program("luarocks")
 
+local function error_handler(err)
+   return debug.traceback("LuaRocks "..cfg.program_version..
+      " bug (please report at https://github.com/keplerproject/luarocks/issues).\n"..err, 2)
+end
+
 --- Display an error message and exit.
 -- @param message string: The error message.
 -- @param exitcode number: the exitcode to use
 local function die(message, exitcode)
    assert(type(message) == "string")
-
-   local ok, err = pcall(util.run_scheduled_functions)
-   if not ok then
-      util.printerr("\nLuaRocks "..cfg.program_version.." internal bug (please report at https://github.com/keplerproject/luarocks/issues):\n"..err)
-   end
    util.printerr("\nError: "..message)
+
+   local ok, err = xpcall(util.run_scheduled_functions, error_handler)
+   if not ok then
+      util.printerr("\nError: "..err)
+      exitcode = cfg.errorcodes.CRASH
+   end
+
    os.exit(exitcode or cfg.errorcodes.UNSPECIFIED)
 end
 
-local function replace_tree(flags, args, tree)
+local function replace_tree(flags, tree)
    tree = dir.normalize(tree)
    flags["tree"] = tree
-   for i = 1, #args do
-      if args[i]:match("%-%-tree=") then
-         args[i] = "--tree="..tree
-         break
-      end
-   end
    path.use_tree(tree)
 end
 
@@ -74,7 +74,6 @@ function command_line.run_command(...)
    if flags["to"] then flags["tree"] = flags["to"] end
    if flags["nodeps"] then
       flags["deps-mode"] = "none"
-      table.insert(args, "--deps-mode=none")
    end
    
    cfg.flags = flags
@@ -102,23 +101,10 @@ function command_line.run_command(...)
       os.exit(cfg.errorcodes.OK)
    elseif flags["help"] or #nonflags == 0 then
       command = "help"
-      args = nonflags
    else
-      command = nonflags[1]
-      for i, arg in ipairs(args) do
-         if arg == command then
-            table.remove(args, i)
-            break
-         end
-      end
+      command = table.remove(nonflags, 1)
    end
    command = command:gsub("-", "_")
-
-   if flags["extensions"] then
-      cfg.use_extensions = true
-      local type_check = require("luarocks.type_check")
-      type_check.load_extensions()
-   end
    
    if cfg.local_by_default then
       flags["local"] = true
@@ -139,15 +125,14 @@ function command_line.run_command(...)
             if not tree.root then
                die("Configuration error: tree '"..tree.name.."' has no 'root' field.")
             end
-            replace_tree(flags, args, tree.root)
+            replace_tree(flags, tree.root)
             named = true
             break
          end
       end
       if not named then
-         local fs = require("luarocks.fs")
          local root_dir = fs.absolute_name(flags["tree"])
-         replace_tree(flags, args, root_dir)
+         replace_tree(flags, root_dir)
       end
    elseif flags["local"] then
       if not cfg.home_tree then
@@ -155,7 +140,7 @@ function command_line.run_command(...)
              "You are running as a superuser, which is intended for system-wide operation.\n"..
              "To force using the superuser's home, use --tree explicitly.")
       end
-      replace_tree(flags, args, cfg.home_tree)
+      replace_tree(flags, cfg.home_tree)
    else
       local trees = cfg.rocks_trees
       path.use_tree(trees[#trees])
@@ -198,19 +183,11 @@ function command_line.run_command(...)
    end
    
    if commands[command] then
-      -- TODO the interface of run should be modified, to receive the
-      -- flags table and the (possibly unpacked) nonflags arguments.
-      -- This would remove redundant parsing of arguments.
-      -- I'm not changing this now to avoid messing with the run()
-      -- interface, which I know some people use (even though
-      -- I never published it as a public API...)
       local cmd = require(commands[command])
-      local xp, ok, err, exitcode = xpcall(function() return cmd.run(unpack(args)) end, function(err)
-         die(debug.traceback("LuaRocks "..cfg.program_version
-            .." bug (please report at https://github.com/keplerproject/luarocks/issues).\n"
-            ..err, 2), cfg.errorcodes.CRASH)
-      end)
-      if xp and (not ok) then
+      local call_ok, ok, err, exitcode = xpcall(function() return cmd.command(flags, unpack(nonflags)) end, error_handler)
+      if not call_ok then
+         die(ok, cfg.errorcodes.CRASH)
+      elseif not ok then
          die(err, exitcode)
       end
    else

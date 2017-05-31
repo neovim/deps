@@ -1,6 +1,5 @@
 --- Module implementing the LuaRocks "show" command.
 -- Shows information about an installed rock.
---module("luarocks.show", package.seeall)
 local show = {}
 package.loaded["luarocks.show"] = show
 
@@ -11,7 +10,9 @@ local path = require("luarocks.path")
 local deps = require("luarocks.deps")
 local fetch = require("luarocks.fetch")
 local manif = require("luarocks.manif")
-show.help_summary = "Shows information about an installed rock."
+
+util.add_run_function(show)
+show.help_summary = "Show information about an installed rock."
 
 show.help = [[
 <argument> is an existing package name.
@@ -28,7 +29,9 @@ With these flags, return only the desired information:
 ]]
 
 local function keys_as_string(t, sep)
-    return table.concat(util.keys(t), sep or " ")
+   local keys = util.keys(t)
+   table.sort(keys)
+   return table.concat(keys, sep or " ")
 end
 
 local function word_wrap(line) 
@@ -55,51 +58,27 @@ local function format_text(text)
    return (table.concat(paragraphs, "\n\n"):gsub("%s$", ""))
 end
 
-function show.pick_installed_rock(name, version, tree)
-   local results = {}
-   local query = search.make_query(name, version)
-   query.exact_name = true
-   local tree_map = {}
-   local trees = cfg.rocks_trees
-   if tree then
-      trees = { tree }
+local function installed_rock_label(name, tree)
+   local installed, version
+   if cfg.rocks_provided[name] then
+      installed, version = true, cfg.rocks_provided[name]
+   else
+      installed, version = search.pick_installed_rock(name, nil, tree)
    end
-   for _, tree in ipairs(trees) do
-      local rocks_dir = path.rocks_dir(tree)
-      tree_map[rocks_dir] = tree
-      search.manifest_search(results, rocks_dir, query)
-   end
-
-   if not next(results) then --
-      return nil,"cannot find package "..name.." "..(version or "").."\nUse 'list' to find installed rocks."
-   end
-
-   version = nil
-   local repo_url
-   local package, versions = util.sortedpairs(results)()
-   --question: what do we do about multiple versions? This should
-   --give us the latest version on the last repo (which is usually the global one)
-   for vs, repositories in util.sortedpairs(versions, deps.compare_versions) do
-      if not version then version = vs end
-      for _, rp in ipairs(repositories) do repo_url = rp.repo end
-   end
-
-   local repo = tree_map[repo_url]
-   return name, version, repo, repo_url
+   return installed and "(using "..version..")" or "(missing)"
 end
 
 --- Driver function for "show" command.
 -- @param name or nil: an existing package name.
 -- @param version string or nil: a version may also be passed.
 -- @return boolean: True if succeeded, nil on errors.
-function show.run(...)
-   local flags, name, version = util.parse_flags(...)
+function show.command(flags, name, version)
    if not name then
       return nil, "Argument missing. "..util.see_help("show")
    end
    
    local repo, repo_url
-   name, version, repo, repo_url = show.pick_installed_rock(name, version, flags["tree"])
+   name, version, repo, repo_url = search.pick_installed_rock(name:lower(), version, flags["tree"])
    if not name then
       return nil, version
    end
@@ -143,10 +122,26 @@ function show.run(...)
             util.printout("\t"..mod.." ("..path.which(mod, filename, name, version, repo, manifest)..")")
          end
       end
-      if next(minfo.dependencies) then
+      local direct_deps = {}
+      if #rockspec.dependencies > 0 then
          util.printout()
          util.printout("Depends on:")
-         util.printout("\t"..keys_as_string(minfo.dependencies, "\n\t"))
+         for _, dep in ipairs(rockspec.dependencies) do
+            direct_deps[dep.name] = true
+            util.printout("\t"..deps.show_dep(dep).." "..installed_rock_label(dep.name, flags["tree"]))
+         end
+      end
+      local has_indirect_deps
+      for dep_name in util.sortedpairs(minfo.dependencies) do
+         if not direct_deps[dep_name] then
+            if not has_indirect_deps then
+               util.printout()
+               util.printout("Indirectly pulling:")
+               has_indirect_deps = true
+            end
+
+            util.printout("\t"..dep_name.." "..installed_rock_label(dep_name, flags["tree"]))
+         end
       end
       util.printout()
    end

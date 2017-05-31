@@ -4,7 +4,6 @@
 -- uses a global table called "commands" to find commands
 -- to show help for; each command should be represented by a
 -- table containing "help" and "help_summary" fields.
---module("luarocks.help", package.seeall)
 local help = {}
 
 local util = require("luarocks.util")
@@ -13,6 +12,7 @@ local dir = require("luarocks.dir")
 
 local program = util.this_program("luarocks")
 
+util.add_run_function(help)
 help.help_summary = "Help on commands. Type '"..program.." help <command>' for more."
 
 help.help_arguments = "[<command>]"
@@ -41,9 +41,7 @@ end
 -- given, help summaries for all commands are shown.
 -- @return boolean or (nil, string): true if there were no errors
 -- or nil and an error message if an invalid command was requested.
-function help.run(...)
-   local flags, command = util.parse_flags(...)
-
+function help.command(flags, command)
    if not command then
       local conf = cfg.which_config()
       print_banner()
@@ -67,7 +65,7 @@ function help.run(...)
 	--verbose              Display verbose output of commands executed.
 	--timeout=<seconds>    Timeout on network operations, in seconds.
 	                       0 means no timeout (wait forever).
-	                       Default is ]]..cfg.connection_timeout..[[.]])
+	                       Default is ]]..tostring(cfg.connection_timeout)..[[.]])
       print_section("VARIABLES")
       util.printout([[
 	Variables from the "variables" table of the configuration file
@@ -111,7 +109,7 @@ function help.run(...)
          print_section("SEE ALSO")
          util.printout("","'"..program.." help' for general options and configuration.\n")
       else
-         return nil, "Unknown command '"..command.."'"
+         return nil, "Unknown command: "..command
       end
    end
    return true

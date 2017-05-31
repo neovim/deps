@@ -1,7 +1,6 @@
 
 --- Module implementing the luarocks "download" command.
 -- Download a rock from the repository.
---module("luarocks.download", package.seeall)
 local download = {}
 package.loaded["luarocks.download"] = download
 
@@ -11,7 +10,9 @@ local fetch = require("luarocks.fetch")
 local search = require("luarocks.search")
 local fs = require("luarocks.fs")
 local dir = require("luarocks.dir")
+local cfg = require("luarocks.cfg")
 
+util.add_run_function(download)
 download.help_summary = "Download a specific rock file from a rocks server."
 download.help_arguments = "[--all] [--arch=<arch> | --source | --rockspec] [<name> [<version>]]"
 
@@ -25,7 +26,7 @@ download.help = [[
 local function get_file(filename)
    local protocol, pathname = dir.split_url(filename)
    if protocol == "file" then
-      local ok, err = fs.copy(pathname, fs.current_dir())
+      local ok, err = fs.copy(pathname, fs.current_dir(), cfg.perm_read)
       if ok then
          return pathname
       else
@@ -37,25 +38,23 @@ local function get_file(filename)
 end
 
 function download.download(arch, name, version, all)
-   local results, err
    local query = search.make_query(name, version)
    if arch then query.arch = arch end
+   local search_err
+
    if all then
       if name == "" then query.exact_name = false end
-      results = search.search_repos(query)
-   else
-      results, err = search.find_suitable_rock(query)
-   end
-   if type(results) == "string" then
-      return get_file(results)
-   elseif type(results) == "table" and next(results) then
-      if all then
-         local all_ok = true
-         local any_err = ""
-         for name, result in pairs(results) do
-            for version, versions in pairs(result) do
-               for _,items in pairs(versions) do
-                  local filename = path.make_url(items.repo, name, version, items.arch)
+      local results = search.search_repos(query)
+      local has_result = false
+      local all_ok = true
+      local any_err = ""
+      for name, result in pairs(results) do
+         for version, items in pairs(result) do
+            for _, item in ipairs(items) do
+               -- Ignore provided rocks.
+               if item.arch ~= "installed" then
+                  has_result = true
+                  local filename = path.make_url(item.repo, name, version, item.arch)
                   local ok, err = get_file(filename)
                   if not ok then
                      all_ok = false
@@ -64,15 +63,20 @@ function download.download(arch, name, version, all)
                end
             end
          end
+      end
+
+      if has_result then
          return all_ok, any_err
-      else
-         util.printerr("Multiple search results were returned.")
-         util.title("Search results:")
-         search.print_results(results)
-         return nil, "Please narrow your query or use --all."
+      end
+   else
+      local url
+      url, search_err = search.find_suitable_rock(query)
+      if url then
+         return get_file(url)
       end
    end
-   return nil, "Could not find a result named "..name..(version and " "..version or "").."."
+   return nil, "Could not find a result named "..name..(version and " "..version or "")..
+      (search_err and ": "..search_err or ".")
 end
 
 --- Driver function for the "download" command.
@@ -81,12 +85,10 @@ end
 -- version may also be passed.
 -- @return boolean or (nil, string): true if successful or nil followed
 -- by an error message.
-function download.run(...)
-   local flags, name, version = util.parse_flags(...)
-   
+function download.command(flags, name, version)
    assert(type(version) == "string" or not version)
    if type(name) ~= "string" and not flags["all"] then
-      return nil, "Argument missing, see help."
+      return nil, "Argument missing. "..util.see_help("download")
    end
    if not name then name, version = "", "" end
 
@@ -100,7 +102,7 @@ function download.run(...)
       arch = flags["arch"]
    end
    
-   local dl, err = download.download(arch, name, version, flags["all"])
+   local dl, err = download.download(arch, name:lower(), version, flags["all"])
    return dl and true, err
 end
 

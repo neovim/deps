@@ -1,7 +1,6 @@
 --- Windows implementation of filesystem and platform abstractions.
 -- Download http://unxutils.sourceforge.net/ for Windows GNU utilities
 -- used by this module.
---module("luarocks.fs.win32", package.seeall)
 local win32 = {}
 
 local fs = require("luarocks.fs")
@@ -9,6 +8,8 @@ local fs = require("luarocks.fs")
 local cfg = require("luarocks.cfg")
 local dir = require("luarocks.dir")
 local util = require("luarocks.util")
+
+math.randomseed(os.time())
 
 -- Monkey patch io.popen and os.execute to make sure quoting
 -- works as expected.
@@ -18,7 +19,6 @@ local _popen, _execute = io.popen, os.execute
 io.popen = function(cmd, ...) return _popen(_prefix..cmd, ...) end
 os.execute = function(cmd, ...) return _execute(_prefix..cmd, ...) end
 
-
 --- Annotate command string for quiet execution.
 -- @param cmd string: A command-line string.
 -- @return string: The command-line, with silencing annotation.
@@ -26,18 +26,30 @@ function win32.quiet(cmd)
    return cmd.." 2> NUL 1> NUL"
 end
 
-
-local win_escape_chars = {
-  ["%"] = "%%",
-  ['"'] = '\\"',
-}
-
-local function q_escaper(bs, q)
-  return ("\\"):rep(2*#bs-1) .. (q or "\\")
+--- Annotate command string for execution with quiet stderr.
+-- @param cmd string: A command-line string.
+-- @return string: The command-line, with stderr silencing annotation.
+function win32.quiet_stderr(cmd)
+   return cmd.." 2> NUL"
 end
 
-local function p_escaper(bs)
-   return bs .. bs .. '"%"'
+-- Split path into root and the rest.
+-- Root part consists of an optional drive letter (e.g. "C:")
+-- and an optional directory separator.
+local function split_root(path)
+   local root = ""
+
+   if path:match("^.:") then
+      root = path:sub(1, 2)
+      path = path:sub(3)
+   end
+
+   if path:match("^[\\/]") then
+      root = path:sub(1, 1)
+      path = path:sub(2)
+   end
+
+   return root, path
 end
 
 --- Quote argument for shell processing. Fixes paths on Windows.
@@ -46,18 +58,19 @@ end
 -- @return string: Quoted argument.
 function win32.Q(arg)
    assert(type(arg) == "string")
-   -- Quote DIR for Windows
-   if arg:match("^[%.a-zA-Z]?:?[\\/]")  then
+   -- Use Windows-specific directory separator for paths.
+   -- Paths should be converted to absolute by now.
+   if split_root(arg) ~= "" then
       arg = arg:gsub("/", "\\")
    end
    if arg == "\\" then
       return '\\' -- CHDIR needs special handling for root dir
    end
-    -- URLs and anything else
-   arg = arg:gsub('(\\+)(")', q_escaper)
-   arg = arg:gsub('(\\+)$', q_escaper)
-   arg = arg:gsub('"', win_escape_chars)
-   arg = arg:gsub('(\\*)%%', p_escaper)
+   -- URLs and anything else
+   arg = arg:gsub('\\(\\*)"', '\\%1%1"')
+   arg = arg:gsub('\\+$', '%0%0')
+   arg = arg:gsub('"', '\\"')
+   arg = arg:gsub('(\\*)%%', '%1%1"%%"')
    return '"' .. arg .. '"'
 end
 
@@ -67,17 +80,19 @@ end
 -- @return string: Quoted argument.
 function win32.Qb(arg)
    assert(type(arg) == "string")
-   -- Quote DIR for Windows
-   if arg:match("^[%.a-zA-Z]?:?[\\/]")  then
+   -- Use Windows-specific directory separator for paths.
+   -- Paths should be converted to absolute by now.
+   if split_root(arg) ~= "" then
       arg = arg:gsub("/", "\\")
    end
    if arg == "\\" then
       return '\\' -- CHDIR needs special handling for root dir
    end
    -- URLs and anything else
-   arg = arg:gsub('(\\+)(")', q_escaper)
-   arg = arg:gsub('(\\+)$', q_escaper)
-   arg = arg:gsub('[%%"]', win_escape_chars)
+   arg = arg:gsub('\\(\\*)"', '\\%1%1"')
+   arg = arg:gsub('\\+$', '%0%0')
+   arg = arg:gsub('"', '\\"')
+   arg = arg:gsub('%%', '%%%%')
    return '"' .. arg .. '"'
 end
 
@@ -92,13 +107,23 @@ function win32.absolute_name(pathname, relative_to)
    assert(type(relative_to) == "string" or not relative_to)
 
    relative_to = relative_to or fs.current_dir()
-   -- FIXME I'm not sure this first \\ should be there at all.
-   -- What are the Windows rules for drive letters?
-   if pathname:match("^[\\.a-zA-Z]?:?[\\/]") then
+   local root, rest = split_root(pathname)
+   if root:match("[\\/]$") then
+      -- It's an absolute path already.
       return pathname
    else
-      return relative_to .. "/" .. pathname
+      -- It's a relative path, join it with base path.
+      -- This drops drive letter from paths like "C:foo".
+      return relative_to .. "/" .. rest
    end
+end
+
+--- Return the root directory for the given path.
+-- For example, for "c:\hello", returns "c:\"
+-- @param pathname string: pathname to use.
+-- @return string: The root of the given pathname.
+function win32.root_of(pathname)
+   return (split_root(fs.absolute_name(pathname)))
 end
 
 --- Create a wrapper to make a script executable from the command-line.
@@ -116,6 +141,8 @@ function win32.wrap_script(file, dest, name, version)
    local wrapname = fs.is_dir(dest) and dest.."/"..base or dest
    wrapname = wrapname..".bat"
    local lpath, lcpath = cfg.package_paths()
+   lpath = util.remove_path_dupes(lpath, ";")
+   lcpath = util.remove_path_dupes(lcpath, ";")
    local wrapper = io.open(wrapname, "w")
    if not wrapper then
       return nil, "Could not open "..wrapname.." for writing."
@@ -213,6 +240,23 @@ function win32.is_writable(file)
       if fh then fh:close() end
    end
    return result
+end
+
+--- Create a temporary directory.
+-- @param name string: name pattern to use for avoiding conflicts
+-- when creating temporary directory.
+-- @return string or (nil, string): name of temporary directory or (nil, error message) on failure.
+function win32.make_temp_dir(name)
+   assert(type(name) == "string")
+   name = dir.normalize(name)
+
+   local temp_dir = os.getenv("TMP") .. "/luarocks_" .. name:gsub(dir.separator, "_") .. "-" .. tostring(math.floor(math.random() * 10000))
+   local ok, err = fs.make_dir(temp_dir)
+   if ok then
+      return temp_dir
+   else
+      return nil, err
+   end
 end
 
 function win32.tmpname()

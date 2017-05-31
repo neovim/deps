@@ -6,8 +6,12 @@ local vars = {}
 
 
 vars.PREFIX = nil
-vars.VERSION = "2.2"
+vars.VERSION = "2.4"
 vars.SYSCONFDIR = nil
+vars.SYSCONFFORCE = nil
+vars.CONFBACKUPDIR = nil
+vars.SYSCONFFILENAME = nil
+vars.CONFIG_FILE = nil
 vars.TREE_ROOT = nil
 vars.TREE_BIN = nil
 vars.TREE_LMODULE = nil
@@ -20,21 +24,21 @@ vars.LUA_LIBDIR = nil
 vars.LUA_LIBNAME = nil
 vars.LUA_VERSION = "5.1"
 vars.LUA_SHORTV = nil   -- "51"
--- MinGW does not generate .lib, nor needs it to link, but MSVC does
--- so .lib must be listed first to ensure they are found first if present.
--- To prevent MSVC trying to link to a .dll, which won't work.
-vars.LUA_LIB_NAMES = "lua5.1.lib lua51.lib lua5.1.dll lua51.dll liblua.dll.a"
 vars.LUA_RUNTIME = nil
 vars.UNAME_M = nil
+vars.COMPILER_ENV_CMD = nil
 
 local FORCE = false
 local FORCE_CONFIG = false
 local INSTALL_LUA = false
 local USE_MINGW = false
+local USE_MSVC_MANUAL = false
 local REGISTRY = true
 local NOADMIN = false
 local PROMPT = true
 local SELFCONTAINED = false
+
+local lua_version_set = false
 
 ---
 -- Some helpers
@@ -49,35 +53,9 @@ local function die(message)
 	os.exit(1)
 end
 
-function split_string(str, delim, maxNb)
-	-- Eliminate bad cases...
-	if string.find(str, delim) == nil then
-		return { str }
-	end
-	if maxNb == nil or maxNb < 1 then
-		maxNb = 0	 -- No limit
-	end
-	local result = {}
-	local pat = "(.-)" .. delim .. "()"
-	local nb = 0
-	local lastPos
-	for part, pos in string.gmatch(str, pat) do
-		nb = nb + 1
-		result[nb] = part
-		lastPos = pos
-		if nb == maxNb then break end
-	end
-	-- Handle the last field
-	if nb ~= maxNb then
-		result[nb + 1] = string.sub(str, lastPos)
-	end
-	return result
-end
-
-
 local function exec(cmd)
 	--print(cmd)
-	local status = os.execute(cmd)
+	local status = os.execute("type NUL && "..cmd)
 	return (status == 0 or status == true) -- compat 5.1/5.2
 end
 
@@ -90,12 +68,12 @@ local function mkdir (dir)
 	return exec([[.\win32\tools\mkdir -p "]]..dir..[[" >NUL]])
 end
 
--- does the current user have admin priviledges ( = elevated)
+-- does the current user have admin privileges ( = elevated)
 local function permission()
 	return exec("net session >NUL 2>&1") -- fails if not admin
 end
 
--- rename file (full path) to backup (name only), appending number if required
+-- rename filename (full path) to backupname (name only), appending number if required
 -- returns the new name (name only)
 local function backup(filename, backupname)
 	local path = filename:match("(.+)%\\.-$").."\\"
@@ -119,14 +97,12 @@ local function print_help()
 Installs LuaRocks.
 
 /P [dir]       Where to install LuaRocks. 
-               Note that version; $VERSION, will be appended to this
-               path, so "/P c:\luarocks\" will install in 
-               "c:\luarocks\$VERSION\"
                Default is %PROGRAMFILES%\LuaRocks
 
 Configuring the destinations:
-/TREE [dir]    Root of the local tree of installed rocks.
-               Default is %PROGRAMFILES%\LuaRocks\systree
+/TREE [dir]    Root of the local system tree of installed rocks.
+               Default is {BIN}\..\ if {BIN} ends with '\bin'
+               otherwise it is {BIN}\systree. 
 /SCRIPTS [dir] Where to install commandline scripts installed by
                rocks. Default is {TREE}\bin.
 /LUAMOD [dir]  Where to install Lua modules installed by rocks.
@@ -145,7 +121,7 @@ Configuring the destinations:
                
 Configuring the Lua interpreter:
 /LV [version]  Lua version to use; either 5.1, 5.2, or 5.3.
-               Default is 5.1
+               Default is auto-detected.
 /LUA [dir]     Location where Lua is installed - e.g. c:\lua\5.1\
                If not provided, the installer will search the system
                path and some default locations for a valid Lua
@@ -165,7 +141,14 @@ Configuring the Lua interpreter:
                (/LUA, /INC, /LIB, /BIN cannot be used with /L)
 
 Compiler configuration:
-/MW            Use mingw as build system instead of MSVC
+               By default the installer will try to determine the 
+               Microsoft toolchain to use. And will automatically use 
+               a setup command to initialize that toolchain when 
+               LuaRocks is run. If it cannot find it, it will default 
+               to the /MSVC switch.
+/MSVC          Use MS toolchain, without a setup command (tools must
+               be in your path)
+/MW            Use mingw as build system (tools must be in your path)
 
 Other options:
 /FORCECONFIG   Use a single config location. Do not use the
@@ -175,7 +158,7 @@ Other options:
 /F             Remove installation directory if it already exists.
 /NOREG         Do not load registry info to register '.rockspec'
                extension with LuaRocks commands (right-click).
-/NOADMIN       The installer requires admin priviledges. If not
+/NOADMIN       The installer requires admin privileges. If not
                available it will elevate a new process. Use this
                switch to prevent elevation, but make sure the
                destination paths are all accessible for the current
@@ -198,6 +181,7 @@ local function parse_options(args)
 			vars.PREFIX = option.value
 		elseif name == "/CONFIG" then
 			vars.SYSCONFDIR = option.value
+			vars.SYSCONFFORCE = true
 		elseif name == "/TREE" then
 			vars.TREE_ROOT = option.value
 		elseif name == "/SCRIPTS" then
@@ -208,10 +192,13 @@ local function parse_options(args)
 			vars.TREE_CMODULE = option.value
 		elseif name == "/LV" then
 			vars.LUA_VERSION = option.value
+			lua_version_set = true
 		elseif name == "/L" then
 			INSTALL_LUA = true
 		elseif name == "/MW" then
 			USE_MINGW = true
+		elseif name == "/MSVC" then
+			USE_MSVC_MANUAL = true
 		elseif name == "/LUA" then
 			vars.LUA_PREFIX = option.value
 		elseif name == "/LIB" then
@@ -253,120 +240,143 @@ local function check_flags()
 			die("Cannot combine option /L with any of /LUA /BIN /LIB /INC")
 		end
 		if vars.LUA_VERSION ~= "5.1" then
-			die("Bundled Lua version is 5.1, cannot install 5.2")
+			die("Bundled Lua version is 5.1, cannot install "..vars.LUA_VERSION)
 		end
 	end
-	if vars.LUA_VERSION ~= "5.1" then
-		if vars.LUA_VERSION == "5.2" then
-			vars.LUA_LIB_NAMES = vars.LUA_LIB_NAMES:gsub("5([%.]?)1", "5%12")
-		elseif vars.LUA_VERSION == "5.3" then
-			vars.LUA_LIB_NAMES = vars.LUA_LIB_NAMES:gsub("5([%.]?)1", "5%13")
-		else
-			die("Bad argument: /LV must either be 5.1, 5.2, or 5.3")
-		end
+	if not vars.LUA_VERSION:match("^5%.[123]$") then
+		die("Bad argument: /LV must either be 5.1, 5.2, or 5.3")
 	end
+  if USE_MSVC_MANUAL and USE_MINGW then
+    die("Cannot combine option /MSVC and /MW")
+  end
 end
 
 -- ***********************************************************
 -- Detect Lua
 -- ***********************************************************
-local function look_for_interpreter (directory)
+local function detect_lua_version(interpreter_path)
+	local handler = io.popen(('type NUL && "%s" -e "io.stdout:write(_VERSION)" 2>NUL'):format(interpreter_path), "r")
+	if not handler then
+		return nil, "interpreter does not work"
+	end
+	local full_version = handler:read("*a")
+	handler:close()
+
+	local version = full_version:match(" (5%.[123])$")
+	if not version then
+		return nil, "unknown interpreter version '" .. full_version .. "'"
+	end
+	return version
+end
+
+local function look_for_interpreter(directory)
+	local names
+	if lua_version_set then
+		names = {S"lua$LUA_VERSION.exe", S"lua$LUA_SHORTV.exe"}
+	else
+		names = {"lua5.3.exe", "lua53.exe", "lua5.2.exe", "lua52.exe", "lua5.1.exe", "lua51.exe"}
+	end
+	table.insert(names, "lua.exe")
+	table.insert(names, "luajit.exe")
+
+	local directories
 	if vars.LUA_BINDIR then
-        -- if LUA_BINDIR is specified, it must be there, otherwise we fail
-		if exists( S"$LUA_BINDIR\\lua$LUA_VERSION.exe" ) then
-			vars.LUA_INTERPRETER = S"lua$LUA_VERSION.exe"
-			print(S"       Found $LUA_BINDIR\\$LUA_INTERPRETER")
-			return true
-		elseif exists( S"$LUA_BINDIR\\lua$LUA_SHORTV.exe" ) then
-			vars.LUA_INTERPRETER = S"lua$LUA_SHORTV.exe"
-			print(S"       Found $LUA_BINDIR\\$LUA_INTERPRETER")
-			return true
-		elseif exists(S"$LUA_BINDIR\\lua.exe") then
-			vars.LUA_INTERPRETER = "lua.exe"
-			print(S"       Found $LUA_BINDIR\\$LUA_INTERPRETER")
-			return true
-		elseif exists(S"$LUA_BINDIR\\luajit.exe") then
-			vars.LUA_INTERPRETER = "luajit.exe"
-			print(S"       Found $LUA_BINDIR\\$LUA_INTERPRETER")
-			return true
-		end
-		die(S"Lua executable lua.exe, luajit.exe, lua$LUA_SHORTV.exe or lua$LUA_VERSION.exe not found in $LUA_BINDIR")
+		-- If LUA_BINDIR is specified, look only in that directory.
+		directories = {vars.LUA_BINDIR}
+	else
+		-- Try candidate directory and its `bin` subdirectory.
+		directories = {directory, directory .. "\\bin"}
 	end
 
-	for _, e in ipairs{ [[\]], [[\bin\]] } do
-		if exists(directory..e.."\\lua"..vars.LUA_VERSION..".exe") then
-			vars.LUA_INTERPRETER = S"lua$LUA_VERSION.exe"
-			vars.LUA_BINDIR = directory .. e
-			print("       Found ."..e..vars.LUA_INTERPRETER)
-			return true
+	for _, dir in ipairs(directories) do
+		for _, name in ipairs(names) do
+			local full_name = dir .. "\\" .. name
+			if exists(full_name) then
+				print("       Found " .. name .. ", testing it...")
+				local version, err = detect_lua_version(full_name)
+				if not version then
+					print("       Error: " .. err)
+				else
+					if version ~= vars.LUA_VERSION then
+						if lua_version_set then
+							die("Version of interpreter clashes with the value of /LV. Please check your configuration.")
+						else
+							vars.LUA_VERSION = version
+							vars.LUA_SHORTV = version:gsub("%.", "")
+						end
+					end
 
-		elseif exists(directory..e.."\\lua"..vars.LUA_SHORTV..".exe") then
-			vars.LUA_INTERPRETER = S"lua$LUA_SHORTV.exe"
-			vars.LUA_BINDIR = directory .. e
-			print("       Found ."..e..vars.LUA_INTERPRETER)
-			return true
-
-		elseif exists(directory..e.."\\lua.exe") then
-			vars.LUA_INTERPRETER = "lua.exe"
-			vars.LUA_BINDIR = directory..e
-			print("       Found ."..e..vars.LUA_INTERPRETER)
-			return true
-
-		elseif exists(directory..e.."\\luajit.exe") then
-			vars.LUA_INTERPRETER = "luajit.exe"
-			vars.LUA_BINDIR = directory..e
-			print("       Found ."..e..vars.LUA_INTERPRETER)
-			return true
+					vars.LUA_INTERPRETER = name
+					vars.LUA_BINDIR = dir
+					return true
+				end
+			end
 		end
 	end
-	print("      No Lua interpreter found")
+
+	if vars.LUA_BINDIR then
+		die(("Working Lua executable (one of %s) not found in %s"):format(table.concat(names, ", "), vars.LUA_BINDIR))
+	end
 	return false
 end
 
-local function look_for_link_libraries (directory)
+local function look_for_link_libraries(directory)
+	-- MinGW does not generate .lib, nor needs it to link, but MSVC does,
+	-- so .lib must be listed first to ensure they are found first if present,
+	-- to prevent MSVC trying to link to a .dll, which won't work.
+	local names = {S"lua$LUA_VERSION.lib", S"lua$LUA_SHORTV.lib", S"lua$LUA_VERSION.dll", S"lua$LUA_SHORTV.dll", "liblua.dll.a"}
+	local directories
 	if vars.LUA_LIBDIR then
-		for name in vars.LUA_LIB_NAMES:gmatch("[^%s]+") do
-			print(S"    checking for $LUA_LIBDIR\\"..name)
-			if exists(vars.LUA_LIBDIR.."\\"..name) then
-				vars.LUA_LIBNAME = name
-				print("       Found "..name)
-				return true
-			end
-		end
-		die(S"link library (one of; $LUA_LIB_NAMES) not found in $LUA_LIBDIR")
+		directories = {vars.LUA_LIBDIR}
+	else
+		directories = {directory, directory .. "\\lib", directory .. "\\bin"}
 	end
 
-	for _, e in ipairs{ [[\]], [[\lib\]], [[\bin\]]} do
-		for name in vars.LUA_LIB_NAMES:gmatch("[^%s]+") do
-			print("    checking for "..directory..e.."\\"..name)
-			if exists(directory..e.."\\"..name) then
-				vars.LUA_LIBDIR = directory .. e
+	for _, dir in ipairs(directories) do
+		for _, name in ipairs(names) do
+			local full_name = dir .. "\\" .. name
+			print("    checking for " .. full_name)
+			if exists(full_name) then
+				vars.LUA_LIBDIR = dir
 				vars.LUA_LIBNAME = name
-				print("       Found "..name)
+				print("       Found " .. name)
 				return true
 			end
 		end
+	end
+
+	if vars.LUA_LIBDIR then
+		die(("Link library (one of %s) not found in %s"):format(table.concat(names, ", "), vars.LUA_LIBDIR))
 	end
 	return false
 end
 
-local function look_for_headers (directory)
+local function look_for_headers(directory)
+	local directories
 	if vars.LUA_INCDIR then
-		print(S"    checking for $LUA_INCDIR\\lua.h")
-		if exists(S"$LUA_INCDIR\\lua.h") then
-			print("       Found lua.h")
-			return true
-		end
-		die(S"lua.h not found in $LUA_INCDIR")
+		directories = {vars.LUA_INCDIR}
+	else
+		directories = {
+			directory .. S"\\include\\lua\\$LUA_VERSION",
+			directory .. S"\\include\\lua$LUA_SHORTV",
+			directory .. S"\\include\\lua$LUA_VERSION",
+			directory .. "\\include",
+			directory
+		}
 	end
 
-	for _, e in ipairs{ [[\]], [[\include\]]} do
-		print("    checking for "..directory..e.."\\lua.h")
-		if exists(directory..e.."\\lua.h") then
-			vars.LUA_INCDIR = directory..e
+	for _, dir in ipairs(directories) do
+		local full_name = dir .. "\\lua.h"
+		print("    checking for " .. full_name)
+		if exists(full_name) then
+			vars.LUA_INCDIR = dir
 			print("       Found lua.h")
 			return true
 		end
+	end
+
+	if vars.LUA_INCDIR then
+		die(S"lua.h not found in $LUA_INCDIR")
 	end
 	return false
 end
@@ -400,52 +410,170 @@ local function get_architecture()
 	return proc
 end
 
+-- get a string value from windows registry.
+local function get_registry(key, value)
+	local keys = {key}
+	local key64, replaced = key:gsub("(%u+\\Software\\)", "%1Wow6432Node\\", 1)
+
+	if replaced == 1 then
+		keys = {key64, key}
+	end
+
+	for _, k in ipairs(keys) do
+		local h = io.popen('reg query "'..k..'" /v '..value..' 2>NUL')
+		local output = h:read("*a")
+		h:close()
+
+		local v = output:match("REG_SZ%s+([^\n]+)")
+		if v then
+			return v
+		end
+	end
+	return nil
+end
+
+local function get_visual_studio_directory()
+	assert(type(vars.LUA_RUNTIME)=="string", "requires vars.LUA_RUNTIME to be set before calling this function.")
+	local major, minor = vars.LUA_RUNTIME:match('VCR%u*(%d+)(%d)$') -- MSVCR<x><y> or VCRUNTIME<x><y>
+	if not major then 
+    print(S[[    Cannot auto-detect Visual Studio version from $LUA_RUNTIME]])
+    return nil 
+  end
+	local keys = {
+		"HKLM\\Software\\Microsoft\\VisualStudio\\%d.%d\\Setup\\VC",
+		"HKLM\\Software\\Microsoft\\VCExpress\\%d.%d\\Setup\\VS"
+	}
+	for _, key in ipairs(keys) do
+    local versionedkey = key:format(major, minor)
+		local vcdir = get_registry(versionedkey, "ProductDir")
+    print("    checking: "..versionedkey)
+		if vcdir then 
+      print("        Found: "..vcdir)
+      return vcdir 
+    end
+	end
+	return nil
+end
+
+local function get_windows_sdk_directory()
+	assert(type(vars.LUA_RUNTIME) == "string", "requires vars.LUA_RUNTIME to be set before calling this function.")
+	-- Only v7.1 and v6.1 shipped with compilers
+	-- Other versions requires a separate  installation of Visual Studio.
+	-- see https://github.com/luarocks/luarocks/pull/443#issuecomment-152792516
+	local wsdks = {
+		["MSVCR100"] = "v7.1", -- shipped with Visual Studio 2010 compilers.
+		["MSVCR100D"] = "v7.1", -- shipped with Visual Studio 2010 compilers.
+		["MSVCR90"] = "v6.1", -- shipped with Visual Studio 2008 compilers.
+		["MSVCR90D"] = "v6.1", -- shipped with Visual Studio 2008 compilers.
+	}
+	local wsdkver = wsdks[vars.LUA_RUNTIME]
+	if not wsdkver then
+    print(S[[    Cannot auto-detect Windows SDK version from $LUA_RUNTIME]])
+		return nil
+	end
+
+	local key = "HKLM\\Software\\Microsoft\\Microsoft SDKs\\Windows\\"..wsdkver
+  print("   checking: "..key)
+  local dir = get_registry(key, "InstallationFolder")
+  if dir then
+    print("        Found: "..dir)
+    return dir
+  end
+  print("        No SDK found")
+	return nil
+end
+
+-- returns the batch command to setup msvc compiler path.
+-- or an empty string (eg. "") if not found
+local function get_msvc_env_setup_cmd()
+  print(S[[Looking for Microsoft toolchain matching runtime $LUA_RUNTIME and architecture $UNAME_M]])
+
+	assert(type(vars.UNAME_M) == "string", "requires vars.UNAME_M to be set before calling this function.")
+	local x64 = vars.UNAME_M=="x86_64"
+
+	-- 1. try visual studio command line tools
+	local vcdir = get_visual_studio_directory()
+	if vcdir then
+		local vcvars_bats = {
+			x86 = {
+				"bin\\vcvars32.bat", -- prefers native compiler
+				"bin\\amd64_x86\\vcvarsamd64_x86.bat"-- then cross compiler
+			},
+			x86_64 = {
+				"bin\\amd64\\vcvars64.bat", -- prefers native compiler
+				"bin\\x86_amd64\\vcvarsx86_amd64.bat" -- then cross compiler
+			}
+		}
+		assert(vcvars_bats[vars.UNAME_M], "vars.UNAME_M: only x86 and x86_64 are supported")
+		for _, bat in ipairs(vcvars_bats[vars.UNAME_M]) do
+			local full_path = vcdir .. bat
+			if exists(full_path) then
+				return ('call "%s"'):format(full_path)
+			end
+		end
+
+		-- try vcvarsall.bat in case MS changes the undocumented bat files above.
+		-- but this way we don't konw if specified compiler is installed...
+		local vcvarsall = vcdir .. 'vcvarsall.bat'
+		if exists(vcvarsall) then
+			local vcvarsall_args = { x86 = "", x86_64 = " amd64" }
+			return ('call "%s"%s'):format(vcvarsall, vcvarsall_args[vars.UNAME_M])
+		end
+	end
+
+	-- 2. try for Windows SDKs command line tools.
+	local wsdkdir = get_windows_sdk_directory()
+	if wsdkdir then
+		local setenv = wsdkdir.."Bin\\SetEnv.cmd"
+		if exists(setenv) then
+			return ('call "%s" /%s'):format(setenv, x64 and "x64" or "x86")
+		end
+	end
+
+	-- finally, we can't detect more, just don't setup the msvc compiler in luarocks.bat.
+	return ""
+end
+
+local function get_possible_lua_directories()
+	if vars.LUA_PREFIX then
+		return {vars.LUA_PREFIX}
+	end
+
+	-- No prefix given, so use PATH.
+	local path = os.getenv("PATH") or ""
+	local directories = {}
+	for dir in path:gmatch("[^;]+") do
+		-- Remove trailing backslashes, but not from a drive letter like `C:\`.
+		dir = dir:gsub("([^:])\\+$", "%1")
+		-- Remove trailing `bin` subdirectory, the searcher will check there anyway.
+		if dir:upper():match("[:\\]BIN$") then
+			dir = dir:sub(1, -5)
+		end
+		table.insert(directories, dir)
+	end
+	-- Finally add some other default paths.
+	table.insert(directories, [[c:\lua5.1.2]])
+	table.insert(directories, [[c:\lua]])
+	table.insert(directories, [[c:\kepler\1.1]])
+	return directories
+end
+
 local function look_for_lua_install ()
 	print("Looking for Lua interpreter")
-	local directories
-	if vars.LUA_PREFIX then
-		directories = { vars.LUA_PREFIX }
-	else
-		-- no prefix given, so use path
-		directories = (os.getenv("PATH",";") or "")
-		local i = 1
-        while i ~= 0 do directories, i = directories:gsub(";;",";") end  --remove all doubles
-		directories = split_string(directories,";")
-		-- if a path element ends with "\bin\" then remove it, as the searcher will check there anyway
-		for i, val in ipairs(directories) do
-			-- remove trailing backslash
-			while val:sub(-1,-1) == "\\" and val:sub(-2,-1) ~= ":\\" do 
-				val = val:sub(1,-2)
-			end
-			-- remove trailing 'bin'
-			if val:upper():sub(-4,-1) == "\\BIN" or val:upper():sub(-4,-1) == ":BIN" then
-				val = val:sub(1,-5)
-			end
-			directories[i] = val
-		end
-		-- finaly add some other default paths
-		table.insert(directories, [[c:\lua5.1.2]])
-		table.insert(directories, [[c:\lua]])
-		table.insert(directories, [[c:\kepler\1.1]])
-	end
 	if vars.LUA_BINDIR and vars.LUA_LIBDIR and vars.LUA_INCDIR then
 		if look_for_interpreter(vars.LUA_BINDIR) and 
 			look_for_link_libraries(vars.LUA_LIBDIR) and
 			look_for_headers(vars.LUA_INCDIR)
 		then
 			if get_runtime() then
-				print("Runtime check completed, now testing interpreter...")
-				if exec(S[["$LUA_BINDIR\$LUA_INTERPRETER" -v 2>NUL]]) then
-					print("    Ok")
-					return true
-				end
-				print("   Interpreter returned an error, not ok")
+				print("Runtime check completed.")
+				return true
 			end
 		end
 		return false
 	end
-	
-	for _, directory in ipairs(directories) do
+
+	for _, directory in ipairs(get_possible_lua_directories()) do
 		print("    checking " .. directory)
 		if exists(directory) then
 			if look_for_interpreter(directory) then
@@ -455,12 +583,8 @@ local function look_for_lua_install ()
 					if look_for_headers(directory) then
 						print("Headers found, checking runtime to use...")
 						if get_runtime() then
-							print("Runtime check completed, now testing interpreter...")
-							if exec(S[["$LUA_BINDIR\$LUA_INTERPRETER" -v 2>NUL]]) then
-								print("    Ok")
-								return true
-							end
-							print("   Interpreter returned an error, not ok")
+							print("Runtime check completed.")
+							return true
 						end
 					end
 				end
@@ -470,6 +594,28 @@ local function look_for_lua_install ()
 	return false
 end
 
+-- backup config[x.x].lua[.bak] and site_config[_x_x].lua
+local function backup_config_files()
+  local temppath
+  while not temppath do
+    temppath = os.getenv("temp").."\\LR-config-backup-"..tostring(math.random(10000))
+    if exists(temppath) then temppath = nil end
+  end
+  vars.CONFBACKUPDIR = temppath
+  mkdir(vars.CONFBACKUPDIR)
+  exec(S[[COPY "$PREFIX\config*.*" "$CONFBACKUPDIR" >NUL]])
+  exec(S[[COPY "$PREFIX\lua\luarocks\site_config*.*" "$CONFBACKUPDIR" >NUL]])
+end
+
+-- restore previously backed up config files
+local function restore_config_files()
+  if not vars.CONFBACKUPDIR then return end -- there is no backup to restore
+  exec(S[[COPY "$CONFBACKUPDIR\config*.*" "$PREFIX" >NUL]])
+  exec(S[[COPY "$CONFBACKUPDIR\site_config*.*" "$PREFIX\lua\luarocks" >NUL]])
+  -- cleanup
+  exec(S[[RD /S /Q "$CONFBACKUPDIR"]])
+  vars.CONFBACKUPDIR = nil
+end
 
 -- ***********************************************************
 -- Installer script start
@@ -494,7 +640,7 @@ local with_arg = { -- options followed by an argument, others are flags
 -- this will be damaged by the batch construction at the start of this file
 local oarg = arg  -- retain old table
 if #arg > 0 then
-	farg = table.concat(arg, " ") .. " "
+	local farg = table.concat(arg, " ") .. " "
 	arg = {}
 	farg = farg:gsub('%"', "")
 	local i = 0
@@ -515,7 +661,6 @@ if #arg > 0 then
 	end
 end
 for k,v in pairs(oarg) do if k < 1 then arg[k] = v end end -- copy 0 and negative indexes
-oarg = nil
 
 -- build config option table with name and value elements
 local i = 1
@@ -550,12 +695,12 @@ check_flags()
 
 if not permission() then
 	if not NOADMIN then
-		-- must elevate the process with admin priviledges
+		-- must elevate the process with admin privileges
         if not exec("PowerShell /? >NUL 2>&1") then
           -- powershell is not available, so error out
-          die("No administrative priviledges detected and cannot auto-elevate. Please run with admin priviledges or use the /NOADMIN switch")
+          die("No administrative privileges detected and cannot auto-elevate. Please run with admin privileges or use the /NOADMIN switch")
         end
-		print("Need admin priviledges, now elevating a new process to continue installing...")
+		print("Need admin privileges, now elevating a new process to continue installing...")
 		local runner = os.getenv("TEMP").."\\".."LuaRocks_Installer.bat"
 		local f = io.open(runner, "w")
 		f:write("@echo off\n")
@@ -567,27 +712,23 @@ if not permission() then
 		f:close()
 		-- run the created temp batch file in elevated mode
 		exec("PowerShell -Command (New-Object -com 'Shell.Application').ShellExecute('"..runner.."', '', '', 'runas')\n")
-		print("Now exiting unpriviledged installer")
+		print("Now exiting unprivileged installer")
        	os.exit()  -- exit here, the newly created elevated process will do the installing
 	else
-		print("Attempting to install without admin priviledges...")
+		print("Attempting to install without admin privileges...")
 	end
 else
-	print("Admin priviledges available for installing")
+	print("Admin privileges available for installing")
 end
 
 vars.PREFIX = vars.PREFIX or os.getenv("PROGRAMFILES")..[[\LuaRocks]]
-vars.FULL_PREFIX = S"$PREFIX\\$VERSION"
-vars.BINDIR = vars.FULL_PREFIX
-vars.LIBDIR = vars.FULL_PREFIX
-vars.LUADIR = S"$FULL_PREFIX\\lua"
-vars.INCDIR = S"$FULL_PREFIX\\include"
+vars.BINDIR = vars.PREFIX
+vars.LIBDIR = vars.PREFIX
+vars.LUADIR = S"$PREFIX\\lua"
+vars.INCDIR = S"$PREFIX\\include"
 vars.LUA_SHORTV = vars.LUA_VERSION:gsub("%.", "")
 
 if INSTALL_LUA then
-	if vars.LUA_VERSION ~= "5.1" then
-		die("Cannot install own copy of Lua because only 5.1 is bundled")
-	end
 	vars.LUA_INTERPRETER = "lua5.1"
 	vars.LUA_BINDIR = vars.BINDIR
 	vars.LUA_LIBDIR = vars.LIBDIR
@@ -602,20 +743,29 @@ else
     vars.UNAME_M = get_architecture()  -- can only do when installation was found
 end
 
-local datapath
-if vars.UNAME_M == "x86" then
-	datapath = os.getenv("PROGRAMFILES") .. [[\LuaRocks]]
-else
-	-- our target interpreter is 64bit, so the tree (with binaries) should go into 64bit program files
-	datapath = os.getenv("ProgramW6432") .. [[\LuaRocks]]
+-- check location of system tree
+if not vars.TREE_ROOT then
+  -- no system tree location given, so we need to construct a default value
+  if vars.LUA_BINDIR:lower():match([[([\/]+bin[\/]*)$]]) then
+    -- lua binary is located in a 'bin' subdirectory, so assume
+    -- default Lua layout and match rocktree on top
+    vars.TREE_ROOT = vars.LUA_BINDIR:lower():gsub([[[\/]+bin[\/]*$]], [[\]])
+  else
+    -- no 'bin', so use a named tree next to the Lua executable
+    vars.TREE_ROOT = vars.LUA_BINDIR .. [[\systree]]
+  end
 end
+
 vars.SYSCONFDIR = vars.SYSCONFDIR or vars.PREFIX
-vars.TREE_ROOT = vars.TREE_ROOT or datapath..[[\systree]]
+vars.SYSCONFFILENAME = S"config-$LUA_VERSION.lua"
+vars.CONFIG_FILE = vars.SYSCONFDIR.."\\"..vars.SYSCONFFILENAME
 if SELFCONTAINED then
 	vars.SYSCONFDIR = vars.PREFIX
+	vars.SYSCONFFORCE = true
 	vars.TREE_ROOT = vars.PREFIX..[[\systree]]
 	REGISTRY = false
 end
+vars.COMPILER_ENV_CMD = (USE_MINGW and "") or (USE_MSVC_MANUAL and "") or get_msvc_env_setup_cmd()
 
 print(S[[
 
@@ -624,8 +774,8 @@ print(S[[
 ==========================
 
 Will configure LuaRocks with the following paths:
-LuaRocks        : $FULL_PREFIX
-Config file     : $SYSCONFDIR\config.lua
+LuaRocks        : $PREFIX
+Config file     : $CONFIG_FILE
 Rocktree        : $TREE_ROOT
 
 Lua interpreter : $LUA_BINDIR\$LUA_INTERPRETER
@@ -634,11 +784,20 @@ Lua interpreter : $LUA_BINDIR\$LUA_INTERPRETER
     includes    : $LUA_INCDIR
     architecture: $UNAME_M
     binary link : $LUA_LIBNAME with runtime $LUA_RUNTIME.dll
-
 ]])
 
+if USE_MINGW then
+  print("Compiler        : MinGW (make sure it is in your path before using LuaRocks)")
+else
+  if vars.COMPILER_ENV_CMD == "" then
+    print("Compiler        : Microsoft (make sure it is in your path before using LuaRocks)")
+  else
+    print(S[[Compiler        : Microsoft, using; $COMPILER_ENV_CMD]])
+  end
+end
+
 if PROMPT then
-	print("Press <ENTER> to start installing, or press <CTRL>+<C> to abort. Use install /? for installation options.")
+	print("\nPress <ENTER> to start installing, or press <CTRL>+<C> to abort. Use install /? for installation options.")
 	io.read()
 end
 
@@ -653,17 +812,19 @@ print([[
 -- ***********************************************************
 -- Install LuaRocks files
 -- ***********************************************************
-if FORCE then
-	print(S"Removing $FULL_PREFIX...")
-	exec(S[[RD /S /Q "$FULL_PREFIX"]])
-	print()
+
+if exists(vars.PREFIX) then
+  if not FORCE then
+    die(S"$PREFIX exists. Use /F to force removal and reinstallation.")
+  else
+    backup_config_files()
+    print(S"Removing $PREFIX...")
+    exec(S[[RD /S /Q "$PREFIX"]])
+    print()
+  end
 end
 
-if exists(vars.FULL_PREFIX) then
-	die(S"$FULL_PREFIX exists. Use /F to force removal and reinstallation.")
-end
-
-print(S"Installing LuaRocks in $FULL_PREFIX...")
+print(S"Installing LuaRocks in $PREFIX...")
 if not exists(vars.BINDIR) then
 	if not mkdir(vars.BINDIR) then
 		die()
@@ -719,7 +880,8 @@ for _, c in ipairs{"luarocks", "luarocks-admin"} do
 	local f = io.open(vars.BINDIR.."\\"..c..".bat", "w")
 	f:write(S[[
 @ECHO OFF
-SETLOCAL
+SETLOCAL ENABLEDELAYEDEXPANSION ENABLEEXTENSIONS
+$COMPILER_ENV_CMD
 SET "LUA_PATH=$LUADIR\?.lua;$LUADIR\?\init.lua;%LUA_PATH%"
 IF NOT "%LUA_PATH_5_2%"=="" (
    SET "LUA_PATH_5_2=$LUADIR\?.lua;$LUADIR\?\init.lua;%LUA_PATH_5_2%"
@@ -755,7 +917,7 @@ ECHO ECHO Press any key to close this window... >> "%TMPFILE%"
 ECHO PAUSE ^> NUL                               >> "%TMPFILE%"
 ECHO DEL "%TMPFILE%"                            >> "%TMPFILE%"
 
-ECHO Now retrying as a priviledged user...
+ECHO Now retrying as a privileged user...
 PowerShell -Command (New-Object -com 'Shell.Application').ShellExecute('%TMPFILE%', '', '', 'runas')
 
 :EXITLR
@@ -765,38 +927,23 @@ exit /b %EXITCODE%
 	print(S"Created LuaRocks command: $BINDIR\\"..c..".bat")
 end
 
--- part below was commented out as its purpose was unclear
--- see https://github.com/keplerproject/luarocks/pull/197#issuecomment-30176548
-
--- configure 'scripts' directory
--- if vars.TREE_BIN then
--- 	mkdir(vars.TREE_BIN)
--- 	if not USE_MINGW then
--- 		-- definitly not for MinGW because of conflicting runtimes
--- 		-- but is it ok to do it for others???
--- 		exec(S[[COPY lua5.1\bin\*.dll "$TREE_BIN" >NUL]])
--- 	end
--- else
--- 	if not USE_MINGW then
--- 	mkdir(S[[$TREE_ROOT\bin]])
--- 		-- definitly not for MinGW because of conflicting runtimes
--- 		-- but is it ok to do it for others???
--- 		exec(S[[COPY lua5.1\bin\*.dll "$TREE_ROOT"\bin >NUL]])
--- 	end
--- end
-
 -- ***********************************************************
 -- Configure LuaRocks
 -- ***********************************************************
 
+restore_config_files()
 print()
 print("Configuring LuaRocks...")
 
 -- Create a site-config file
-if exists(S[[$LUADIR\luarocks\site_config.lua]]) then
-	exec(S[[RENAME "$LUADIR\luarocks\site_config.lua" site_config.lua.bak]])
+local site_config = S("site_config_$LUA_VERSION"):gsub("%.","_")
+if exists(S([[$LUADIR\luarocks\]]..site_config..[[.lua]])) then
+	local nname = backup(S([[$LUADIR\luarocks\]]..site_config..[[.lua]]), site_config..".lua.bak")
+	print("***************")
+	print("*** WARNING *** LuaRocks site_config file already exists: '"..site_config..".lua'. The old file has been renamed to '"..nname.."'")
+	print("***************")
 end
-local f = io.open(vars.LUADIR.."\\luarocks\\site_config.lua", "w")
+local f = io.open(vars.LUADIR.."\\luarocks\\"..site_config..".lua", "w")
 f:write(S[=[
 local site_config = {}
 site_config.LUA_INCDIR=[[$LUA_INCDIR]]
@@ -811,7 +958,6 @@ else
 end
 f:write(S[=[
 site_config.LUAROCKS_UNAME_M=[[$UNAME_M]]
-site_config.LUAROCKS_SYSCONFIG=[[$SYSCONFDIR\config.lua]]
 site_config.LUAROCKS_ROCKS_TREE=[[$TREE_ROOT]]
 site_config.LUAROCKS_PREFIX=[[$PREFIX]]
 site_config.LUAROCKS_DOWNLOADER=[[wget]]
@@ -820,24 +966,19 @@ site_config.LUAROCKS_MD5CHECKER=[[md5sum]]
 if FORCE_CONFIG then
 	f:write("site_config.LUAROCKS_FORCE_CONFIG=true\n")
 end
-if exists(vars.LUADIR.."\\luarocks\\site_config.lua.bak") then
-	for line in io.lines(vars.LUADIR.."\\luarocks\\site_config.lua.bak", "r") do
-		f:write(line)
-		f:write("\n")
-	end
-	exec(S[[DEL /F /Q "$LUADIR\luarocks\site_config.lua.bak"]])
+if vars.SYSCONFFORCE then  -- only write this value when explcitly given, otherwise rely on defaults
+	f:write(S("site_config.LUAROCKS_SYSCONFDIR=[[$SYSCONFDIR]]\n"))
 end
 f:write("return site_config\n")
 f:close()
-print(S[[Created LuaRocks site-config file: $LUADIR\luarocks\site_config.lua]])
+print(S([[Created LuaRocks site-config file: $LUADIR\luarocks\]]..site_config..[[.lua]]))
 
 -- create config file
-vars.CONFIG_FILE = vars.SYSCONFDIR.."\\config.lua"
 if not exists(vars.SYSCONFDIR) then
 	mkdir(vars.SYSCONFDIR)
 end
 if exists(vars.CONFIG_FILE) then
-	local nname = backup(vars.CONFIG_FILE, "config.bak")
+	local nname = backup(vars.CONFIG_FILE, vars.SYSCONFFILENAME..".bak")
 	print("***************")
 	print(S"*** WARNING *** LuaRocks config file already exists: '$CONFIG_FILE'. The old file has been renamed to '"..nname.."'")
 	print("***************")
@@ -902,17 +1043,17 @@ if REGISTRY then
 	-- expand template with correct path information
 	print()
 	print([[Loading registry information for ".rockspec" files]])
-	exec( S[[win32\lua5.1\bin\lua5.1.exe "$FULL_PREFIX\LuaRocks.reg.lua" "$FULL_PREFIX\LuaRocks.reg.template"]] )
-	exec( S[[regedit /S "$FULL_PREFIX\\LuaRocks.reg"]] )
+	exec( S[[win32\lua5.1\bin\lua5.1.exe "$PREFIX\LuaRocks.reg.lua" "$PREFIX\LuaRocks.reg.template"]] )
+	exec( S[[regedit /S "$PREFIX\\LuaRocks.reg"]] )
 end
 
 -- ***********************************************************
 -- Cleanup
 -- ***********************************************************
 -- remove regsitry related files, no longer needed
-exec( S[[del "$FULL_PREFIX\LuaRocks.reg.*" >NUL]] )
+exec( S[[del "$PREFIX\LuaRocks.reg.*" >NUL]] )
 -- remove pe-parser module
-exec( S[[del "$FULL_PREFIX\pe-parser.lua" >NUL]] )
+exec( S[[del "$PREFIX\pe-parser.lua" >NUL]] )
 
 -- ***********************************************************
 -- Exit handlers 
@@ -932,8 +1073,8 @@ Lua interpreter;
   PATH     :   $LUA_BINDIR
   PATHEXT  :   .LUA
 LuaRocks;
-  PATH     :   $FULL_PREFIX
-  LUA_PATH :   $FULL_PREFIX\lua\?.lua;$FULL_PREFIX\lua\?\init.lua
+  PATH     :   $PREFIX
+  LUA_PATH :   $PREFIX\lua\?.lua;$PREFIX\lua\?\init.lua
 Local user rocktree (Note: %APPDATA% is user dependent);
   PATH     :   %APPDATA%\LuaRocks\bin
   LUA_PATH :   %APPDATA%\LuaRocks\share\lua\$LUA_VERSION\?.lua;%APPDATA%\LuaRocks\share\lua\$LUA_VERSION\?\init.lua

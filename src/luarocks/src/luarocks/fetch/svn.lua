@@ -1,6 +1,5 @@
 
 --- Fetch back-end for retrieving sources from Subversion.
---module("luarocks.fetch.svn", package.seeall)
 local svn = {}
 
 local unpack = unpack or table.unpack
@@ -21,6 +20,11 @@ function svn.get_sources(rockspec, extract, dest_dir)
    assert(type(dest_dir) == "string" or not dest_dir)
 
    local svn_cmd = rockspec.variables.SVN
+   local ok, err_msg = fs.is_tool_available(svn_cmd, "--version", "Subversion")
+   if not ok then
+      return nil, err_msg
+   end
+
    local name_version = rockspec.name .. "-" .. rockspec.version
    local module = rockspec.source.module or dir.base_name(rockspec.source.url)
    local url = rockspec.source.url:gsub("^svn://", "")

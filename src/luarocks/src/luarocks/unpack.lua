@@ -1,7 +1,6 @@
 
 --- Module implementing the LuaRocks "unpack" command.
 -- Unpack the contents of a rock.
---module("luarocks.unpack", package.seeall)
 local unpack = {}
 package.loaded["luarocks.unpack"] = unpack
 
@@ -10,7 +9,9 @@ local fs = require("luarocks.fs")
 local util = require("luarocks.util")
 local build = require("luarocks.build")
 local dir = require("luarocks.dir")
+local cfg = require("luarocks.cfg")
 
+util.add_run_function(unpack)
 unpack.help_summary = "Unpack the contents of a rock."
 unpack.help_arguments = "[--force] {<rock>|<name> [<version>]}"
 unpack.help = [[
@@ -44,7 +45,6 @@ local function unpack_rockspec(rockspec_file, dir_name)
    ok, err = fs.change_dir(sources_dir)
    if not ok then return nil, err end
    ok, err = build.apply_patches(rockspec)
-   fs.pop_dir()
    fs.pop_dir()
    if not ok then return nil, err end
    return rockspec
@@ -128,7 +128,7 @@ local function run_unpacker(file, force)
    end
    if kind == "src" or kind == "rockspec" then
       if rockspec.source.dir ~= "." then
-         local ok = fs.copy(rockspec.local_filename, rockspec.source.dir)
+         local ok = fs.copy(rockspec.local_filename, rockspec.source.dir, cfg.perm_read)
          if not ok then
             return nil, "Failed copying unpacked rockspec into unpacked source directory."
          end
@@ -149,9 +149,7 @@ end
 -- version may also be passed.
 -- @return boolean or (nil, string): true if successful or nil followed
 -- by an error message.
-function unpack.run(...)
-   local flags, name, version = util.parse_flags(...)
-
+function unpack.command(flags, name, version)
    assert(type(version) == "string" or not version)
    if type(name) ~= "string" then
       return nil, "Argument missing. "..util.see_help("unpack")
@@ -161,7 +159,7 @@ function unpack.run(...)
       return run_unpacker(name, flags["force"])
    else
       local search = require("luarocks.search")
-      return search.act_on_src_or_rockspec(run_unpacker, name, version)
+      return search.act_on_src_or_rockspec(run_unpacker, name:lower(), version)
    end
 end
 

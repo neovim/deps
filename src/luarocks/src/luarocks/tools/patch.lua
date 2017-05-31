@@ -8,7 +8,6 @@
 --   Project home: http://code.google.com/p/python-patch/ .
 --   Version 0.1
 
---module("luarocks.tools.patch", package.seeall)
 local patch = {}
 
 local fs = require("luarocks.fs")
@@ -200,8 +199,13 @@ function patch.read_patch(filename, data)
     if state == 'hunkbody' then
       -- skip hunkskip and hunkbody code until definition of hunkhead read
 
+      if line:match"^[\r\n]*$" then
+          -- prepend space to empty lines to interpret them as context properly
+          line = " " .. line
+      end
+
       -- process line first
-      if line:match"^[- +\\]" or line:match"^[\r\n]*$" then
+      if line:match"^[- +\\]" then
           -- gather stats about line endings
           local he = files.hunkends[nextfileno]
           if endswith(line, "\r\n") then
@@ -455,16 +459,15 @@ local function find_hunks(file, hunks)
 end
 
 local function check_patched(file, hunks)
-  local matched = true
   local lineno = 1
   local ok, err = pcall(function()
     if #file == 0 then
-      error 'nomatch'
+      error('nomatch', 0)
     end
     for hno, h in ipairs(hunks) do
       -- skip to line just before hunk starts
       if #file < h.starttgt then
-         error 'nomatch'
+        error('nomatch', 0)
       end
       lineno = h.starttgt
       for _, hline in ipairs(h.text) do
@@ -473,22 +476,18 @@ local function check_patched(file, hunks)
           local line = file[lineno]
           lineno = lineno + 1
           if #line == 0 then
-            error 'nomatch'
+            error('nomatch', 0)
           end
           if endlstrip(line) ~= endlstrip(hline:sub(2)) then
             warning(format("file is not patched - failed hunk: %d", hno))
-            error 'nomatch'
+            error('nomatch', 0)
           end
         end
       end
     end
   end)
-  if err == 'nomatch' then
-    matched = false
-  end
-    -- todo: display failed hunk, i.e. expected/found
-
-  return matched
+  -- todo: display failed hunk, i.e. expected/found
+  return err ~= 'nomatch'
 end
 
 local function patch_hunks(srcname, tgtname, hunks)

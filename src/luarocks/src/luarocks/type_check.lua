@@ -1,7 +1,6 @@
 --- Type-checking functions.
 -- Functions and definitions for doing a basic lint check on files
 -- loaded by LuaRocks.
---module("luarocks.type_check", package.seeall)
 local type_check = {}
 package.loaded["luarocks.type_check"] = type_check
 
@@ -87,7 +86,8 @@ local rockspec_types = {
       copy_directories = {
          _any = string_1,
       },
-      _more = true
+      _more = true,
+      _mandatory = true
    },
    hooks = {
       platforms = {}, -- recursively defined below
@@ -234,9 +234,12 @@ end
 
 local function mkfield(context, field)
    if context == "" then
-      return field
+      return tostring(field)
+   elseif type(field) == "string" then
+      return context.."."..field
+   else
+      return context.."["..tostring(field).."]"
    end
-   return context.."."..field
 end
 
 --- Type check the contents of a table.

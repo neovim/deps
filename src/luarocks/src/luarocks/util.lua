@@ -4,7 +4,6 @@
 -- inside specific functions) to avoid interdependencies,
 -- as this is used in the bootstrapping stage of luarocks.cfg.
 
---module("luarocks.util", package.seeall)
 local util = {}
 
 local unpack = unpack or table.unpack
@@ -81,8 +80,8 @@ local supported_flags = {
    ["deps"] = true,
    ["deps-mode"] = "<mode>",
    ["detailed"] = "\"<text>\"",
-   ["extensions"] = true,
    ["force"] = true,
+   ["force-fast"] = true,
    ["from"] = "<server>",
    ["help"] = true,
    ["home"] = true,
@@ -119,6 +118,7 @@ local supported_flags = {
    ["rock-tree"] = true,
    ["rock-trees"] = true,
    ["rockspec"] = true,
+   ["rockspec-format"] = "<ver>",
    ["server"] = "<server>",
    ["skip-pack"] = true,
    ["source"] = true,
@@ -196,36 +196,11 @@ function util.parse_flags(...)
    return flags, unpack(out)
 end
 
---- Build a sequence of flags for forwarding from one command to
--- another (for example, from "install" to "build").
--- @param flags table: A table of parsed flags
--- @param ... string...: A variable number of flags to be checked
--- in the flags table. If no flags are passed as varargs, the
--- entire flags table is forwarded.
--- @return string... A variable number of strings
-function util.forward_flags(flags, ...)
-   assert(type(flags) == "table")
-   local out = {}
-   local filter = select('#', ...)
-   local function add_flag(flagname)
-      if flags[flagname] then
-         if flags[flagname] == true then
-            table.insert(out, "--"..flagname)
-         else
-            table.insert(out, "--"..flagname.."="..flags[flagname])
-         end
-      end
-   end
-   if filter > 0 then
-      for i = 1, filter do
-         add_flag(select(i, ...))
-      end
-   else
-      for flagname, _ in pairs(flags) do
-         add_flag(flagname)
-      end
-   end
-   return unpack(out)
+-- Adds legacy 'run' function to a command module.
+-- @param command table: command module with 'command' function,
+-- the added 'run' function calls it after parseing command-line arguments.
+function util.add_run_function(command)
+   command.run = function(...) return command.command(util.parse_flags(...)) end
 end
 
 --- Merges contents of src on top of dst's contents.
@@ -382,41 +357,6 @@ local function default_sort(a, b)
    end
 end
 
--- The iterator function used internally by util.sortedpairs.
--- @param tbl table: The table to be iterated.
--- @param sort_function function or nil: An optional comparison function
--- to be used by table.sort when sorting keys.
--- @see sortedpairs
-local function sortedpairs_iterator(tbl, sort_function)
-   local ks = util.keys(tbl)
-   if not sort_function or type(sort_function) == "function" then
-      table.sort(ks, sort_function or default_sort)
-      for _, k in ipairs(ks) do
-         coroutine.yield(k, tbl[k])
-      end
-   else
-      local order = sort_function
-      local done = {}
-      for _, k in ipairs(order) do
-         local sub_order
-         if type(k) == "table" then
-            sub_order = k[2]
-            k = k[1]
-         end
-         if tbl[k] then
-            done[k] = true
-            coroutine.yield(k, tbl[k], sub_order)
-         end
-      end
-      table.sort(ks, default_sort)
-      for _, k in ipairs(ks) do
-         if not done[k] then
-            coroutine.yield(k, tbl[k])
-         end
-      end
-   end
-end
-
 --- A table iterator generator that returns elements sorted by key,
 -- to be used in "for" loops.
 -- @param tbl table: The table to be iterated.
@@ -424,10 +364,52 @@ end
 -- to be used by table.sort when sorting keys, or an array listing an explicit order
 -- for keys. If a value itself is an array, it is taken so that the first element
 -- is a string representing the field name, and the second element is a priority table
--- for that key.
+-- for that key, which is returned by the iterator as the third value after the key
+-- and the value.
 -- @return function: the iterator function.
 function util.sortedpairs(tbl, sort_function)
-   return coroutine.wrap(function() sortedpairs_iterator(tbl, sort_function) end)
+   sort_function = sort_function or default_sort
+   local keys = util.keys(tbl)
+   local sub_orders = {}
+
+   if type(sort_function) == "function" then
+      table.sort(keys, sort_function)
+   else
+      local order = sort_function
+      local ordered_keys = {}
+      local all_keys = keys
+      keys = {}
+
+      for _, order_entry in ipairs(order) do
+         local key, sub_order
+         if type(order_entry) == "table" then
+            key = order_entry[1]
+            sub_order = order_entry[2]
+         else
+            key = order_entry
+         end
+
+         if tbl[key] then
+            ordered_keys[key] = true
+            sub_orders[key] = sub_order
+            table.insert(keys, key)
+         end
+      end
+
+      table.sort(all_keys, default_sort)
+      for _, key in ipairs(all_keys) do
+         if not ordered_keys[key] then
+            table.insert(keys, key)
+         end
+      end
+   end
+
+   local i = 1
+   return function()
+      local key = keys[i]
+      i = i + 1
+      return key, tbl[key], sub_orders[key]
+   end
 end
 
 function util.lua_versions()
@@ -503,6 +485,85 @@ end
 
 function util.see_help(command, program)
    return "See '"..util.this_program(program or "luarocks")..' help'..(command and " "..command or "").."'."
+end
+
+function util.announce_install(rockspec)
+   local cfg = require("luarocks.cfg")
+   local path = require("luarocks.path")
+
+   local suffix = ""
+   if rockspec.description and rockspec.description.license then
+      suffix = " (license: "..rockspec.description.license..")"
+   end
+
+   local root_dir = path.root_dir(cfg.rocks_dir)
+   util.printout(rockspec.name.." "..rockspec.version.." is now installed in "..root_dir..suffix)
+   util.printout()
+end
+
+--- Collect rockspecs located in a subdirectory.
+-- @param versions table: A table mapping rock names to newest rockspec versions.
+-- @param paths table: A table mapping rock names to newest rockspec paths.
+-- @param unnamed_paths table: An array of rockspec paths that don't contain rock
+-- name and version in regular format.
+-- @param subdir string: path to subdirectory.
+local function collect_rockspecs(versions, paths, unnamed_paths, subdir)
+   local fs = require("luarocks.fs")
+   local dir = require("luarocks.dir")
+   local path = require("luarocks.path")
+   local deps = require("luarocks.deps")
+
+   if fs.is_dir(subdir) then
+      for file in fs.dir(subdir) do
+         file = dir.path(subdir, file)
+
+         if file:match("rockspec$") and fs.is_file(file) then
+            local rock, version = path.parse_name(file)
+
+            if rock then
+               if not versions[rock] or deps.compare_versions(version, versions[rock]) then
+                  versions[rock] = version
+                  paths[rock] = file
+               end
+            else
+               table.insert(unnamed_paths, file)
+            end
+         end
+      end
+   end
+end
+
+--- Get default rockspec name for commands that take optional rockspec name.
+-- @return string or (nil, string): path to the rockspec or nil and error message.
+function util.get_default_rockspec()
+   local versions, paths, unnamed_paths = {}, {}, {}
+   -- Look for rockspecs in some common locations.
+   collect_rockspecs(versions, paths, unnamed_paths, ".")
+   collect_rockspecs(versions, paths, unnamed_paths, "rockspec")
+   collect_rockspecs(versions, paths, unnamed_paths, "rockspecs")
+
+   if #unnamed_paths > 0 then
+      -- There are rockspecs not following "name-version.rockspec" format.
+      -- More than one are ambiguous.
+      if #unnamed_paths > 1 then
+         return nil, "Please specify which rockspec file to use."
+      else
+         return unnamed_paths[1]
+      end
+   else
+      local rock = next(versions)
+
+      if rock then
+         -- If there are rockspecs for multiple rocks it's ambiguous.
+         if next(versions, rock) then
+            return nil, "Please specify which rockspec file to use."
+         else
+            return paths[rock]
+         end
+      else
+         return nil, "Argument missing: please specify a rockspec to use on current directory."
+      end
+   end
 end
 
 -- from http://lua-users.org/wiki/SplitJoin

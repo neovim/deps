@@ -1,6 +1,5 @@
 
 --- A builtin build system: back-end to provide a portable way of building C-based Lua modules.
---module("luarocks.build.builtin", package.seeall)
 local builtin = {}
 
 local unpack = unpack or table.unpack
@@ -165,7 +164,7 @@ function builtin.run(rockspec)
             add_flags(extras, "-Wl,-rpath,%s:", libdirs)
          end
          add_flags(extras, "-l%s", libraries)
-         if cfg.is_platform("cygwin") then
+         if cfg.link_lua_explicitly then
             add_flags(extras, "-l%s", {"lua"})
          end
          return execute(variables.LD.." "..variables.LIBFLAG, "-o", library, "-L"..variables.LUA_LIBDIR, unpack(extras))
@@ -174,8 +173,9 @@ function builtin.run(rockspec)
       --TODO EXEWRAPPER
    end
 
-   local ok = true
-   local built_modules = {}
+   local ok, err
+   local lua_modules = {}
+   local lib_modules = {}
    local luadir = path.lua_dir(rockspec.name, rockspec.version)
    local libdir = path.lib_dir(rockspec.name, rockspec.version)
    --TODO EXEWRAPPER
@@ -202,20 +202,17 @@ function builtin.run(rockspec)
    for name, info in pairs(build.modules) do
       local moddir = path.module_to_path(name)
       if type(info) == "string" then
-         local ext = info:match(".([^.]+)$")
+         local ext = info:match("%.([^.]+)$")
          if ext == "lua" then
             local filename = dir.base_name(info)
-            if info:match("init%.lua$") and not name:match("%.init$") then
+            if filename == "init.lua" and not name:match("%.init$") then
                moddir = path.module_to_path(name..".init")
             else
                local basename = name:match("([^.]+)$")
-               local baseinfo = filename:gsub("%.lua$", "")
-               if basename ~= baseinfo then
-                  filename = basename..".lua"
-               end
+               filename = basename..".lua"
             end
             local dest = dir.path(luadir, moddir, filename)
-            built_modules[info] = dest
+            lua_modules[info] = dest
          else
             info = {info}
          end
@@ -226,7 +223,7 @@ function builtin.run(rockspec)
          if info[1] then sources = info end
          if type(sources) == "string" then sources = {sources} end
          for _, source in ipairs(sources) do
-            local object = source:gsub(".[^.]*$", "."..cfg.obj_extension)
+            local object = source:gsub("%.[^.]*$", "."..cfg.obj_extension)
             if not object then
                object = source.."."..cfg.obj_extension
             end
@@ -236,29 +233,30 @@ function builtin.run(rockspec)
             end
             table.insert(objects, object)
          end
-         if not ok then break end
          local module_name = name:match("([^.]*)$").."."..util.matchquote(cfg.lib_extension)
          if moddir ~= "" then
             module_name = dir.path(moddir, module_name)
-            local ok, err = fs.make_dir(moddir)
+            ok, err = fs.make_dir(moddir)
             if not ok then return nil, err end
          end
-         built_modules[module_name] = dir.path(libdir, module_name)
+         lib_modules[module_name] = dir.path(libdir, module_name)
          ok = compile_library(module_name, objects, info.libraries, info.libdirs, name)
          if not ok then
             return nil, "Failed compiling module "..module_name
          end
       end
    end
-   for name, dest in pairs(built_modules) do
-      fs.make_dir(dir.dir_name(dest))
-      ok = fs.copy(name, dest)
-      if not ok then
-         return nil, "Failed installing "..name.." in "..dest
+   for _, mods in ipairs({{ tbl = lua_modules, perms = cfg.perm_read }, { tbl = lib_modules, perms = cfg.perm_exec }}) do
+      for name, dest in pairs(mods.tbl) do
+         fs.make_dir(dir.dir_name(dest))
+         ok, err = fs.copy(name, dest, mods.perms)
+         if not ok then
+            return nil, "Failed installing "..name.." in "..dest..": "..err
+         end
       end
    end
    if fs.is_dir("lua") then
-      local ok, err = fs.copy_contents("lua", luadir)
+      ok, err = fs.copy_contents("lua", luadir)
       if not ok then
          return nil, "Failed copying contents of 'lua' directory: "..err
       end
