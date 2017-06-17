@@ -15,23 +15,18 @@
 # undef O_BINARY
 #endif
 #if O_BINARY
+# include <io.h>
 # define SET_BINARY(f) setmode (f, O_BINARY)
 #else
 # define SET_BINARY(f) (void)0
 #endif
 
-#if defined __STDC__ || defined __cplusplus
-extern struct language * in_word_set (const char *, int);
-#else
-extern struct language * in_word_set ();
-#endif
+extern struct language * in_word_set (const char *, size_t);
 
 #define MAX_LEN 80
 
 int
-main (argc, argv)
-     int   argc;
-     char *argv[];
+main (int argc, char *argv[])
 {
   int  verbose = argc > 1 ? 1 : 0;
   char buf[2*MAX_LEN];

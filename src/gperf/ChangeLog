@@ -1,3 +1,450 @@
+2017-01-02  Marcel Schaible <marcel.schaible@studium.fernuni-hagen.de>
+	
+	* gperf-3.1 released.
+
+2016-12-29  Bruno Haible  <bruno@clisp.org>
+
+	Make autogen.sh more user-friendly.
+	* autogen.sh: Emit a message at the end, if everything succeeded.
+
+2016-12-03  Bruno Haible  <bruno@clisp.org>
+
+	Make Makefile.devel more useful for the users of the released tarball.
+	* Makefile.devel (totally-clean): New target.
+	* autogen.sh: Invoke it and 'all'.
+
+2016-11-27  Bruno Haible  <bruno@clisp.org>
+
+	Fix build with mingw.
+	* README.windows: Augment PATH for mingw, so that it finds libstdc++.
+
+2016-11-27  Bruno Haible  <bruno@clisp.org>
+
+	Assume the available C compiler supports ANSI C. Remove K&R C cruft.
+	* lib/getopt.h: Assume 'const' is defined. Use ANSI C prototypes.
+	* lib/getopt.c: Assume 'const' is defined. Use ANSI C prototypes.
+	Include <stddef.h>. Declare strcmp and strlen.
+	* lib/getopt1.c: Assume 'const' and NULL are defined. Use ANSI C
+	prototypes.
+	* lib/getopt.h.patch: Remove file.
+	* lib/getopt.c.patch: Remove file.
+	* lib/Makefile.in (SOURCE_FILES): Remove them.
+	* tests/jstest*.gperf: Assume 'const' is defined.
+	* tests/test.c: Use ANSI C prototypes.
+	(in_word_set): Fix prototype.
+	* tests/test2.c: Use ANSI C prototypes.
+	(in_word_set): Fix prototype.
+	Reported by Erik Johansson at <https://savannah.gnu.org/patch/?7382>.
+
+2016-11-26  Bruno Haible  <bruno@clisp.org>
+
+	Drop the inline specifiers from the generated lookup function.
+	It's not adequate because
+	- this lookup function is quite large in fact, not worth inlining,
+	- with gcc -O0, it leads to link errors, see
+	  <https://gcc.gnu.org/bugzilla/show_bug.cgi?id=41194#c2>
+	- the hash function is 'static', the lookup function is non-static,
+	  but references from non-static inline functions to static functions
+	  and variables are forbidden, see ISO C 99 section 6.7.4.(3).
+	* src/output.cc (Output::output_lookup_function): Don't emit an inline
+	specifier.
+	* tests/*.exp: Update.
+	Reported by Sebastian Freundt and Sergii Strelkovskyi
+	at <https://savannah.gnu.org/bugs/?37071>.
+
+2016-11-26  Bruno Haible  <bruno@clisp.org>
+
+	Change mailing list address to <bug-gperf@gnu.org>.
+	* src/output.cc (Output::output): Change bug report address to
+	<bug-gperf@gnu.org>.
+	* src/options.cc (Options::long_usage): Likewise.
+	* README: Likewise.
+	* doc/gperf.texi (Contributors): Likewise.
+	* tests/*.{c,exp,out}: Update.
+	Reported by Eric Blake <eblake@redhat.com>
+	at <http://lists.gnu.org/archive/html/bug-gperf/2014-10/msg00000.html>.
+
+2016-11-26  Bruno Haible  <bruno@clisp.org>
+
+	Change the 'len' parameter type to 'size_t'.
+	* src/output.cc (output_upperlower_strncmp, output_upperlower_memcmp,
+	Output::output_hash_function, Output::output_lookup_function,
+	Output::output): Emit declarations with 'size_t len' instead of
+	'unsigned int len'.
+	* tests/*.exp: Update.
+	* doc/gperf.texi (Output Format): Change declarations of 'hash' and
+	'in_word_set'.
+	* NEWS: Mention the change.
+	Reported by Pedro Giffuni <pfg@FreeBSD.org>
+	at <http://lists.gnu.org/archive/html/bug-gperf/2014-08/msg00000.html>.
+
+2016-11-26  Bruno Haible  <bruno@clisp.org>
+
+	Use proper 'ar' program when cross-compiling or when AR is specified.
+	* lib/configure.ac (AR): Determine through AC_CHECK_TOOL.
+	* lib/Makefile.in (AR): Use value determined by 'configure'.
+	Reported by György Andrasek <jurily@gmail.com>
+	at <http://lists.gnu.org/archive/html/bug-gperf/2014-04/msg00000.html>.
+
+2016-11-26  Bruno Haible  <bruno@clisp.org>
+
+	Avoid 'warning: cast from pointer to integer of different size'
+	in output code on 64-bit native Windows platforms.
+	* src/output.cc (output_keyword_entry): Cast pointer to 'size_t',
+	not to 'long', before casting it further to 'int'.
+	* tests/*.exp: Update.
+	Reported at <https://savannah.gnu.org/bugs/?45330>.
+
+2016-11-26  Bruno Haible  <bruno@clisp.org>
+
+	Don't use 'register' storage-class specifier in C++ output code.
+	* src/output.cc (register_scs): New variable.
+	(Output::Output): Initialize it.
+	(output_upperlower_strcmp, output_upperlower_strncmp,
+	output_upperlower_memcmp, Output::output_hash_function,
+	Output::output_lookup_function_body, Output::output_lookup_function):
+	Use it.
+	Reported at <https://savannah.gnu.org/bugs/?44887>.
+
+2016-11-26  Bruno Haible  <bruno@clisp.org>
+
+	Avoid 'warning: use of old-style cast' in output code.
+	* src/output.h (Output::output_asso_values_index): New method
+	declaration.
+	* src/output.cc (Output::output_asso_values_index): New method,
+	extracted from Output::output_asso_values_ref.
+	(Output::output_asso_values_ref): Use it. In C++ mode, emit C++ style
+	cast syntax.
+	Reported at <https://savannah.gnu.org/bugs/?44887>.
+
+2016-11-26  Bruno Haible  <bruno@clisp.org>
+
+	Avoid 'warning: implicit conversion changes signedness' in output code.
+	* src/output.cc (Output::output_lookup_function_body): Emit declaration
+	of 'key' as 'unsigned int', not 'int'. Optimize comparison accordingly.
+	* tests/*.exp: Update.
+	Reported at <https://savannah.gnu.org/bugs/?44887>.
+
+2016-11-26  Bruno Haible  <bruno@clisp.org>
+
+	Avoid 'warning: implicit conversion changes signedness' in output code.
+	* src/output.cc (Output::output_hash_function): Emit declaration of
+	'hval' as 'unsigned int', not 'int'.
+	* tests/*.exp: Update.
+	Reported at <https://savannah.gnu.org/bugs/?44887>.
+
+2016-11-25  Bruno Haible  <bruno@clisp.org>
+
+	Fix g++ -Wall warnings.
+	* src/search.cc (Search::prepare, Search::find_positions,
+	Search::optimize): Add braces in 'if (...) for (...)', to pacify
+	g++ 4.6.3 warnings "suggest explicit braces to avoid ambiguous 'else'"
+	(although there is no 'else'!).
+
+2016-11-25  Bruno Haible  <bruno@clisp.org>
+
+	Fix typo in autogen.sh, introduced on 2012-07-01.
+	* autogen.sh: Fix typo.
+
+2016-11-25  Bruno Haible  <bruno@clisp.org>
+
+	Fix "make check" error on Mac OS X.
+	* tests/Makefile.in (POSTPROCESS_FOR_MINGW): Run 'sed' in the C locale.
+	This fixes an error "sed: RE error: illegal byte sequence" on Mac OS X
+	when producing languages.out.
+	Reported at <https://savannah.gnu.org/bugs/?45329>.
+
+2016-11-23  Bruno Haible  <bruno@clisp.org>
+
+	Update installation instructions for Windows.
+	* README.windows: Assume a 64-bit Windows. Explain both 32-bit and
+	64-bit builds. Revamp instructions for the MS Visual C/C++ tool chain
+	and for Cygwin.
+
+2016-11-23  Bruno Haible  <bruno@clisp.org>
+
+	Drop the nickname "woe32".
+	* README.windows: Renamed from README.woe32.
+	* Makefile.in (SOURCE_FILES): Update.
+
+2016-11-19  Bruno Haible  <bruno@clisp.org>
+
+	doc: Prepare for possible use of GNU texi2any.
+	* doc/Makefile.in (TEXI2ANY): New variable.
+	(gperf_0.html): New rule.
+
+2016-11-19  Bruno Haible  <bruno@clisp.org>
+
+	doc: Don't generate Postscript-formatted doc by default.
+	* doc/Makefile.in (all): Don't depend on 'ps'.
+
+2014-10-15  Eric Blake  <eblake@redhat.com>
+
+	doc: fix invalid use of @itemx
+	* doc/gperf.texi (Output Details): Use correct macro.
+
+2012-07-01  Bruno Haible  <bruno@clisp.org>
+
+	Fix "make clean" with MSVC.
+	With MSVC 9, a program is created together with a .manifest file.
+	* src/Makefile.in (clean): Remove also the .manifest file.
+	* tests/Makefile.in (clean): Remove also the .manifest files.
+
+2012-07-01  Bruno Haible  <bruno@clisp.org>
+
+	Update expected test results.
+	* tests/test-6.exp: Expect to see --constants-prefix option.
+
+2012-07-01  Bruno Haible  <bruno@clisp.org>
+
+	Fix compilation error with MSVC.
+	* src/output.cc: Include config.h.
+	(DYNAMIC_ARRAY, FREE_DYNAMIC_ARRAY): New macros, copied from
+	src/search.cc.
+	(output_constant): Use them.
+
+2012-07-01  Bruno Haible  <bruno@clisp.org>
+
+	Remove old infrastructure for building with MSVC.
+	* autogen.sh: Don't remove src/config.h.msvc.
+	* Makefile.devel (src/config.h.msvc): Remove rule.
+	(all): Don't depend on it.
+	* src/Makefile.in (GENERATED_FILES): Remove config.h.msvc.
+	* src/.gitignore: Remove config.h.msvc.
+	* Makefile.msvc: Remove file.
+	* Makefile.in (SOURCE_FILES): Remove Makefile.msvc.
+
+2012-07-01  Bruno Haible  <bruno@clisp.org>
+
+	Support for building with MSVC much like for Unix.
+	* autogen.sh: Fetch also 'compile' and 'ar-lib'.
+	* Makefile.in (IMPORTED_FILES): Add build-aux/compile, build-aux/ar-lib.
+	* build-aux/.gitignore: Ignore also 'compile' and 'ar-lib'.
+	* lib/Makefile.in: Use $(OBJEXT) where suitable.
+	* README.woe32: Change instructions for compiling with MSVC.
+
+2012-07-01  Bruno Haible  <bruno@clisp.org>
+
+	Move build infrastructure files to build-aux/.
+	* autogen.sh: Copy install-sh and mkinstalldirst into build-aux/.
+	* configure.ac: Invoke AC_CONFIG_AUX_DIR.
+	* Makefile.in (IMPORTED_FILES): Update.
+	(distdir): Create subdirectories as needed.
+	* doc/Makefile.in (MKINSTALLDIRS): Update.
+	* src/Makefile.in (MKINSTALLDIRS): Update.
+	* .gitgnore: Remove install-sh, mkinstalldirs.
+	* build-aux/.gitignore: New file.
+
+2012-07-01  Bruno Haible  <bruno@clisp.org>
+
+	Distribute install-sh.
+	* autogen.sh: Fetch also install-sh.
+	* Makefile.in (IMPORTED_FILES): Add install-sh.
+	* configure.ac: Remove hack with AC_CONFIG_AUX_DIR_DEFAULT.
+	* .gitignore: Add install-sh.
+
+2012-07-01  Bruno Haible  <bruno@clisp.org>
+
+	Remove files distributed via gnulib from version control.
+	* autogen.sh: Fetch mkinstalldirs from the gnulib repository.
+	* mkinstalldirs: Remove file.
+	* .gitignore: Add mkinstalldirs.
+
+2012-07-01  Bruno Haible  <bruno@clisp.org>
+
+	Remove autotools generated files from version control.
+	* autogen.sh: New file.
+	* configure: Remove file.
+	* lib/configure: Remove file.
+	* src/configure: Remove file.
+	* tests/configure: Remove file.
+	* doc/configure: Remove file.
+	* src/config.h.in: Remove file.
+	* src/config.h.msvc: Remove file.
+	* src/config.h_vms: Remove file.
+	* .gitignore: Ignore configure.
+	* lib/.gitignore: New file.
+	* src/.gitignore: New file.
+	* tests/.gitignore: New file.
+	* doc/.gitignore: Ignore configure.
+
+2012-07-01  Bruno Haible  <bruno@clisp.org>
+
+	Turn doc/gperf.1 into a distributed built file.
+	* doc/gperf.1: Remove file.
+	* Makefile.devel (doc/gperf.1): Remove rule.
+	(all): Don't depend on it.
+	* doc/Makefile.in (man, gperf.1, gperf.1-update): New rules.
+	(all): Depend on man.
+	(distdir): Depend on gperf.1-update.
+	(GENERATED_FILES): Remove gperf.1.
+	(DISTRIBUTED_BUILT_FILES): Add gperf.1.
+	* doc/.gitignore: Add gperf.1.
+	* configure (AC_INIT): Rely on doc/gperf.texi, not doc/gperf.1.
+	* doc/configure (AC_INIT): Rely on gperf.texi, not gperf.1.
+
+2012-07-01  Bruno Haible  <bruno@clisp.org>
+
+	Remove distributed built files from version control.
+	* doc/.gitignore: New file.
+	* doc/gperf.info: Remove file.
+	* doc/gperf.dvi: Remove file.
+	* doc/gperf.ps: Remove file.
+	* doc/gperf.pdf: Remove file.
+	* doc/gperf.html: Remove file.
+	* doc/gperf_toc.html, doc/gperf_[0-9].html, doc/gperf_[0-9][0-9].html:
+	Remove files.
+
+2012-07-01  Bruno Haible  <bruno@clisp.org>
+
+	Allow editor backup files in git checkouts.
+	* .gitignore: New file.
+
+2012-07-01  Bruno Haible  <bruno@clisp.org>
+
+	Create tarballs through an Automake-like "make dist" command.
+	* Makefile.in (SOURCE_FILES, IMPORTED_FILES, GENERATED_FILES,
+	DISTRIBUTED_BUILT_FILES, DISTFILES): New macros.
+	(distdir): New rule.
+	(PACKAGE, VERSION, TAR, GZIP): New macros.
+	(dist): New rule.
+	* doc/Makefile.in (SOURCE_FILES, IMPORTED_FILES, GENERATED_FILES,
+	DISTRIBUTED_BUILT_FILES, DISTFILES): New macros.
+	(distdir): New rule.
+	* lib/Makefile.in (SOURCE_FILES, IMPORTED_FILES, GENERATED_FILES,
+	DISTRIBUTED_BUILT_FILES, DISTFILES): New macros.
+	(distdir): New rule.
+	* src/Makefile.in (SOURCE_FILES, IMPORTED_FILES, GENERATED_FILES,
+	DISTRIBUTED_BUILT_FILES, DISTFILES): New macros.
+	(distdir): New rule.
+	* tests/Makefile.in (SOURCE_FILES, IMPORTED_FILES, GENERATED_FILES,
+	DISTRIBUTED_BUILT_FILES, DISTFILES): New macros.
+	(distdir): New rule.
+
+2012-04-28  Bruno Haible  <bruno@clisp.org>
+
+	* configure: Regenerated with autoconf-2.69.
+	* doc/configure: Likewise.
+	* lib/configure: Likewise.
+	* src/configure: Likewise.
+	* tests/configure: Likewise.
+
+2011-01-16  Bruno Haible  <bruno@clisp.org>
+
+	* src/options.cc (Options::parse_options): Bump copyright year.
+
+	New option --constants-prefix.
+	* src/options.h (Options): Add member functions get_constants_prefix,
+	set_constants_prefix. Add member _constants_prefix.
+	* src/options.icc (Options::get_constants_prefix): New functions.
+	* src/options.cc (DEFAULT_CONSTANTS_PREFIX): New constant.
+	(Options::long_usage): Document --constants-prefix option.
+	(Options::Options): Initialize _constants_prefix member.
+	(Options::set_constants_prefix): New function.
+	(long_options): Add --constants-prefix option.
+	(Options::parse_options): Handle --constants-prefix option.
+	* src/input.cc (Input::read_input): Handle %define constants-prefix
+	declaration.
+	* src/output.cc (output_constant): New function.
+	(Output::output_constants): Invoke it.
+	(Output::output_lookup_function_body): Prefix each reference to a
+	constant with the constants prefix.
+	* doc/gperf.texi: Bump copyright year.
+	(Gperf Declarations): Document %define constants-prefix.
+	(Controlling Identifiers): New section.
+	(Output Details): Document --constants-prefix option.
+	* NEWS: Mention the changes.
+	Reported by Julian Zubek <zubekj@gmail.com>.
+
+2011-01-16  Bruno Haible  <bruno@clisp.org>
+
+	* configure: Regenerated with autoconf-2.68.
+	* doc/configure: Likewise.
+	* lib/configure: Likewise.
+	* src/configure: Likewise.
+	* tests/configure: Likewise.
+
+2010-07-31  Bruno Haible  <bruno@clisp.org>
+
+	* configure: Regenerated with autoconf-2.67.
+	* doc/configure: Likewise.
+	* lib/configure: Likewise.
+	* src/configure: Likewise.
+	* tests/configure: Likewise.
+
+2010-07-04  Bruno Haible  <bruno@clisp.org>
+
+	* configure: Regenerated with autoconf-2.66.
+	* doc/configure: Likewise.
+	* lib/configure: Likewise.
+	* src/configure: Likewise.
+	* tests/configure: Likewise.
+	* src/config.h.in: Likewise.
+	* src/config.h.msvc: Likewise.
+	* src/config.h_vms: Likewise.
+
+2010-03-30  Bruno Haible  <bruno@clisp.org>
+
+	Modernize README.woe32.
+	* README.woe32: Mention the mingw and Cygwin environments.
+
+2009-12-22  Eric Blake  <ebb9@byu.net>  (tiny change)
+
+	Avoid gcc warnings on Cygwin.
+	* lib/getopt.c (_getopt_internal): Add braces. Fix indentation.
+	* tests/smtp.gperf: Cast arguments of <ctype.h> functions.
+	* tests/test2.c: Include <io.h>.
+
+2009-12-22  Bruno Haible  <bruno@clisp.org>
+
+	Avoid g++ warnings.
+	* src/options.cc (Options::print_options): Add parentheses.
+	* src/output.cc (Output::output_lookup_array): Cast fprintf argument.
+
+2009-12-22  Bruno Haible  <bruno@clisp.org>
+
+	Support CPPFLAGS as mandated by GNU standards.
+	* lib/Makefile.in (CPPFLAGS): Use autoconf determined value.
+	* src/Makefile.in (CPPFLAGS): Likewise.
+	* tests/Makefile.in (CPPFLAGS): Likewise.
+	(check-c, check-ada, check-modula3, check-pascal, check-lang-utf8,
+	test.$(OBJEXT), check-lang-ucs2, test2.$(OBJEXT), check-smtp): Use
+	CPPFLAGS when compiling a .c file.
+	(VALIDATE): Pass also CPPFLAGS.
+	* tests/validate: Use CPPFLAGS when compiling a C or C++ file.
+
+2009-12-20  Bruno Haible  <bruno@clisp.org>
+
+	* doc/gperf.info: Regenerated.
+	* doc/gperf*.html: Likewise.
+	* doc/gperf.dvi: Likewise.
+	* doc/gperf.ps: Likewise.
+	* doc/gperf.pdf: Likewise.
+	* tests/*.exp: Update.
+
+	Change the default language to ANSI-C.
+	* src/options.cc (Options::long_usage): Mention new default language.
+	(Options::Options): Change default of _option_word.
+	(Options::set_language): Change fallback.
+	* doc/gperf.texi (Gperf Declarations, Output Language): Mention new
+	default language.
+	* NEWS: Mention the change.
+	Reported by Albert Cahalan <acahalan@gmail.com>.
+
+	* src/version.cc (version_string): Bump to 3.1.
+	* doc/gperf.texi: Bump version.
+
+2009-12-20  Bruno Haible  <bruno@clisp.org>
+
+	Allow processing the tests with parallel make.
+	* tests/Makefile.in (check-link-c, check-link-c++): Remove rules.
+	(test.$(OBJEXT), test2.$(OBJEXT)): New rules.
+	(check-c): Add commands for building cout. Depend on test.$(OBJEXT).
+	(check-ada, check-modula3, check-pascal, check-lang-utf8): Depend on
+	test.$(OBJEXT).
+	(check-lang-ucs2): Depend on test2.$(OBJEXT).
+	Reported by Bryan Østergaard <kloeri@exherbo.org>.
+
 2009-02-01  Brendan Kehoe  <brendan@zen.org>
 
 	* gperf-3.0.4 released.

@@ -1,7 +1,7 @@
 <HTML>
 <HEAD>
 <!-- This HTML file has been created by texi2html 1.52b
-     from gperf.texi on 1 February 2009 -->
+     from gperf.texi on 2 January 2017 -->
 
 <META HTTP-EQUIV="content-type" CONTENT="text/html; charset=UTF-8">
 <TITLE>Perfect Hash Function Generator - 5  Invoking gperf</TITLE>
@@ -11,7 +11,7 @@ Go to the <A HREF="gperf_1.html">first</A>, <A HREF="gperf_5.html">previous</A>,
 <P><HR><P>
 
 
-<H1><A NAME="SEC17" HREF="gperf_toc.html#TOC17">5  Invoking <CODE>gperf</CODE></A></H1>
+<H1><A NAME="SEC18" HREF="gperf_toc.html#TOC18">5  Invoking <CODE>gperf</CODE></A></H1>
 
 <P>
 There are <EM>many</EM> options to <CODE>gperf</CODE>.  They were added to make
@@ -23,7 +23,7 @@ complete list of options.
 
 
 
-<H2><A NAME="SEC18" HREF="gperf_toc.html#TOC18">5.1  Specifying the Location of the Output File</A></H2>
+<H2><A NAME="SEC19" HREF="gperf_toc.html#TOC19">5.1  Specifying the Location of the Output File</A></H2>
 
 <DL COMPACT>
 
@@ -39,7 +39,7 @@ or if it is <SAMP>&lsquo;-&rsquo;</SAMP>.
 </P>
 
 
-<H2><A NAME="SEC19" HREF="gperf_toc.html#TOC19">5.2  Options that affect Interpretation of the Input File</A></H2>
+<H2><A NAME="SEC20" HREF="gperf_toc.html#TOC20">5.2  Options that affect Interpretation of the Input File</A></H2>
 
 <P>
 These options are also available as declarations in the input file
@@ -52,7 +52,7 @@ These options are also available as declarations in the input file
 <DD>
 <DT><SAMP>&lsquo;--delimiters=<VAR>keyword-delimiter-list</VAR>&rsquo;</SAMP>
 <DD>
-<A NAME="IDX40"></A>
+<A NAME="IDX41"></A>
 Allows you to provide a string containing delimiters used to
 separate keywords from their attributes.  The default is ",".  This
 option is essential if you want to use keywords that have embedded
@@ -85,7 +85,7 @@ the <CODE>gperf</CODE> generated function.
 
 
 
-<H2><A NAME="SEC20" HREF="gperf_toc.html#TOC20">5.3  Options to specify the Language for the Output Code</A></H2>
+<H2><A NAME="SEC21" HREF="gperf_toc.html#TOC21">5.3  Options to specify the Language for the Output Code</A></H2>
 
 <P>
 These options are also available as declarations in the input file
@@ -124,7 +124,7 @@ ANSI C.  This language is understood by ANSI C compilers and C++ compilers.
 C++.  This language is understood by C++ compilers.
 </DL>
 
-The default is C.
+The default is ANSI-C.
 
 <DT><SAMP>&lsquo;-a&rsquo;</SAMP>
 <DD>
@@ -139,7 +139,7 @@ This option is supported for compatibility with previous releases of
 
 
 
-<H2><A NAME="SEC21" HREF="gperf_toc.html#TOC21">5.4  Options for fine tuning Details in the Output Code</A></H2>
+<H2><A NAME="SEC22" HREF="gperf_toc.html#TOC22">5.4  Options for fine tuning Details in the Output Code</A></H2>
 
 <P>
 Most of these options are also available as declarations in the input file
@@ -152,7 +152,7 @@ Most of these options are also available as declarations in the input file
 <DD>
 <DT><SAMP>&lsquo;--slot-name=<VAR>slot-name</VAR>&rsquo;</SAMP>
 <DD>
-<A NAME="IDX41"></A>
+<A NAME="IDX42"></A>
 This option is only useful when option <SAMP>&lsquo;-t&rsquo;</SAMP> (or, equivalently, the
 <SAMP>&lsquo;%struct-type&rsquo;</SAMP> declaration) has been given.
 By default, the program assumes the structure component identifier for
@@ -164,7 +164,7 @@ field in your supplied <CODE>struct</CODE>.
 <DD>
 <DT><SAMP>&lsquo;--initializer-suffix=<VAR>initializers</VAR>&rsquo;</SAMP>
 <DD>
-<A NAME="IDX42"></A>
+<A NAME="IDX43"></A>
 This option is only useful when option <SAMP>&lsquo;-t&rsquo;</SAMP> (or, equivalently, the
 <SAMP>&lsquo;%struct-type&rsquo;</SAMP> declaration) has been given.
 It permits to specify initializers for the structure members following
@@ -192,7 +192,7 @@ generated hash functions to be used in the same application.
 <DD>
 <DT><SAMP>&lsquo;--class-name=<VAR>class-name</VAR>&rsquo;</SAMP>
 <DD>
-<A NAME="IDX43"></A>
+<A NAME="IDX44"></A>
 This option is only useful when option <SAMP>&lsquo;-L C++&rsquo;</SAMP> (or, equivalently,
 the <SAMP>&lsquo;%language=C++&rsquo;</SAMP> declaration) has been given.  It
 allows you to specify the name of generated C++ class.  Default name is
@@ -243,6 +243,7 @@ by putting the tables in readonly memory.
 <DD>
 <DT><SAMP>&lsquo;--enum&rsquo;</SAMP>
 <DD>
+<A NAME="IDX45"></A>
 Define constant values using an enum local to the lookup function rather
 than with #defines.  This also means that different lookup functions can
 reside in the same file.  Thanks to James Clark <CODE>&#60;jjc@ai.mit.edu&#62;</CODE>.
@@ -294,11 +295,21 @@ This reduces the startup time of programs using a shared library containing
 the generated code (but not as much as option <SAMP>&lsquo;-P&rsquo;</SAMP>), at the expense
 of one more test-and-branch instruction at run time.
 
+<DT><SAMP>&lsquo;--constants-prefix=<VAR>prefix</VAR>&rsquo;</SAMP>
+<DD>
+<A NAME="IDX46"></A>
+Allows you to specify a prefix for the constants <CODE>TOTAL_KEYWORDS</CODE>,
+<CODE>MIN_WORD_LENGTH</CODE>, <CODE>MAX_WORD_LENGTH</CODE>, and so on.  This option
+permits the use of two hash tables in the same file, even when the option
+<SAMP>&lsquo;-E&rsquo;</SAMP> (or, equivalently, the <SAMP>&lsquo;%enum&rsquo;</SAMP> declaration) is not given or
+the option <SAMP>&lsquo;-G&rsquo;</SAMP> (or, equivalently, the <SAMP>&lsquo;%global-table&rsquo;</SAMP> declaration)
+is given.
+
 <DT><SAMP>&lsquo;-W <VAR>hash-table-array-name</VAR>&rsquo;</SAMP>
 <DD>
 <DT><SAMP>&lsquo;--word-array-name=<VAR>hash-table-array-name</VAR>&rsquo;</SAMP>
 <DD>
-<A NAME="IDX44"></A>
+<A NAME="IDX47"></A>
 Allows you to specify the name for the generated array containing the
 hash table.  Default name is <SAMP>&lsquo;wordlist&rsquo;</SAMP>.  This option permits the
 use of two hash tables in the same file, even when the option <SAMP>&lsquo;-G&rsquo;</SAMP>
@@ -306,7 +317,7 @@ use of two hash tables in the same file, even when the option <SAMP>&lsquo;-G&rs
 
 <DT><SAMP>&lsquo;--length-table-name=<VAR>length-table-array-name</VAR>&rsquo;</SAMP>
 <DD>
-<A NAME="IDX45"></A>
+<A NAME="IDX48"></A>
 Allows you to specify the name for the generated array containing the
 length table.  Default name is <SAMP>&lsquo;lengthtable&rsquo;</SAMP>.  This option permits the
 use of two length tables in the same file, even when the option <SAMP>&lsquo;-G&rsquo;</SAMP>
@@ -316,7 +327,7 @@ use of two length tables in the same file, even when the option <SAMP>&lsquo;-G&
 <DD>
 <DT><SAMP>&lsquo;--switch=<VAR>total-switch-statements</VAR>&rsquo;</SAMP>
 <DD>
-<A NAME="IDX46"></A>
+<A NAME="IDX49"></A>
 Causes the generated C code to use a <CODE>switch</CODE> statement scheme,
 rather than an array lookup table.  This can lead to a reduction in both
 time and space requirements for some input files.  The argument to this
@@ -342,7 +353,7 @@ This option is supported for compatibility with previous releases of
 
 
 
-<H2><A NAME="SEC22" HREF="gperf_toc.html#TOC22">5.5  Options for changing the Algorithms employed by <CODE>gperf</CODE></A></H2>
+<H2><A NAME="SEC23" HREF="gperf_toc.html#TOC23">5.5  Options for changing the Algorithms employed by <CODE>gperf</CODE></A></H2>
 
 <DL COMPACT>
 
@@ -376,7 +387,7 @@ through a search that minimizes the number of byte positions.
 <DD>
 <DT><SAMP>&lsquo;--duplicates&rsquo;</SAMP>
 <DD>
-<A NAME="IDX47"></A>
+<A NAME="IDX50"></A>
 Handle keywords whose selected byte sets hash to duplicate values.
 Duplicate hash values can occur if a set of keywords has the same names, but
 possesses different attributes, or if the selected byte positions are not well
@@ -413,7 +424,7 @@ option is not particularly useful when <SAMP>&lsquo;-S&rsquo;</SAMP> (or, equiva
 <DD>
 <DT><SAMP>&lsquo;--jump=<VAR>jump-value</VAR>&rsquo;</SAMP>
 <DD>
-<A NAME="IDX48"></A>
+<A NAME="IDX51"></A>
 Affects the “jump value”, i.e., how far to advance the associated
 byte value upon collisions.  <VAR>Jump-value</VAR> is rounded up to an
 odd number, the default is 5.  If the <VAR>jump-value</VAR> is 0 <CODE>gperf</CODE>
@@ -467,7 +478,7 @@ heuristic.
 
 
 
-<H2><A NAME="SEC23" HREF="gperf_toc.html#TOC23">5.6  Informative Output</A></H2>
+<H2><A NAME="SEC24" HREF="gperf_toc.html#TOC24">5.6  Informative Output</A></H2>
 
 <DL COMPACT>
 

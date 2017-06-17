@@ -1,4 +1,4 @@
-CMAKE_MINIMUM_REQUIRED (VERSION 2.8.6)
+CMAKE_MINIMUM_REQUIRED (VERSION 2.8.12)
 
 IF ((CMAKE_VERSION VERSION_GREATER 3.1) OR
     (CMAKE_VERSION VERSION_EQUAL 3.1))
@@ -50,7 +50,15 @@ IF (MSGPACK_USE_X3_PARSE)
       ENDIF ()
    ENDIF ()
 ELSE ()
-   IF (MSGPACK_CXX11)
+   IF (MSGPACK_CXX17)
+      IF ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+         SET (CMAKE_CXX_FLAGS "-std=c++17 ${CMAKE_CXX_FLAGS}")
+      ELSEIF ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
+         SET (CMAKE_CXX_FLAGS "-std=c++17 ${CMAKE_CXX_FLAGS}")
+      ELSEIF ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
+         MESSAGE ( FATAL_ERROR "MSVC doesn't support C++17.")
+      ENDIF ()
+   ELSEIF (MSGPACK_CXX11)
       IF ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
          SET (CMAKE_CXX_FLAGS "-std=c++11 ${CMAKE_CXX_FLAGS}")
       ELSEIF ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
@@ -92,21 +100,20 @@ OPTION (MSGPACK_BUILD_EXAMPLES "Build msgpack examples." ON)
 
 IF (MSGPACK_BOOST)
    SET (CMAKE_CXX_FLAGS "-DMSGPACK_USE_BOOST ${CMAKE_CXX_FLAGS}")
-ENDIF ()
-
-SET (Boost_USE_STATIC_LIBS        ON) # only find static libs
-SET (Boost_USE_MULTITHREADED      ON)
-SET (Boost_USE_STATIC_RUNTIME    OFF)
-FIND_PACKAGE (Boost COMPONENTS chrono context timer system)
-IF (Boost_INCLUDE_DIRS)
-    INCLUDE_DIRECTORIES (
-        ${Boost_INCLUDE_DIRS}
-    )
-ENDIF ()
-IF (MSGPACK_BOOST_DIR)
-    INCLUDE_DIRECTORIES (
-        ${MSGPACK_BOOST_DIR}
-    )
+   SET (Boost_USE_MULTITHREADED      ON)
+   SET (Boost_USE_STATIC_RUNTIME    OFF)
+   FIND_PACKAGE (Boost REQUIRED COMPONENTS chrono context system timer)
+   INCLUDE_DIRECTORIES (
+      ${Boost_INCLUDE_DIRS}
+   )
+   LINK_DIRECTORIES (
+      ${Boost_LIBRARY_DIRS}
+   )
+   IF (MSGPACK_BOOST_DIR)
+      INCLUDE_DIRECTORIES (
+         ${MSGPACK_BOOST_DIR}
+      )
+   ENDIF ()
 ENDIF ()
 
 IF (MSGPACK_CHAR_SIGN)
@@ -127,7 +134,7 @@ FOREACH (F ${PREDEF_FILES})
    FILE (READ ${CMAKE_CURRENT_SOURCE_DIR}/external/boost/predef/include/boost/${F} CONTENT)
    STRING(REPLACE "BOOST_" "MSGPACK_" CONTENT ${CONTENT})
    STRING(REPLACE "boost/" "msgpack/" CONTENT ${CONTENT})
-   FILE (WRITE ${CMAKE_CURRENT_SOURCE_DIR}/include/msgpack/${F} ${CONTENT})
+   FILE (GENERATE OUTPUT ${CMAKE_CURRENT_SOURCE_DIR}/include/msgpack/${F} CONTENT ${CONTENT})
 ENDFOREACH ()
 
 FILE (GLOB_RECURSE PREPROCESSOR_FILES RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}/external/boost/preprocessor/include/boost ${CMAKE_CURRENT_SOURCE_DIR}/external/boost/preprocessor/include/boost/*.hpp)
@@ -137,7 +144,7 @@ FOREACH (F ${PREPROCESSOR_FILES})
    FILE (READ ${CMAKE_CURRENT_SOURCE_DIR}/external/boost/preprocessor/include/boost/${F} CONTENT)
    STRING(REPLACE "BOOST_" "MSGPACK_" CONTENT ${CONTENT})
    STRING(REPLACE "boost/" "msgpack/" CONTENT ${CONTENT})
-   FILE (WRITE ${CMAKE_CURRENT_SOURCE_DIR}/include/msgpack/${F} ${CONTENT})
+   FILE (GENERATE OUTPUT ${CMAKE_CURRENT_SOURCE_DIR}/include/msgpack/${F} CONTENT ${CONTENT})
 ENDFOREACH ()
 
 FIND_PACKAGE (GTest)
@@ -174,16 +181,19 @@ CONFIGURE_FILE (
     @ONLY
 )
 
-INCLUDE_DIRECTORIES (
-    ./
-    include/
-    ${CMAKE_CURRENT_BINARY_DIR}/include/
-)
-
 IF (MSGPACK_ENABLE_SHARED)
     ADD_LIBRARY (msgpackc SHARED
         ${msgpackc_SOURCES}
         ${msgpackc_HEADERS}
+    )
+
+    TARGET_INCLUDE_DIRECTORIES (msgpackc
+        PUBLIC
+            $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+            $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>
+            $<INSTALL_INTERFACE:include>
+        PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}
     )
 ENDIF ()
 
@@ -191,6 +201,20 @@ ADD_LIBRARY (msgpackc-static STATIC
     ${msgpackc_SOURCES}
     ${msgpackc_HEADERS}
 )
+
+TARGET_INCLUDE_DIRECTORIES (msgpackc-static
+    PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>
+        $<INSTALL_INTERFACE:include>
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+IF (NOT MSGPACK_ENABLE_SHARED)
+    # Add alias for subdirectories
+    ADD_LIBRARY (msgpackc ALIAS msgpackc-static)
+ENDIF ()
 
 SET_TARGET_PROPERTIES (msgpackc-static PROPERTIES OUTPUT_NAME "msgpackc")
 IF (MSGPACK_ENABLE_SHARED)
@@ -255,10 +279,15 @@ ELSE()
     SET (MSGPACK_INSTALLTARGETS msgpackc-static)
 ENDIF ()
 
-INSTALL (TARGETS ${MSGPACK_INSTALLTARGETS} RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-                                           LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-                                           ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
-INSTALL (DIRECTORY include DESTINATION ${CMAKE_INSTALL_PREFIX})
+INSTALL (TARGETS ${MSGPACK_INSTALLTARGETS} EXPORT msgpack-targets
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+)
+FOREACH (file ${msgpackc_HEADERS})
+    GET_FILENAME_COMPONENT (dir ${file} PATH)
+    INSTALL (FILES ${file} DESTINATION ${CMAKE_INSTALL_PREFIX}/${dir})
+ENDFOREACH ()
 IF (NOT MSVC)
     INSTALL (FILES ${CMAKE_CURRENT_BINARY_DIR}/msgpack.pc DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig)
 ENDIF ()
@@ -309,3 +338,39 @@ IF (DOXYGEN_FOUND)
         DEPENDS doxygen_c doxygen_cpp
     )
 ENDIF ()
+
+INCLUDE (CMakePackageConfigHelpers)
+
+SET (CMAKE_INSTALL_CMAKEDIR "${CMAKE_INSTALL_LIBDIR}/cmake/msgpack")
+
+WRITE_BASIC_PACKAGE_VERSION_FILE (
+    msgpack-config-version.cmake
+    VERSION ${VERSION}
+    COMPATIBILITY SameMajorVersion
+)
+
+IF (NOT CMAKE_VERSION VERSION_LESS 3.0)
+    EXPORT (EXPORT msgpack-targets
+        FILE "${CMAKE_CURRENT_BINARY_DIR}/msgpack-targets.cmake"
+    )
+ENDIF ()
+
+CONFIGURE_PACKAGE_CONFIG_FILE (msgpack-config.cmake.in
+    msgpack-config.cmake
+    INSTALL_DESTINATION "${CMAKE_INSTALL_CMAKEDIR}"
+)
+
+INSTALL (EXPORT msgpack-targets
+    FILE
+        msgpack-targets.cmake
+    DESTINATION
+        "${CMAKE_INSTALL_CMAKEDIR}"
+)
+
+INSTALL (
+    FILES
+        "${CMAKE_CURRENT_BINARY_DIR}/msgpack-config.cmake"
+        "${CMAKE_CURRENT_BINARY_DIR}/msgpack-config-version.cmake"
+    DESTINATION
+        "${CMAKE_INSTALL_CMAKEDIR}"
+)

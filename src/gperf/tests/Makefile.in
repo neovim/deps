@@ -1,6 +1,6 @@
 # Makefile for gperf/tests
 
-# Copyright (C) 1989, 1992-1993, 1995, 1998, 2000, 2002-2004, 2007-2009 Free Software Foundation, Inc.
+# Copyright (C) 1989, 1992-1993, 1995, 1998, 2000, 2002-2004, 2007-2009, 2012, 2016 Free Software Foundation, Inc.
 # Written by Douglas C. Schmidt <schmidt@ics.uci.edu>
 # and Bruno Haible <bruno@clisp.org>.
 #
@@ -34,6 +34,7 @@ CXX = @CXX@
 CXXFLAGS = @CXXFLAGS@
 CXXCPP = @CXXCPP@
 # Both C and C++ compiler
+CPPFLAGS = @CPPFLAGS@
 LDFLAGS = @LDFLAGS@
 OBJEXT = @OBJEXT@
 EXEEXT = @EXEEXT@
@@ -60,84 +61,83 @@ installdirs :
 
 uninstall :
 
-check : check-link-c check-link-c++ check-c check-ada check-modula3 check-pascal check-lang-utf8 check-lang-ucs2 check-smtp check-test
+check : check-c check-ada check-modula3 check-pascal check-lang-utf8 check-lang-ucs2 check-smtp check-test
 	@true
 
 extracheck : @CHECK_LANG_SYNTAX@
 	@true
 
-check-link-c: force
-	@echo "performing some tests of the perfect hash generator"
-	$(CC) -c $(CFLAGS) $(srcdir)/test.c
-	$(GPERF) -c -l -S1 -I -o $(srcdir)/c.gperf > cinset.c
-	$(CC) $(CFLAGS) $(LDFLAGS) -o cout cinset.c test.$(OBJEXT)
-
-check-link-c++: force
-
-check-c:
+check-c: test.$(OBJEXT)
 	@echo "testing ANSI C reserved words, all items should be found in the set"
+	$(GPERF) -c -l -S1 -I -o $(srcdir)/c.gperf > cinset.c
+	$(CC) $(CFLAGS) $(CPPFLAGS) $(LDFLAGS) -o cout cinset.c test.$(OBJEXT)
 	./cout -v < $(srcdir)/c.gperf | LC_ALL=C tr -d '\r' > c.out
 	diff $(srcdir)/c.exp c.out
 
-check-ada:
+check-ada: test.$(OBJEXT)
 	$(GPERF) -k1,4,'$$' -I $(srcdir)/ada.gperf > adainset.c
 # double '$$' is only there since make gets confused; program wants only 1 '$'
-	$(CC) $(CFLAGS) $(LDFLAGS) -o aout adainset.c test.$(OBJEXT)
+	$(CC) $(CFLAGS) $(CPPFLAGS) $(LDFLAGS) -o aout adainset.c test.$(OBJEXT)
 	@echo "testing Ada reserved words, all items should be found in the set"
 	./aout -v < $(srcdir)/ada.gperf | LC_ALL=C tr -d '\r' > ada-res.out
 	diff $(srcdir)/ada-res.exp ada-res.out
 	$(GPERF) -D -k1,'$$' -s 2 -I -o $(srcdir)/adadefs.gperf > preinset.c
-	$(CC) $(CFLAGS) $(LDFLAGS) -o preout preinset.c test.$(OBJEXT)
+	$(CC) $(CFLAGS) $(CPPFLAGS) $(LDFLAGS) -o preout preinset.c test.$(OBJEXT)
 	@echo "testing Ada predefined words, all items should be found in the set"
 	./preout -v < $(srcdir)/adadefs.gperf | LC_ALL=C tr -d '\r' > ada-pred.out
 	diff $(srcdir)/ada-pred.exp ada-pred.out
 
-check-modula3:
+check-modula3: test.$(OBJEXT)
 	$(GPERF) -k1,2,'$$' -I -o $(srcdir)/modula3.gperf > m3inset.c
-	$(CC) $(CFLAGS) $(LDFLAGS) -o m3out m3inset.c test.$(OBJEXT)
+	$(CC) $(CFLAGS) $(CPPFLAGS) $(LDFLAGS) -o m3out m3inset.c test.$(OBJEXT)
 	@echo "testing Modula3 reserved words, all items should be found in the set"
 	./m3out -v < $(srcdir)/modula3.gperf | LC_ALL=C tr -d '\r' > modula.out
 	diff $(srcdir)/modula.exp modula.out
 
-check-pascal:
+check-pascal: test.$(OBJEXT)
 	$(GPERF) -o -S2 -I < $(srcdir)/pascal.gperf > pinset.c
-	$(CC) $(CFLAGS) $(LDFLAGS) -o pout pinset.c test.$(OBJEXT)
+	$(CC) $(CFLAGS) $(CPPFLAGS) $(LDFLAGS) -o pout pinset.c test.$(OBJEXT)
 	@echo "testing Pascal reserved words, all items should be found in the set"
 	./pout -v < $(srcdir)/pascal.gperf | LC_ALL=C tr -d '\r' > pascal.out
 	diff $(srcdir)/pascal.exp pascal.out
 
 # check for 8-bit cleanliness
-check-lang-utf8:
+check-lang-utf8: test.$(OBJEXT)
 	$(GPERF) -k1 -t -I -K foreign_name < $(srcdir)/lang-utf8.gperf > lu8inset.c
-	$(CC) $(CFLAGS) $(LDFLAGS) -o lu8out lu8inset.c test.$(OBJEXT)
+	$(CC) $(CFLAGS) $(CPPFLAGS) $(LDFLAGS) -o lu8out lu8inset.c test.$(OBJEXT)
 	@echo "testing UTF-8 encoded languages, all items should be found in the set"
 	sed -e '1,6d' -e 's/,.*//' < $(srcdir)/lang-utf8.gperf | ./lu8out -v | LC_ALL=C tr -d '\r' > lang-utf8.out
 	diff $(srcdir)/lang-utf8.exp lang-utf8.out
 
+test.$(OBJEXT) : $(srcdir)/test.c
+	$(CC) -c $(CFLAGS) $(CPPFLAGS) $(srcdir)/test.c
+
 # check for binary keywords with NUL bytes
-check-lang-ucs2:
-	$(CC) -c $(CFLAGS) $(srcdir)/test2.c
+check-lang-ucs2: test2.$(OBJEXT)
 	$(GPERF) -k4 -t -l -I -K foreign_name < $(srcdir)/lang-ucs2.gperf > lu2inset.c
-	$(CC) $(CFLAGS) $(LDFLAGS) -o lu2out lu2inset.c test2.$(OBJEXT)
+	$(CC) $(CFLAGS) $(CPPFLAGS) $(LDFLAGS) -o lu2out lu2inset.c test2.$(OBJEXT)
 	@echo "testing UCS-2 encoded languages, all items should be found in the set"
 	./lu2out -v < $(srcdir)/lang-ucs2.in | LC_ALL=C tr -d '\r' > lang-ucs2.out
 	diff $(srcdir)/lang-ucs2.exp lang-ucs2.out
+
+test2.$(OBJEXT) : $(srcdir)/test2.c
+	$(CC) -c $(CFLAGS) $(CPPFLAGS) $(srcdir)/test2.c
 
 # check case-insensitive lookup
 check-smtp:
 	@echo "testing SMTP keywords, case-insensitive"
 	$(GPERF) --struct-type --readonly-table --enum --global -K field_name -N header_entry --ignore-case $(srcdir)/smtp.gperf > smtp.c
-	$(CC) $(CFLAGS) $(LDFLAGS) -o smtp smtp.c
+	$(CC) $(CFLAGS) $(CPPFLAGS) $(LDFLAGS) -o smtp smtp.c
 	./smtp
 	$(GPERF) --struct-type --readonly-table --enum --global -K field_name -N header_entry --ignore-case --compare-strncmp $(srcdir)/smtp.gperf > smtp.c
-	$(CC) $(CFLAGS) $(LDFLAGS) -o smtp smtp.c
+	$(CC) $(CFLAGS) $(CPPFLAGS) $(LDFLAGS) -o smtp smtp.c
 	./smtp
 	$(GPERF) --struct-type --readonly-table --enum --global -K field_name -N header_entry --ignore-case --compare-lengths $(srcdir)/smtp.gperf > smtp.c
-	$(CC) $(CFLAGS) $(LDFLAGS) -o smtp smtp.c
+	$(CC) $(CFLAGS) $(CPPFLAGS) $(LDFLAGS) -o smtp smtp.c
 	./smtp
 
 # these next 5 are demos that show off the generated code
-POSTPROCESS_FOR_MINGW = LC_ALL=C tr -d '\r' | sed -e 's|[^ ]*[/\\][\\]*src[/\\][\\]*gperf[^ ]*|../src/gperf|'
+POSTPROCESS_FOR_MINGW = LC_ALL=C tr -d '\r' | LC_ALL=C sed -e 's|[^ ]*[/\\][\\]*src[/\\][\\]*gperf[^ ]*|../src/gperf|'
 check-test:
 	$(GPERF) -L C -F ', 0, 0' -j1 -i 1 -g -o -t -G -N is_reserved_word -k1,3,'$$' < $(srcdir)/c-parse.gperf | $(POSTPROCESS_FOR_MINGW) > c-parse.out
 	diff $(srcdir)/c-parse.exp c-parse.out
@@ -179,7 +179,7 @@ check-test:
 # usable. (There are still platforms where gcc-2.8.0's fixincludes does not
 # work well enough.)
 
-VALIDATE = CC='$(CC)' CFLAGS='$(CFLAGS)' CXX='$(CXX)' CXXFLAGS='$(CXXFLAGS)' GPERF='$(GPERF)' $(srcdir)/validate
+VALIDATE = CC='$(CC)' CFLAGS='$(CFLAGS)' CXX='$(CXX)' CXXFLAGS='$(CXXFLAGS)' CPPFLAGS='$(CPPFLAGS)' GPERF='$(GPERF)' $(srcdir)/validate
 
 check-lang-syntax : force
 	$(VALIDATE) KR-C,C,ANSI-C,C++ -k1,2 $(srcdir)/jstest1.gperf
@@ -329,13 +329,71 @@ check-lang-syntax : force
 mostlyclean : clean
 
 clean : force
-	$(RM) *.$(OBJEXT) core *inset.c output.* *.out aout$(EXEEXT) cout$(EXEEXT) lu2out$(EXEEXT) lu8out$(EXEEXT) m3out$(EXEEXT) pout$(EXEEXT) preout$(EXEEXT) smtp.c smtp$(EXEEXT) tmp-* valitest*
+	$(RM) *.$(OBJEXT) core *inset.c output.* *.out \
+	      aout$(EXEEXT) aout$(EXEEXT).manifest \
+	      cout$(EXEEXT) cout$(EXEEXT).manifest \
+	      lu2out$(EXEEXT) lu2out$(EXEEXT).manifest \
+	      lu8out$(EXEEXT) lu8out$(EXEEXT).manifest \
+	      m3out$(EXEEXT) m3out$(EXEEXT).manifest \
+	      pout$(EXEEXT) pout$(EXEEXT).manifest \
+	      preout$(EXEEXT) preout$(EXEEXT).manifest \
+	      smtp.c smtp$(EXEEXT) smtp$(EXEEXT).manifest \
+	      tmp-* valitest*
 	$(RM) -r *.dSYM
 
 distclean : clean
 	$(RM) config.status config.log config.cache Makefile
 
 maintainer-clean : distclean
+
+# List of source files.
+SOURCE_FILES = \
+  configure.ac Makefile.in \
+  test.c \
+  c.gperf c.exp \
+  ada.gperf ada-res.exp adadefs.gperf ada-pred.exp \
+  modula3.gperf modula.exp \
+  pascal.gperf pascal.exp \
+  lang-utf8.gperf lang-utf8.exp \
+  lang-ucs2.gperf lang-ucs2.in lang-ucs2.exp test2.c \
+  smtp.gperf \
+  c-parse.gperf c-parse.exp \
+  objc.gperf objc.exp \
+  chill.gperf chill.exp \
+  cplusplus.gperf cplusplus.exp \
+  java.gperf java.exp \
+  modula2.gperf modula2.exp \
+  test-4.exp \
+  gpc.gperf gpc.exp \
+  permut2.gperf permut2.exp \
+  permut3.gperf permut3.exp \
+  permutc2.gperf permutc2.exp \
+  charsets.gperf charsets.exp \
+  languages.gperf languages.exp \
+  incomplete.gperf incomplete.exp \
+  test-6.exp \
+  test-7.exp \
+  validate \
+  jstest1.gperf \
+  jstest2.gperf \
+  jstest3.gperf \
+  jstest4.gperf \
+  c++.gperf irc.gperf jscript.gperf makeinfo.gperf
+# List of distributed files imported from other packages.
+IMPORTED_FILES =
+# List of distributed files generated by autotools or Makefile.devel.
+GENERATED_FILES = \
+  configure
+# List of distributed files generated by "make".
+DISTRIBUTED_BUILT_FILES =
+# List of distributed files.
+DISTFILES = $(SOURCE_FILES) $(IMPORTED_FILES) $(GENERATED_FILES) $(DISTRIBUTED_BUILT_FILES)
+
+distdir : $(DISTFILES)
+	for file in $(DISTFILES); do \
+	  if test -f $$file; then dir='.'; else dir='$(srcdir)'; fi; \
+	  cp -p $$dir/$$file '$(distdir)'/$$file || exit 1; \
+	done
 
 force :
 

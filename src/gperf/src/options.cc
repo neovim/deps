@@ -1,5 +1,5 @@
 /* Handles parsing the Options provided to the user.
-   Copyright (C) 1989-1998, 2000, 2002-2004, 2006-2009 Free Software Foundation, Inc.
+   Copyright (C) 1989-1998, 2000, 2002-2004, 2006-2009, 2011, 2016 Free Software Foundation, Inc.
    Written by Douglas C. Schmidt <schmidt@ics.uci.edu>
    and Bruno Haible <bruno@clisp.org>.
 
@@ -62,6 +62,9 @@ static const char *const DEFAULT_LENGTHTABLE_NAME = "lengthtable";
 /* Default name for string pool.  */
 static const char *const DEFAULT_STRINGPOOL_NAME = "stringpool";
 
+/* Default prefix for constants.  */
+static const char *const DEFAULT_CONSTANTS_PREFIX = "";
+
 /* Default delimiters that separate keywords from their attributes.  */
 static const char *const DEFAULT_DELIMITERS = ",";
 
@@ -120,7 +123,7 @@ Options::long_usage (FILE * stream)
            "  -L, --language=LANGUAGE-NAME\n"
            "                         Generates code in the specified language. Languages\n"
            "                         handled are currently C++, ANSI-C, C, and KR-C. The\n"
-           "                         default is C.\n");
+           "                         default is ANSI-C.\n");
   fprintf (stream, "\n");
   fprintf (stream,
            "Details in the output code:\n");
@@ -176,6 +179,9 @@ Options::long_usage (FILE * stream)
   fprintf (stream,
            "      --null-strings     Use NULL strings instead of empty strings for empty\n"
            "                         keyword table entries.\n");
+  fprintf (stream,
+           "      --constants-prefix=PREFIX\n"
+           "                         Specify prefix for the constants like TOTAL_KEYWORDS.\n");
   fprintf (stream,
            "  -W, --word-array-name=NAME\n"
            "                         Specify name of word list array. Default name is\n"
@@ -260,7 +266,7 @@ Options::long_usage (FILE * stream)
            "                         output to the standard error).\n");
   fprintf (stream, "\n");
   fprintf (stream,
-           "Report bugs to <bug-gnu-gperf@gnu.org>.\n");
+           "Report bugs to <bug-gperf@gnu.org>.\n");
 }
 
 /* Prints the given options.  */
@@ -279,7 +285,7 @@ Options::print_options () const
         {
           putchar (*arg);
           arg++;
-          if (*arg >= 'A' && *arg <= 'Z' || *arg >= 'a' && *arg <= 'z')
+          if ((*arg >= 'A' && *arg <= 'Z') || (*arg >= 'a' && *arg <= 'z'))
             {
               putchar (*arg);
               arg++;
@@ -291,7 +297,7 @@ Options::print_options () const
                   putchar (*arg);
                   arg++;
                 }
-              while (*arg >= 'A' && *arg <= 'Z' || *arg >= 'a' && *arg <= 'z' || *arg == '-');
+              while ((*arg >= 'A' && *arg <= 'Z') || (*arg >= 'a' && *arg <= 'z') || *arg == '-');
               if (*arg == '=')
                 {
                   putchar (*arg);
@@ -448,7 +454,7 @@ PositionStringParser::nextPosition ()
 /* Sets the default Options.  */
 
 Options::Options ()
-  : _option_word (C),
+  : _option_word (ANSIC),
     _input_file_name (NULL),
     _output_file_name (NULL),
     _language (NULL),
@@ -465,6 +471,7 @@ Options::Options ()
     _wordlist_name (DEFAULT_WORDLIST_NAME),
     _lengthtable_name (DEFAULT_LENGTHTABLE_NAME),
     _stringpool_name (DEFAULT_STRINGPOOL_NAME),
+    _constants_prefix (DEFAULT_CONSTANTS_PREFIX),
     _delimiters (DEFAULT_DELIMITERS),
     _key_positions ()
 {
@@ -574,9 +581,10 @@ Options::set_language (const char *language)
         _option_word |= CPLUSPLUS;
       else
         {
-          fprintf (stderr, "unsupported language option %s, defaulting to C\n",
+          fprintf (stderr,
+                   "unsupported language option %s, defaulting to ANSI-C\n",
                    language);
-          _option_word |= C;
+          _option_word |= ANSIC;
         }
     }
 }
@@ -648,6 +656,14 @@ Options::set_lengthtable_name (const char *name)
     _lengthtable_name = name;
 }
 
+/* Sets the prefix for the constants, if not already set.  */
+void
+Options::set_constants_prefix (const char *prefix)
+{
+  if (_constants_prefix == DEFAULT_CONSTANTS_PREFIX)
+    _constants_prefix = prefix;
+}
+
 /* Sets the string pool name, if not already set.  */
 void
 Options::set_stringpool_name (const char *name)
@@ -687,6 +703,7 @@ static const struct option long_options[] =
   { "enum", no_argument, NULL, 'E' },
   { "includes", no_argument, NULL, 'I' },
   { "global-table", no_argument, NULL, 'G' },
+  { "constants-prefix", required_argument, NULL, CHAR_MAX + 5 },
   { "word-array-name", required_argument, NULL, 'W' },
   { "length-table-name", required_argument, NULL, CHAR_MAX + 4 },
   { "switch", required_argument, NULL, 'S' },
@@ -1004,7 +1021,7 @@ License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>\n\
 This is free software: you are free to change and redistribute it.\n\
 There is NO WARRANTY, to the extent permitted by law.\n\
 ",
-                   "1989-1998, 2000-2004, 2006-2009");
+                   "1989-2017");
           fprintf (stdout, "Written by %s and %s.\n",
                    "Douglas C. Schmidt", "Bruno Haible");
           exit (0);
@@ -1041,6 +1058,11 @@ There is NO WARRANTY, to the extent permitted by law.\n\
         case CHAR_MAX + 4:      /* Sets the name for the length table array.  */
           {
             _lengthtable_name = /*getopt*/optarg;
+            break;
+          }
+        case CHAR_MAX + 5:      /* Sets the prefix for the constants.  */
+          {
+            _constants_prefix = /*getopt*/optarg;
             break;
           }
         default:

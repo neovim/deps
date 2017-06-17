@@ -1,5 +1,5 @@
 /* Output routines.
-   Copyright (C) 1989-1998, 2000, 2002-2004, 2006-2007, 2009 Free Software Foundation, Inc.
+   Copyright (C) 1989-1998, 2000, 2002-2004, 2006-2007, 2009, 2011-2012, 2016 Free Software Foundation, Inc.
    Written by Douglas C. Schmidt <schmidt@ics.uci.edu>
    and Bruno Haible <bruno@clisp.org>.
 
@@ -28,6 +28,32 @@
 #include <limits.h> /* defines SCHAR_MAX etc. */
 #include "options.h"
 #include "version.h"
+#include "config.h"
+
+/* ============================== Portability ============================== */
+
+/* Dynamically allocated array with dynamic extent:
+
+   Example:
+       DYNAMIC_ARRAY (my_array, int, n);
+       ...
+       FREE_DYNAMIC_ARRAY (my_array);
+
+   Attention: depending on your implementation my_array is either the array
+   itself or a pointer to the array! Always use my_array only as expression!
+ */
+#if HAVE_DYNAMIC_ARRAY
+  #define DYNAMIC_ARRAY(var,eltype,size) eltype var[size]
+  #define FREE_DYNAMIC_ARRAY(var)
+#else
+  #define DYNAMIC_ARRAY(var,eltype,size) eltype *var = new eltype[size]
+  #define FREE_DYNAMIC_ARRAY(var) delete[] var
+#endif
+
+/* ========================================================================= */
+
+/* The "register " storage-class specifier.  */
+static const char *register_scs;
 
 /* The "const " qualifier.  */
 static const char *const_always;
@@ -214,17 +240,30 @@ void Output_Enum::output_end ()
   printf ("%s  };\n\n", _indentation);
 }
 
+/* Outputs a constant in the given style.  */
+
+static void
+output_constant (struct Output_Constants& style, const char *name, int value)
+{
+  const char *prefix = option.get_constants_prefix ();
+  DYNAMIC_ARRAY (combined_name, char, strlen (prefix) + strlen (name) + 1);
+  strcpy (combined_name, prefix);
+  strcpy (combined_name + strlen (prefix), name);
+  style.output_item (combined_name, value);
+  FREE_DYNAMIC_ARRAY (combined_name);
+}
+
 /* Outputs the maximum and minimum hash values etc.  */
 
 void
 Output::output_constants (struct Output_Constants& style) const
 {
   style.output_start ();
-  style.output_item ("TOTAL_KEYWORDS", _total_keys);
-  style.output_item ("MIN_WORD_LENGTH", _min_key_len);
-  style.output_item ("MAX_WORD_LENGTH", _max_key_len);
-  style.output_item ("MIN_HASH_VALUE", _min_hash_value);
-  style.output_item ("MAX_HASH_VALUE", _max_hash_value);
+  output_constant (style, "TOTAL_KEYWORDS", _total_keys);
+  output_constant (style, "MIN_WORD_LENGTH", _min_key_len);
+  output_constant (style, "MAX_WORD_LENGTH", _max_key_len);
+  output_constant (style, "MIN_HASH_VALUE", _min_hash_value);
+  output_constant (style, "MAX_HASH_VALUE", _max_hash_value);
   style.output_end ();
 }
 
@@ -277,15 +316,16 @@ output_upperlower_strcmp ()
           "gperf_case_strcmp ");
   printf (option[KRC] ?
                "(s1, s2)\n"
-          "     register char *s1;\n"
-          "     register char *s2;\n" :
+          "     %schar *s1;\n"
+          "     %schar *s2;\n" :
           option[C] ?
                "(s1, s2)\n"
-          "     register const char *s1;\n"
-          "     register const char *s2;\n" :
+          "     %sconst char *s1;\n"
+          "     %sconst char *s2;\n" :
           option[ANSIC] | option[CPLUSPLUS] ?
-               "(register const char *s1, register const char *s2)\n" :
-          "");
+               "(%sconst char *s1, %sconst char *s2)\n" :
+          "",
+          register_scs, register_scs);
   #if USE_DOWNCASE_TABLE
   printf ("{\n"
           "  for (;;)\n"
@@ -327,17 +367,18 @@ output_upperlower_strncmp ()
           "gperf_case_strncmp ");
   printf (option[KRC] ?
                "(s1, s2, n)\n"
-          "     register char *s1;\n"
-          "     register char *s2;\n"
-          "     register unsigned int n;\n" :
+          "     %schar *s1;\n"
+          "     %schar *s2;\n"
+          "     %ssize_t n;\n" :
           option[C] ?
                "(s1, s2, n)\n"
-          "     register const char *s1;\n"
-          "     register const char *s2;\n"
-          "     register unsigned int n;\n" :
+          "     %sconst char *s1;\n"
+          "     %sconst char *s2;\n"
+          "     %ssize_t n;\n" :
           option[ANSIC] | option[CPLUSPLUS] ?
-               "(register const char *s1, register const char *s2, register unsigned int n)\n" :
-          "");
+               "(%sconst char *s1, %sconst char *s2, %ssize_t n)\n" :
+          "",
+          register_scs, register_scs, register_scs);
   #if USE_DOWNCASE_TABLE
   printf ("{\n"
           "  for (; n > 0;)\n"
@@ -387,17 +428,18 @@ output_upperlower_memcmp ()
           "gperf_case_memcmp ");
   printf (option[KRC] ?
                "(s1, s2, n)\n"
-          "     register char *s1;\n"
-          "     register char *s2;\n"
-          "     register unsigned int n;\n" :
+          "     %schar *s1;\n"
+          "     %schar *s2;\n"
+          "     %ssize_t n;\n" :
           option[C] ?
                "(s1, s2, n)\n"
-          "     register const char *s1;\n"
-          "     register const char *s2;\n"
-          "     register unsigned int n;\n" :
+          "     %sconst char *s1;\n"
+          "     %sconst char *s2;\n"
+          "     %ssize_t n;\n" :
           option[ANSIC] | option[CPLUSPLUS] ?
-               "(register const char *s1, register const char *s2, register unsigned int n)\n" :
-          "");
+               "(%sconst char *s1, %sconst char *s2, %ssize_t n)\n" :
+          "",
+          register_scs, register_scs, register_scs);
   #if USE_DOWNCASE_TABLE
   printf ("{\n"
           "  for (; n > 0;)\n"
@@ -713,15 +755,11 @@ void Output_Compare_Memcmp::output_comparison (const Output_Expr& expr1,
 
 /* ------------------------------------------------------------------------- */
 
-/* Generates a C expression for an asso_values[] reference.  */
+/* Generates a C expression for an asso_values[] index.  */
 
 void
-Output::output_asso_values_ref (int pos) const
+Output::output_asso_values_index (int pos) const
 {
-  printf ("asso_values[");
-  /* Always cast to unsigned char.  This is necessary when the alpha_inc
-     is nonzero, and also avoids a gcc warning "subscript has type 'char'".  */
-  printf ("(unsigned char)");
   if (pos == Positions::LASTCHAR)
     printf ("str[len - 1]");
   else
@@ -730,13 +768,36 @@ Output::output_asso_values_ref (int pos) const
       if (_alpha_inc[pos])
         printf ("+%u", _alpha_inc[pos]);
     }
+}
+
+/* Generates a C expression for an asso_values[] reference.  */
+
+void
+Output::output_asso_values_ref (int pos) const
+{
+  printf ("asso_values[");
+  /* Always cast to unsigned char.  This is necessary when the alpha_inc
+     is nonzero, and also avoids a gcc warning "subscript has type 'char'".  */
+  if (option[CPLUSPLUS])
+    {
+      /* In C++, a C style cast may lead to a 'warning: use of old-style cast'.
+         Therefore prefer the C++ style cast syntax.  */
+      printf ("static_cast<unsigned char>(");
+      output_asso_values_index (pos);
+      printf (")");
+    }
+  else
+    {
+      printf ("(unsigned char)");
+      output_asso_values_index (pos);
+    }
   printf ("]");
 }
 
 /* Generates C code for the hash function that returns the
    proper encoding for each keyword.
    The hash function has the signature
-     unsigned int <hash> (const char *str, unsigned int len).  */
+     unsigned int <hash> (const char *str, size_t len).  */
 
 void
 Output::output_hash_function () const
@@ -770,15 +831,16 @@ Output::output_hash_function () const
   printf ("%s ", option.get_hash_name ());
   printf (option[KRC] ?
                  "(str, len)\n"
-            "     register char *str;\n"
-            "     register unsigned int len;\n" :
+            "     %schar *str;\n"
+            "     %ssize_t len;\n" :
           option[C] ?
                  "(str, len)\n"
-            "     register const char *str;\n"
-            "     register unsigned int len;\n" :
+            "     %sconst char *str;\n"
+            "     %ssize_t len;\n" :
           option[ANSIC] | option[CPLUSPLUS] ?
-                 "(register const char *str, register unsigned int len)\n" :
-          "");
+                 "(%sconst char *str, %ssize_t len)\n" :
+          "",
+          register_scs, register_scs);
 
   /* Note that when the hash function is called, it has already been verified
      that  min_key_len <= len <= max_key_len.  */
@@ -870,11 +932,13 @@ Output::output_hash_function () const
       else
         {
           /* We've got to use the correct, but brute force, technique.  */
-          printf ("  register int hval = %s;\n\n"
+          /* It doesn't really matter whether hval is an 'int' or
+             'unsigned int', but 'unsigned int' gives fewer warnings.  */
+          printf ("  %sunsigned int hval = %s;\n\n"
                   "  switch (%s)\n"
                   "    {\n"
                   "      default:\n",
-                  _hash_includes_len ? "len" : "0",
+                  register_scs, _hash_includes_len ? "len" : "0",
                   _hash_includes_len ? "hval" : "len");
 
           while (key_pos != Positions::LASTCHAR && key_pos >= _max_key_len)
@@ -1105,7 +1169,20 @@ output_keyword_entry (KeywordExt *temp, int stringpool_index, const char *indent
   if (option[TYPE])
     printf ("{");
   if (option[SHAREDLIB])
-    printf ("(int)(long)&((struct %s_t *)0)->%s_str%d",
+    /* How to determine a certain offset in stringpool at compile time?
+       - The standard way would be to use the 'offsetof' macro.  But it is only
+         defined in <stddef.h>, and <stddef.h> is not among the prerequisite
+         header files that the user must #include.
+       - The next best way would be to take the address and cast to 'intptr_t'
+         or 'uintptr_t'.  But these types are only defined in <stdint.h>, and
+         <stdint.h> is not among the prerequisite header files that the user
+         must #include.
+       - The next best approximation of 'uintptr_t' is 'size_t'.  It is defined
+         in the prerequisite header <string.h>.
+       - The types 'long' and 'unsigned long' do work as well, but on 64-bit
+         native Windows platforms, they don't have the same size as pointers
+         and therefore generate warnings.  */
+    printf ("(int)(size_t)&((struct %s_t *)0)->%s_str%d",
             option.get_stringpool_name (), option.get_stringpool_name (),
             stringpool_index);
   else
@@ -1299,8 +1376,8 @@ Output::output_lookup_array () const
 
           if (option[DEBUG])
             fprintf (stderr,
-                     "dup_ptr[%d]: hash_value = %d, index = %d, count = %d\n",
-                     dup_ptr - duplicates,
+                     "dup_ptr[%lu]: hash_value = %d, index = %d, count = %d\n",
+                     static_cast<unsigned long>(dup_ptr - duplicates),
                      dup_ptr->hash_value, dup_ptr->index, dup_ptr->count);
 
           int i;
@@ -1575,10 +1652,11 @@ output_switches (KeywordExt_List *list, int num_switches, int size, int min_hash
 void
 Output::output_lookup_function_body (const Output_Compare& comparison) const
 {
-  printf ("  if (len <= MAX_WORD_LENGTH && len >= MIN_WORD_LENGTH)\n"
+  printf ("  if (len <= %sMAX_WORD_LENGTH && len >= %sMIN_WORD_LENGTH)\n"
           "    {\n"
-          "      register int key = %s (str, len);\n\n",
-          option.get_hash_name ());
+          "      %sunsigned int key = %s (str, len);\n\n",
+          option.get_constants_prefix (), option.get_constants_prefix (),
+          register_scs, option.get_hash_name ());
 
   if (option[SWITCH])
     {
@@ -1587,29 +1665,38 @@ Output::output_lookup_function_body (const Output_Compare& comparison) const
       if (num_switches > switch_size)
         num_switches = switch_size;
 
-      printf ("      if (key <= MAX_HASH_VALUE && key >= MIN_HASH_VALUE)\n"
+      printf ("      if (key <= %sMAX_HASH_VALUE",
+              option.get_constants_prefix ());
+      if (_min_hash_value > 0)
+        printf (" && key >= %sMIN_HASH_VALUE",
+                option.get_constants_prefix ());
+      printf (")\n"
               "        {\n");
       if (option[DUP] && _total_duplicates > 0)
         {
           if (option[LENTABLE])
-            printf ("          register %s%s *lengthptr;\n",
-                    const_always, smallest_integral_type (_max_key_len));
-          printf ("          register ");
+            printf ("          %s%s%s *lengthptr;\n",
+                    register_scs, const_always,
+                    smallest_integral_type (_max_key_len));
+          printf ("          %s",
+                  register_scs);
           output_const_type (const_readonly_array, _wordlist_eltype);
           printf ("*wordptr;\n");
-          printf ("          register ");
+          printf ("          %s",
+                  register_scs);
           output_const_type (const_readonly_array, _wordlist_eltype);
           printf ("*wordendptr;\n");
         }
       if (option[TYPE])
         {
-          printf ("          register ");
+          printf ("          %s",
+                  register_scs);
           output_const_type (const_readonly_array, _struct_tag);
           printf ("*resword;\n\n");
         }
       else
-        printf ("          register %sresword;\n\n",
-                _struct_tag);
+        printf ("          %s%sresword;\n\n",
+                register_scs, _struct_tag);
 
       output_switches (_head, num_switches, switch_size, _min_hash_value, _max_hash_value, 10);
 
@@ -1628,8 +1715,8 @@ Output::output_lookup_function_body (const Output_Compare& comparison) const
                       indent, "", indent, "");
               indent += 4;
             }
-          printf ("%*s      register %schar *s = ",
-                  indent, "", const_always);
+          printf ("%*s      %s%schar *s = ",
+                  indent, "", register_scs, const_always);
           if (option[TYPE])
             printf ("wordptr->%s", option.get_slot_name ());
           else
@@ -1663,8 +1750,8 @@ Output::output_lookup_function_body (const Output_Compare& comparison) const
       if (option[TYPE])
         {
           printf ("          {\n"
-                  "            register %schar *s = resword->%s",
-                  const_always, option.get_slot_name ());
+                  "            %s%schar *s = resword->%s",
+                  register_scs, const_always, option.get_slot_name ());
           if (option[SHAREDLIB])
             printf (" + %s",
                     option.get_stringpool_name ());
@@ -1686,15 +1773,16 @@ Output::output_lookup_function_body (const Output_Compare& comparison) const
     }
   else
     {
-      printf ("      if (key <= MAX_HASH_VALUE && key >= 0)\n");
+      printf ("      if (key <= %sMAX_HASH_VALUE)\n",
+              option.get_constants_prefix ());
 
       if (option[DUP])
         {
           int indent = 8;
           printf ("%*s{\n"
-                  "%*s  register int index = lookup[key];\n\n"
+                  "%*s  %sint index = lookup[key];\n\n"
                   "%*s  if (index >= 0)\n",
-                  indent, "", indent, "", indent, "");
+                  indent, "", indent, "", register_scs, indent, "");
           if (option[LENTABLE])
             {
               printf ("%*s    {\n"
@@ -1703,9 +1791,10 @@ Output::output_lookup_function_body (const Output_Compare& comparison) const
               indent += 4;
             }
           printf ("%*s    {\n"
-                  "%*s      register %schar *s = %s[index]",
+                  "%*s      %s%schar *s = %s[index]",
                   indent, "",
-                  indent, "", const_always, option.get_wordlist_name ());
+                  indent, "", register_scs, const_always,
+                  option.get_wordlist_name ());
           if (option[TYPE])
             printf (".%s", option.get_slot_name ());
           if (option[SHAREDLIB])
@@ -1732,21 +1821,22 @@ Output::output_lookup_function_body (const Output_Compare& comparison) const
             }
           if (_total_duplicates > 0)
             {
-              printf ("%*s  else if (index < -TOTAL_KEYWORDS)\n"
+              printf ("%*s  else if (index < -%sTOTAL_KEYWORDS)\n"
                       "%*s    {\n"
-                      "%*s      register int offset = - 1 - TOTAL_KEYWORDS - index;\n",
-                      indent, "", indent, "", indent, "");
+                      "%*s      %sint offset = - 1 - %sTOTAL_KEYWORDS - index;\n",
+                      indent, "", option.get_constants_prefix (), indent, "",
+                      indent, "", register_scs, option.get_constants_prefix ());
               if (option[LENTABLE])
-                printf ("%*s      register %s%s *lengthptr = &%s[TOTAL_KEYWORDS + lookup[offset]];\n",
-                        indent, "", const_always, smallest_integral_type (_max_key_len),
-                        option.get_lengthtable_name ());
-              printf ("%*s      register ",
-                      indent, "");
+                printf ("%*s      %s%s%s *lengthptr = &%s[%sTOTAL_KEYWORDS + lookup[offset]];\n",
+                        indent, "", register_scs, const_always, smallest_integral_type (_max_key_len),
+                        option.get_lengthtable_name (), option.get_constants_prefix ());
+              printf ("%*s      %s",
+                      indent, "", register_scs);
               output_const_type (const_readonly_array, _wordlist_eltype);
-              printf ("*wordptr = &%s[TOTAL_KEYWORDS + lookup[offset]];\n",
-                      option.get_wordlist_name ());
-              printf ("%*s      register ",
-                      indent, "");
+              printf ("*wordptr = &%s[%sTOTAL_KEYWORDS + lookup[offset]];\n",
+                      option.get_wordlist_name (), option.get_constants_prefix ());
+              printf ("%*s      %s",
+                      indent, "", register_scs);
               output_const_type (const_readonly_array, _wordlist_eltype);
               printf ("*wordendptr = wordptr + -lookup[offset + 1];\n\n");
               printf ("%*s      while (wordptr < wordendptr)\n"
@@ -1759,8 +1849,8 @@ Output::output_lookup_function_body (const Output_Compare& comparison) const
                           indent, "", indent, "");
                   indent += 4;
                 }
-              printf ("%*s          register %schar *s = ",
-                      indent, "", const_always);
+              printf ("%*s          %s%schar *s = ",
+                      indent, "", register_scs, const_always);
               if (option[TYPE])
                 printf ("wordptr->%s", option.get_slot_name ());
               else
@@ -1808,9 +1898,10 @@ Output::output_lookup_function_body (const Output_Compare& comparison) const
               if (!option[LENTABLE])
                 {
                   printf ("%*s{\n"
-                          "%*s  register int o = %s[key]",
+                          "%*s  %sint o = %s[key]",
                           indent, "",
-                          indent, "", option.get_wordlist_name ());
+                          indent, "", register_scs,
+                          option.get_wordlist_name ());
                   if (option[TYPE])
                     printf (".%s", option.get_slot_name ());
                   printf (";\n"
@@ -1819,8 +1910,8 @@ Output::output_lookup_function_body (const Output_Compare& comparison) const
                           indent, "",
                           indent, "");
                   indent += 4;
-                  printf ("%*s  register %schar *s = o",
-                          indent, "", const_always);
+                  printf ("%*s  %s%schar *s = o",
+                          indent, "", register_scs, const_always);
                 }
               else
                 {
@@ -1828,9 +1919,9 @@ Output::output_lookup_function_body (const Output_Compare& comparison) const
                      (len == lengthtable[key]) test already guarantees that
                      key points to nonempty table entry.  */
                   printf ("%*s{\n"
-                          "%*s  register %schar *s = %s[key]",
+                          "%*s  %s%schar *s = %s[key]",
                           indent, "",
-                          indent, "", const_always,
+                          indent, "", register_scs, const_always,
                           option.get_wordlist_name ());
                   if (option[TYPE])
                     printf (".%s", option.get_slot_name ());
@@ -1841,9 +1932,10 @@ Output::output_lookup_function_body (const Output_Compare& comparison) const
           else
             {
               printf ("%*s{\n"
-                      "%*s  register %schar *s = %s[key]",
+                      "%*s  %s%schar *s = %s[key]",
                       indent, "",
-                      indent, "", const_always, option.get_wordlist_name ());
+                      indent, "", register_scs, const_always,
+                      option.get_wordlist_name ());
               if (option[TYPE])
                 printf (".%s", option.get_slot_name ());
             }
@@ -1882,22 +1974,11 @@ void
 Output::output_lookup_function () const
 {
   /* Output the function's head.  */
-  if (option[KRC] | option[C] | option[ANSIC])
-    /* GCC 4.3 and above with -std=c99 or -std=gnu99 implements ISO C99
-       inline semantics, unless -fgnu89-inline is used.  It defines a macro
-       __GNUC_STDC_INLINE__ to indicate this situation or a macro
-       __GNUC_GNU_INLINE__ to indicate the opposite situation.
-       GCC 4.2 with -std=c99 or -std=gnu99 implements the GNU C inline
-       semantics but warns, unless -fgnu89-inline is used:
-         warning: C99 inline functions are not supported; using GNU89
-         warning: to disable this warning use -fgnu89-inline or the gnu_inline function attribute
-       It defines a macro __GNUC_GNU_INLINE__ to indicate this situation.  */
-    printf ("#ifdef __GNUC__\n"
-            "__inline\n"
-            "#if defined __GNUC_STDC_INLINE__ || defined __GNUC_GNU_INLINE__\n"
-            "__attribute__ ((__gnu_inline__))\n"
-            "#endif\n"
-            "#endif\n");
+  /* We don't declare the lookup function 'static' because we cannot make
+     assumptions about the compilation units of the user.
+     Since we don't make it 'static', it makes no sense to declare it 'inline',
+     because non-static inline functions must not reference static functions or
+     variables, see ISO C 99 section 6.7.4.(3).  */
 
   printf ("%s%s\n",
           const_for_struct, _return_type);
@@ -1906,15 +1987,16 @@ Output::output_lookup_function () const
   printf ("%s ", option.get_function_name ());
   printf (option[KRC] ?
                  "(str, len)\n"
-            "     register char *str;\n"
-            "     register unsigned int len;\n" :
+            "     %schar *str;\n"
+            "     %ssize_t len;\n" :
           option[C] ?
                  "(str, len)\n"
-            "     register const char *str;\n"
-            "     register unsigned int len;\n" :
+            "     %sconst char *str;\n"
+            "     %ssize_t len;\n" :
           option[ANSIC] | option[CPLUSPLUS] ?
-                 "(register const char *str, register unsigned int len)\n" :
-          "");
+                 "(%sconst char *str, %ssize_t len)\n" :
+          "",
+          register_scs, register_scs);
 
   /* Output the function's body.  */
   printf ("{\n");
@@ -1952,6 +2034,13 @@ void
 Output::output ()
 {
   compute_min_max ();
+
+  if (option[CPLUSPLUS])
+    /* The 'register' keyword is removed from C++17.
+       See http://www.open-std.org/jtc1/sc22/wg21/docs/papers/2015/n4340  */
+    register_scs = "";
+  else
+    register_scs = "register ";
 
   if (option[C] | option[ANSIC] | option[CPLUSPLUS])
     {
@@ -2023,7 +2112,7 @@ Output::output ()
               "      && ('w' == 119) && ('x' == 120) && ('y' == 121) && ('z' == 122) \\\n"
               "      && ('{' == 123) && ('|' == 124) && ('}' == 125) && ('~' == 126))\n"
               "/* The character set is not based on ISO-646.  */\n");
-      printf ("%s \"gperf generated tables don't work with this execution character set. Please report a bug to <bug-gnu-gperf@gnu.org>.\"\n", option[KRC] || option[C] ? "error" : "#error");
+      printf ("%s \"gperf generated tables don't work with this execution character set. Please report a bug to <bug-gperf@gnu.org>.\"\n", option[KRC] || option[C] ? "error" : "#error");
       printf ("#endif\n\n");
     }
 
@@ -2078,9 +2167,9 @@ Output::output ()
     printf ("class %s\n"
             "{\n"
             "private:\n"
-            "  static inline unsigned int %s (const char *str, unsigned int len);\n"
+            "  static inline unsigned int %s (const char *str, size_t len);\n"
             "public:\n"
-            "  static %s%s%s (const char *str, unsigned int len);\n"
+            "  static %s%s%s (const char *str, size_t len);\n"
             "};\n"
             "\n",
             option.get_class_name (), option.get_hash_name (),

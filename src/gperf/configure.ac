@@ -1,6 +1,6 @@
 dnl autoconf configuration for gperf
 
-dnl Copyright (C) 1998, 2002, 2003, 2005-2007, 2009 Free Software Foundation, Inc.
+dnl Copyright (C) 1998, 2002, 2003, 2005-2007, 2009-2010, 2012 Free Software Foundation, Inc.
 dnl Written by Douglas C. Schmidt <schmidt@ics.uci.edu>
 dnl and Bruno Haible <bruno@clisp.org>.
 dnl
@@ -20,14 +20,13 @@ dnl You should have received a copy of the GNU General Public License
 dnl along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 AC_PREREQ([2.60])
-AC_INIT([doc/gperf.1])
+AC_INIT([doc/gperf.texi])
+AC_CONFIG_AUX_DIR([build-aux])
+
 AC_PROG_MAKE_SET
 AC_OBJEXT
 AC_EXEEXT
 
-dnl An autoconf-2.52 bug: AC_CONFIG_SUBDIRS requires AC_CONFIG_AUX_DIR_DEFAULT.
-ac_aux_dir=$srcdir
-AC_PROVIDE([AC_CONFIG_AUX_DIR_DEFAULT])
 AC_CONFIG_SUBDIRS([lib src tests doc])
 
 dnl This piece of sed script replaces every line containing '@subdir@'
