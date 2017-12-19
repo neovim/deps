@@ -1,5 +1,5 @@
-ifneq ($(wildcard .git),)
-  -include maint.mk
+ifneq ($(wildcard .maint),)
+  include maint.mk
 endif
 
 ifeq ($(shell uname),Darwin)
@@ -16,13 +16,13 @@ PACKAGE=unibilium
 
 PKG_MAJOR=1
 PKG_MINOR=2
-PKG_REVISION=0
+PKG_REVISION=1
 
 PKG_VERSION=$(PKG_MAJOR).$(PKG_MINOR).$(PKG_REVISION)
 
 # I am implementation $LT_REVISION of binary interface $LT_CURRENT, which is
 # a superset of all interfaces back to $LT_CURRENT - $LT_AGE.
-LT_REVISION=0
+LT_REVISION=1
 LT_CURRENT=3
 LT_AGE=3
 
@@ -32,12 +32,17 @@ INCDIR=$(PREFIX)/include
 MANDIR=$(PREFIX)/share/man
 MAN3DIR=$(MANDIR)/man3
 
-TERMINFO_DIRS="/etc/terminfo:/lib/terminfo:/usr/share/terminfo:/usr/lib/terminfo:/usr/local/share/terminfo:/usr/local/lib/terminfo"
+ifneq ($(OS),Windows_NT)
+  TERMINFO_DIRS="/etc/terminfo:/lib/terminfo:/usr/share/terminfo:/usr/lib/terminfo:/usr/local/share/terminfo:/usr/local/lib/terminfo"
+else
+  TERMINFO_DIRS=""
+endif
 
 POD2MAN=pod2man
 POD2MAN_OPTS=-c "$(PACKAGE)" -s3 -r "$(PACKAGE)-$(PKG_VERSION)"
 
 PROVE=prove
+PROVEFLAGS=`perl -we 'print $$ENV{MAKEFLAGS} =~ /-j *(\d+)?/ ? "-j" . ($$1 || 2) : ""'`
 
 ifeq ($(DEBUG),1)
   CFLAGS_DEBUG=-ggdb -DDEBUG
@@ -79,7 +84,8 @@ build-test: $(TESTS:.c=.t)
 
 .PHONY: test
 test: build-test
-	$(PROVE)
+	@echo $(PROVE) $(PROVEFLAGS)
+	@$(PROVE) $(PROVEFLAGS)
 
 .PHONY: clean
 clean:
@@ -113,3 +119,10 @@ build-man: $(MANPAGES)
 
 man/%.3.gz: doc/%.pod
 	$(POD2MAN) $(POD2MAN_OPTS) $< | gzip > $@
+
+
+.PHONY: regenerate-tests
+regenerate-tests: tools/gen-static-test
+	for t in screen-256color screen tmux xterm; do \
+	    $< $$t > t/static_$$t.c; \
+	done
