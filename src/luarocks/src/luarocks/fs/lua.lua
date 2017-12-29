@@ -293,7 +293,7 @@ function fs_lua.copy(src, dest, perms)
    if destmode == "directory" then
       dest = dir.path(dest, dir.base_name(src))
    end
-   if not perms then perms = fs.get_permissions(src) end
+   if not perms then perms = fs.attributes(src, "permissions") end
    local src_h, err = io.open(src, "rb")
    if not src_h then return nil, err end
    local dest_h, err = io.open(dest, "w+b")
@@ -758,8 +758,20 @@ function fs_lua.chmod(file, mode)
    return err == 0
 end
 
-function fs_lua.get_permissions(file)
-   return posix.stat(file, "mode")
+function fs_lua.attributes(file, attrtype)
+   if attrtype == "permissions" then
+      return posix.stat(file, "mode") or nil
+   elseif attrtype == "owner" then
+      local uid = posix.stat(file, "uid")
+      if not uid then return nil end
+      return posix.getpwuid(uid).pw_name or nil
+   else
+      return nil
+   end
+end
+
+function fs_lua.current_user()
+   return posix.getpwuid(posix.geteuid()).pw_name
 end
 
 --- Create a temporary directory.
@@ -821,28 +833,29 @@ end
 -- @return boolean or (boolean, string): true on success, false on failure,
 -- plus an error message.
 function fs_lua.check_command_permissions(flags)
-   local root_dir = path.root_dir(cfg.rocks_dir)
    local ok = true
    local err = ""
-   for _, dir in ipairs { cfg.rocks_dir, root_dir } do
-      if fs.exists(dir) and not fs.is_writable(dir) then
-         ok = false
-         err = "Your user does not have write permissions in " .. dir
-         break
-      end
-   end
-   if ok and not fs.exists(root_dir) then
-      local root = fs.root_of(root_dir)
-      local parent = root_dir
-      repeat
-         parent = dir.dir_name(parent)
-         if parent == "" then
-            parent = root
+   for _, directory in ipairs { cfg.rocks_dir, cfg.deploy_lua_dir, cfg.deploy_bin_dir, cfg.deploy_lua_dir } do
+      if fs.exists(directory) then
+         if not fs.is_writable(directory) then
+            ok = false
+            err = "Your user does not have write permissions in " .. directory
+            break
          end
-      until parent == root or fs.exists(parent)
-      if not fs.is_writable(parent) then
-         ok = false
-         err = root_dir.." does not exist and your user does not have write permissions in " .. parent
+      else
+         local root = fs.root_of(directory)
+         local parent = directory
+         repeat
+            parent = dir.dir_name(parent)
+            if parent == "" then
+               parent = root
+            end
+         until parent == root or fs.exists(parent)
+         if not fs.is_writable(parent) then
+            ok = false
+            err = directory.." does not exist and your user does not have write permissions in " .. parent
+            break
+         end
       end
    end
    if ok then

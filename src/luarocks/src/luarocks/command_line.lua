@@ -40,6 +40,18 @@ local function replace_tree(flags, tree)
    path.use_tree(tree)
 end
 
+local function is_ownership_ok(directory)
+   local me = fs.current_user()
+   for _ = 1,3 do -- try up to grandparent
+      local owner = fs.attributes(directory, "owner")
+      if owner then
+         return owner == me
+      end
+      directory = dir.dir_name(directory)
+   end
+   return false
+end
+
 --- Main command-line processor.
 -- Parses input arguments and calls the appropriate driver function
 -- to execute the action requested on the command-line, forwarding
@@ -178,8 +190,19 @@ function command_line.run_command(...)
       end
    end
 
-   if not fs.current_dir() or fs.current_dir() == "" then
+   if (not fs.current_dir()) or fs.current_dir() == "" then
       die("Current directory does not exist. Please run LuaRocks from an existing directory.")
+   end
+
+   if not is_ownership_ok(cfg.local_cache) then
+      util.warning("The directory '" .. cfg.local_cache .. "' or its parent directory "..
+                   "is not owned by the current user and the cache has been disabled. "..
+                   "Please check the permissions and owner of that directory. "..
+                   (cfg.is_platform("unix")
+                    and ("If executing "..util.this_program("luarocks").." with sudo, you may want sudo's -H flag.")
+                    or ""))
+      cfg.local_cache = fs.make_temp_dir("local_cache")
+      util.schedule_function(fs.delete, cfg.local_cache)
    end
    
    if commands[command] then

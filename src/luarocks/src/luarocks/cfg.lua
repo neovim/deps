@@ -31,7 +31,7 @@ if not ok then
    site_config = {}
 end
 
-cfg.program_version = "2.4.2"
+cfg.program_version = "2.4.3"
 cfg.program_series = "2.4"
 cfg.major_version = (cfg.program_version:match("([^.]%.[^.])")) or cfg.program_series
 cfg.variables = {}
@@ -409,7 +409,8 @@ local defaults = {
       SEVENZ = "7z",
 
       RSYNCFLAGS = "--exclude=.git -Oavz",
-      STATFLAG = "-c '%a'",
+      STATPERMFLAG = "-c '%a'",
+      STATOWNERFLAG = "-c '%U'",
       CURLNOCERTFLAG = "",
       WGETNOCERTFLAG = "",
    },
@@ -577,7 +578,8 @@ end
 
 if cfg.platforms.bsd then
    defaults.variables.MAKE = "gmake"
-   defaults.variables.STATFLAG = "-f '%OLp'"
+   defaults.variables.STATPERMFLAG = "-f '%OLp'"
+   defaults.variables.STATOWNERFLAG = "-f '%Su'"
 end
 
 if cfg.platforms.macosx then
