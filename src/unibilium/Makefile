@@ -14,17 +14,17 @@ CFLAGS_DEBUG=
 
 PACKAGE=unibilium
 
-PKG_MAJOR=1
-PKG_MINOR=2
-PKG_REVISION=1
+PKG_MAJOR=2
+PKG_MINOR=0
+PKG_REVISION=0
 
 PKG_VERSION=$(PKG_MAJOR).$(PKG_MINOR).$(PKG_REVISION)
 
 # I am implementation $LT_REVISION of binary interface $LT_CURRENT, which is
 # a superset of all interfaces back to $LT_CURRENT - $LT_AGE.
-LT_REVISION=1
-LT_CURRENT=3
-LT_AGE=3
+LT_REVISION=0
+LT_CURRENT=4
+LT_AGE=0
 
 PREFIX=/usr/local
 LIBDIR=$(PREFIX)/lib
@@ -33,7 +33,11 @@ MANDIR=$(PREFIX)/share/man
 MAN3DIR=$(MANDIR)/man3
 
 ifneq ($(OS),Windows_NT)
-  TERMINFO_DIRS="/etc/terminfo:/lib/terminfo:/usr/share/terminfo:/usr/lib/terminfo:/usr/local/share/terminfo:/usr/local/lib/terminfo"
+  TERMINFO_DIRS="$(shell ncursesw6-config --terminfo-dirs 2>/dev/null || \
+                         ncurses6-config  --terminfo-dirs 2>/dev/null || \
+                         ncursesw5-config --terminfo-dirs 2>/dev/null || \
+                         ncurses5-config  --terminfo-dirs 2>/dev/null || \
+                         echo "/etc/terminfo:/lib/terminfo:/usr/share/terminfo:/usr/lib/terminfo:/usr/local/share/terminfo:/usr/local/lib/terminfo")"
 else
   TERMINFO_DIRS=""
 endif
@@ -102,7 +106,7 @@ install-inc:
 	mkdir -p '$(DESTDIR)$(INCDIR)'
 	install -m644 unibilium.h '$(DESTDIR)$(INCDIR)'
 	mkdir -p '$(DESTDIR)$(LIBDIR)/pkgconfig'
-	sed 's,@VERSION@,$(PKG_VERSION),;s,@LIBDIR@,$(LIBDIR),;s,@INCDIR@,$(INCDIR),' <unibilium.pc.in >'$(DESTDIR)$(LIBDIR)/pkgconfig/unibilium.pc'
+	perl -wpe 'BEGIN { @V{"VERSION", "LIBDIR", "INCDIR"} = splice @ARGV } s/\@(VERSION|LIBDIR|INCDIR)\@/$$V{$$1}/g' '$(PKG_VERSION)' '$(LIBDIR)' '$(INCDIR)' <unibilium.pc.in >'$(DESTDIR)$(LIBDIR)/pkgconfig/unibilium.pc'
 
 .PHONY: install-lib
 install-lib:
@@ -123,6 +127,6 @@ man/%.3.gz: doc/%.pod
 
 .PHONY: regenerate-tests
 regenerate-tests: tools/gen-static-test
-	for t in screen-256color screen tmux xterm; do \
+	for t in screen-256color screen tmux xterm-256color xterm; do \
 	    $< $$t > t/static_$$t.c; \
 	done

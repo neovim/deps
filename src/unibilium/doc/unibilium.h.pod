@@ -2,7 +2,7 @@
 
 =head1 NAME
 
-unibilium.h - terminfo parser and utility functions
+unibilium.h - ncurses terminfo parser and utility functions
 
 =head1 SYNOPSIS
 
@@ -11,8 +11,9 @@ unibilium.h - terminfo parser and utility functions
 =head1 DESCRIPTION
 
 This library provides functions and types to access terminal descriptions in
-the terminfo database. It can parse compiled terminfo entries from memory or
-files, access and modify their capabilities, and generate new terminfo entries.
+the terminfo database (in the format used by ncurses). It can parse compiled
+terminfo entries from memory or files, access and modify their capabilities,
+and generate new terminfo entries.
 
 =head2 Types
 
@@ -28,12 +29,11 @@ this structure.
 =item unibi_var_t
 
 A type that represents the values in format string operations, which are either
-integers or strings. It is currently implemented as a union of two members,
-C<int i> and C<char *p>, but direct use of these is deprecated as the
-representation will change in the future.
+integers or strings. Its exact representation is unspecified.
 
 See L<unibi_var_from_num(3)>, L<unibi_var_from_str(3)>,
-L<unibi_num_from_var(3)>, L<unibi_str_from_var(3)> instead.
+L<unibi_num_from_var(3)>, L<unibi_str_from_var(3)> for how to use values of
+this type.
 
 However, it is guaranteed that zero-initializing a C<unibi_var_t> is equivalent
 to C<unibi_var_from_num(0)>.

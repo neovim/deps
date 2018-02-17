@@ -30,6 +30,9 @@ THE SOFTWARE.
 
 #include <stdio.h>
 #include <ctype.h>
+#include <stdlib.h>
+#include <string.h>
+#include <errno.h>
 
 static void print_str_esc(const char *s) {
     if (!s) {
@@ -47,6 +50,7 @@ static void print_str_esc(const char *s) {
             case '\t': printf("\\t"); break;
             case '\v': printf("\\v"); break;
             case '\033': printf("\\e"); break;
+            case '\\': printf("\\\\"); break;
             default:
                 if (isprint(c)) {
                     printf("%c", c);
@@ -58,10 +62,26 @@ static void print_str_esc(const char *s) {
     }
 }
 
-int main(void) {
-    unibi_term *const ut = unibi_from_env();
+static unibi_term *get_term(const char *s) {
+    unibi_term *ut;
+    if (s) {
+        ut = unibi_from_file(s);
+        if (!ut) {
+            fprintf(stderr, "unibi_from_file(): %s: %s\n", s, strerror(errno));
+        }
+    } else {
+        ut = unibi_from_env();
+        if (!ut) {
+            const char *name = getenv("TERM");
+            fprintf(stderr, "unibi_from_env(): %s: %s\n", name ? name : "(null)", strerror(errno));
+        }
+    }
+    return ut;
+}
+
+int main(int argc, char **argv) {
+    unibi_term *const ut = get_term(argc > 1 ? argv[1] : NULL);
     if (!ut) {
-        perror("unibi_from_env");
         return 1;
     }
 
@@ -89,9 +109,9 @@ int main(void) {
 
     printf("Numeric capabilities:\n");
     for (enum unibi_numeric i = unibi_numeric_begin_ + 1; i < unibi_numeric_end_; i++) {
-        short n = unibi_get_num(ut, i);
+        int n = unibi_get_num(ut, i);
         if (n != -1) {
-            printf("  %-25s / %-10s = %hd\n", unibi_name_num(i), unibi_short_name_num(i), n);
+            printf("  %-25s / %-10s = %d\n", unibi_name_num(i), unibi_short_name_num(i), n);
         }
     }
     printf("\n");
@@ -119,7 +139,7 @@ int main(void) {
     if (unibi_count_ext_num(ut)) {
         printf("Extended numeric capabilities:\n");
         for (size_t i = 0; i < unibi_count_ext_num(ut); i++) {
-            printf("  %-25s = %hd\n", unibi_get_ext_num_name(ut, i), unibi_get_ext_num(ut, i));
+            printf("  %-25s = %d\n", unibi_get_ext_num_name(ut, i), unibi_get_ext_num(ut, i));
         }
         printf("\n");
     }

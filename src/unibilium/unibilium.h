@@ -553,8 +553,8 @@ void         unibi_set_aliases(unibi_term *, const char **);
 int  unibi_get_bool(const unibi_term *, enum unibi_boolean);
 void unibi_set_bool(unibi_term *, enum unibi_boolean, int);
 
-short unibi_get_num(const unibi_term *, enum unibi_numeric);
-void  unibi_set_num(unibi_term *, enum unibi_numeric, short);
+int  unibi_get_num(const unibi_term *, enum unibi_numeric);
+void unibi_set_num(unibi_term *, enum unibi_numeric, int);
 
 const char *unibi_get_str(const unibi_term *, enum unibi_string);
 void        unibi_set_str(unibi_term *, enum unibi_string, const char *);
@@ -580,11 +580,11 @@ size_t unibi_count_ext_num(const unibi_term *);
 size_t unibi_count_ext_str(const unibi_term *);
 
 int unibi_get_ext_bool(const unibi_term *, size_t);
-short unibi_get_ext_num(const unibi_term *, size_t);
+int unibi_get_ext_num(const unibi_term *, size_t);
 const char *unibi_get_ext_str(const unibi_term *, size_t);
 
 void unibi_set_ext_bool(unibi_term *, size_t, int);
-void unibi_set_ext_num(unibi_term *, size_t, short);
+void unibi_set_ext_num(unibi_term *, size_t, int);
 void unibi_set_ext_str(unibi_term *, size_t, const char *);
 
 const char *unibi_get_ext_bool_name(const unibi_term *, size_t);
@@ -596,7 +596,7 @@ void unibi_set_ext_num_name(unibi_term *, size_t, const char *);
 void unibi_set_ext_str_name(unibi_term *, size_t, const char *);
 
 size_t unibi_add_ext_bool(unibi_term *, const char *, int);
-size_t unibi_add_ext_num(unibi_term *, const char *, short);
+size_t unibi_add_ext_num(unibi_term *, const char *, int);
 size_t unibi_add_ext_str(unibi_term *, const char *, const char *);
 
 void unibi_del_ext_bool(unibi_term *, size_t);
@@ -604,36 +604,10 @@ void unibi_del_ext_num(unibi_term *, size_t);
 void unibi_del_ext_str(unibi_term *, size_t);
 
 
-#if !defined UNIBI_DEPRECATED && defined __GNUC__ && !defined __has_extension
- #if __GNUC__ >= 5 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 5)
-  #define UNIBI_DEPRECATED(MSG) __attribute__((deprecated(MSG)))
- #elif __GNUC__ > 3 || (__GNUC__ == 3 &&  __GNUC_MINOR__ >= 1)
-  #define UNIBI_DEPRECATED(MSG) __attribute__((deprecated))
- #endif
-#endif
-
-#if !defined UNIBI_DEPRECATED && defined __has_extension
- #if __has_extension(attribute_deprecated_with_message)
-  #define UNIBI_DEPRECATED(MSG) __attribute__((deprecated(MSG)))
- #endif
-#endif
-
-#if !defined UNIBI_DEPRECATED && defined __has_attribute
- #if __has_attribute(deprecated)
-  #define UNIBI_DEPRECATED(MSG) __attribute__((deprecated))
- #endif
-#endif
-
-#if !defined UNIBI_DEPRECATED
- #define UNIBI_DEPRECATED(MSG)
-#endif
-
-typedef union {
-    int i   UNIBI_DEPRECATED("use unibi_var_from_num or unibi_num_from_var instead");
-    char *p UNIBI_DEPRECATED("use unibi_var_from_str or unibi_str_from_var instead");
+typedef struct {
+    int i_;
+    char *p_;
 } unibi_var_t;
-
-#undef UNIBI_DEPRECATED
 
 unibi_var_t unibi_var_from_num(int);
 unibi_var_t unibi_var_from_str(char *);
