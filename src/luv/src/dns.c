@@ -20,19 +20,6 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netdb.h>
-#else
-#ifndef AI_NUMERICSERV
-# define AI_NUMERICSERV 0x0008
-#endif
-#ifndef AI_ALL
-# define AI_ALL 0x00000100
-#endif
-#ifndef AI_ADDRCONFIG
-# define AI_ADDRCONFIG 0x00000400
-#endif
-#ifndef AI_V4MAPPED
-# define AI_V4MAPPED 0x00000800
-#endif
 #endif
 
 static void luv_pushaddrinfo(lua_State* L, struct addrinfo* res) {
