@@ -63,6 +63,9 @@ IF (MSGPACK_CXX11)
         reference_wrapper_cpp11.cpp
         shared_ptr_cpp11.cpp
         unique_ptr_cpp11.cpp
+
+        # fuzzers are cpp11 only
+        fuzz_unpack_pack_fuzzer_cpp11.cpp
     )
 ENDIF ()
 
@@ -86,7 +89,7 @@ FOREACH (source_file ${check_PROGRAMS})
     )
     ADD_TEST (${source_file_we} ${source_file_we})
     IF ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang" OR "${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
-        SET_PROPERTY (TARGET ${source_file_we} APPEND_STRING PROPERTY COMPILE_FLAGS "-Wall -Wextra -Werror -g -O3 ")
+        SET_PROPERTY (TARGET ${source_file_we} APPEND_STRING PROPERTY COMPILE_FLAGS " -Wall -Wextra")
     ENDIF ()
     IF ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
         SET_PROPERTY (TARGET ${source_file_we} APPEND_STRING PROPERTY COMPILE_FLAGS " -Wno-mismatched-tags")
