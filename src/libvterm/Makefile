@@ -8,7 +8,7 @@ ifneq ($(VERBOSE),1)
   LIBTOOL +=--quiet
 endif
 
-override CFLAGS +=-Wall -Iinclude -std=c99
+override CFLAGS +=-Wall -Iinclude -std=c99 -Wpedantic
 
 ifeq ($(shell uname),SunOS)
   override CFLAGS +=-D__EXTENSIONS__ -D_XPG6 -D__XOPEN_OR_POSIX
@@ -23,18 +23,18 @@ ifeq ($(PROFILE),1)
   override LDFLAGS+=-pg
 endif
 
-CFILES=$(wildcard src/*.c)
-HFILES=$(wildcard include/*.h)
+CFILES=$(sort $(wildcard src/*.c))
+HFILES=$(sort $(wildcard include/*.h))
 OBJECTS=$(CFILES:.c=.lo)
 LIBRARY=libvterm.la
 
-BINFILES_SRC=$(wildcard bin/*.c)
+BINFILES_SRC=$(sort $(wildcard bin/*.c))
 BINFILES=$(BINFILES_SRC:.c=)
 
-TBLFILES=$(wildcard src/encoding/*.tbl)
+TBLFILES=$(sort $(wildcard src/encoding/*.tbl))
 INCFILES=$(TBLFILES:.tbl=.inc)
 
-HFILES_INT=$(wildcard src/*.h) $(HFILES)
+HFILES_INT=$(sort $(wildcard src/*.h)) $(HFILES)
 
 VERSION_MAJOR=0
 VERSION_MINOR=0
@@ -65,6 +65,9 @@ src/%.lo: src/%.c $(HFILES_INT)
 src/encoding/%.inc: src/encoding/%.tbl
 	@echo TBL $<
 	@perl -CSD tbl2inc_c.pl $< >$@
+
+src/fullwidth.inc:
+	@perl find-wide-chars.pl >$@
 
 src/encoding.lo: $(INCFILES)
 

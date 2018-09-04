@@ -92,8 +92,8 @@ static void dump_cell(const VTermScreenCell *cell, const VTermScreenCell *prevce
             sgr[sgri++] = 90 + (index - 8);
           else {
             sgr[sgri++] = 38;
-            sgr[sgri++] = 5 | (1<<31);
-            sgr[sgri++] = index | (1<<31);
+            sgr[sgri++] = 5 | CSI_ARG_FLAG_MORE;
+            sgr[sgri++] = index | CSI_ARG_FLAG_MORE;
           }
         }
 
@@ -109,20 +109,20 @@ static void dump_cell(const VTermScreenCell *cell, const VTermScreenCell *prevce
             sgr[sgri++] = 100 + (index - 8);
           else {
             sgr[sgri++] = 48;
-            sgr[sgri++] = 5 | (1<<31);
-            sgr[sgri++] = index | (1<<31);
+            sgr[sgri++] = 5 | CSI_ARG_FLAG_MORE;
+            sgr[sgri++] = index | CSI_ARG_FLAG_MORE;
           }
         }
 
         if(!sgri)
           break;
 
-        printf("\e[");
+        printf("\x1b[");
         for(int i = 0; i < sgri; i++)
           printf(!i               ? "%d" :
-              sgr[i] & (1<<31) ? ":%d" :
+              CSI_ARG_HAS_MORE(sgr[i]) ? ":%d" :
               ";%d",
-              sgr[i] & ~(1<<31));
+              CSI_ARG(sgr[i]));
         printf("m");
       }
       break;
@@ -144,7 +144,7 @@ static void dump_eol(const VTermScreenCell *prevcell)
       if(prevcell->attrs.bold || prevcell->attrs.underline || prevcell->attrs.italic ||
          prevcell->attrs.blink || prevcell->attrs.reverse || prevcell->attrs.strike ||
          prevcell->attrs.font)
-        printf("\e[m");
+        printf("\x1b[m");
       break;
   }
 
@@ -154,7 +154,7 @@ static void dump_eol(const VTermScreenCell *prevcell)
 void dump_row(int row)
 {
   VTermPos pos = { .row = row, .col = 0 };
-  VTermScreenCell prevcell = {};
+  VTermScreenCell prevcell = { 0 };
   vterm_state_get_default_colors(vterm_obtain_state(vt), &prevcell.fg, &prevcell.bg);
 
   while(pos.col < cols) {
@@ -172,7 +172,7 @@ void dump_row(int row)
 
 static int screen_sb_pushline(int cols, const VTermScreenCell *cells, void *user)
 {
-  VTermScreenCell prevcell = {};
+  VTermScreenCell prevcell = { 0 };
   vterm_state_get_default_colors(vterm_obtain_state(vt), &prevcell.fg, &prevcell.bg);
 
   for(int col = 0; col < cols; col++) {
@@ -258,4 +258,6 @@ int main(int argc, char *argv[])
   close(fd);
 
   vterm_free(vt);
+
+  return 0;
 }

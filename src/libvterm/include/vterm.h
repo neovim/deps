@@ -59,6 +59,8 @@ typedef enum {
   VTERM_VALUETYPE_INT,
   VTERM_VALUETYPE_STRING,
   VTERM_VALUETYPE_COLOR,
+
+  VTERM_N_VALUETYPES
 } VTermValueType;
 
 typedef union {
@@ -79,6 +81,8 @@ typedef enum {
   VTERM_ATTR_FONT,       // number: 10-19
   VTERM_ATTR_FOREGROUND, // color:  30-39 90-97
   VTERM_ATTR_BACKGROUND, // color:  40-49 100-107
+
+  VTERM_N_ATTRS
 } VTermAttr;
 
 typedef enum {
@@ -91,12 +95,16 @@ typedef enum {
   VTERM_PROP_REVERSE,           // bool
   VTERM_PROP_CURSORSHAPE,       // number
   VTERM_PROP_MOUSE,             // number
+
+  VTERM_N_PROPS
 } VTermProp;
 
 enum {
   VTERM_PROP_CURSORSHAPE_BLOCK = 1,
   VTERM_PROP_CURSORSHAPE_UNDERLINE,
   VTERM_PROP_CURSORSHAPE_BAR_LEFT,
+
+  VTERM_N_PROP_CURSORSHAPES
 };
 
 enum {
@@ -104,6 +112,8 @@ enum {
   VTERM_PROP_MOUSE_CLICK,
   VTERM_PROP_MOUSE_DRAG,
   VTERM_PROP_MOUSE_MOVE,
+
+  VTERM_N_PROP_MOUSES
 };
 
 typedef struct {
@@ -165,8 +175,8 @@ void vterm_mouse_button(VTerm *vt, int button, bool pressed, VTermModifier mod);
  *
  * Don't confuse this with the final byte of the CSI escape; 'a' in this case.
  */
-#define CSI_ARG_FLAG_MORE (1<<31)
-#define CSI_ARG_MASK      (~(1<<31))
+#define CSI_ARG_FLAG_MORE (1U<<31)
+#define CSI_ARG_MASK      (~(1U<<31))
 
 #define CSI_ARG_HAS_MORE(a) ((a) & CSI_ARG_FLAG_MORE)
 #define CSI_ARG(a)          ((a) & CSI_ARG_MASK)
@@ -227,6 +237,8 @@ void vterm_state_set_palette_color(VTermState *state, int index, const VTermColo
 void vterm_state_set_bold_highbright(VTermState *state, int bold_is_highbright);
 int  vterm_state_get_penattr(const VTermState *state, VTermAttr attr, VTermValue *val);
 int  vterm_state_set_termprop(VTermState *state, VTermProp prop, VTermValue *val);
+void vterm_state_focus_in(VTermState *state);
+void vterm_state_focus_out(VTermState *state);
 const VTermLineInfo *vterm_state_get_lineinfo(const VTermState *state, int row);
 
 // ------------
@@ -234,10 +246,6 @@ const VTermLineInfo *vterm_state_get_lineinfo(const VTermState *state, int row);
 // ------------
 
 typedef struct {
-#define VTERM_MAX_CHARS_PER_CELL 6
-  uint32_t chars[VTERM_MAX_CHARS_PER_CELL];
-  char     width;
-  struct {
     unsigned int bold      : 1;
     unsigned int underline : 2;
     unsigned int italic    : 1;
@@ -247,7 +255,13 @@ typedef struct {
     unsigned int font      : 4; /* 0 to 9 */
     unsigned int dwl       : 1; /* On a DECDWL or DECDHL line */
     unsigned int dhl       : 2; /* On a DECDHL line (1=top 2=bottom) */
-  } attrs;
+} VTermScreenCellAttrs;
+
+typedef struct {
+#define VTERM_MAX_CHARS_PER_CELL 6
+  uint32_t chars[VTERM_MAX_CHARS_PER_CELL];
+  char     width;
+  VTermScreenCellAttrs attrs;
   VTermColor fg, bg;
 } VTermScreenCell;
 
@@ -278,6 +292,8 @@ typedef enum {
   VTERM_DAMAGE_ROW,     /* entire rows */
   VTERM_DAMAGE_SCREEN,  /* entire screen */
   VTERM_DAMAGE_SCROLL,  /* entire screen + scrollrect */
+
+  VTERM_N_DAMAGES
 } VTermDamageSize;
 
 void vterm_screen_flush_damage(VTermScreen *screen);
@@ -299,6 +315,8 @@ typedef enum {
   VTERM_ATTR_FONT_MASK       = 1 << 6,
   VTERM_ATTR_FOREGROUND_MASK = 1 << 7,
   VTERM_ATTR_BACKGROUND_MASK = 1 << 8,
+
+  VTERM_ALL_ATTRS_MASK = (1 << 9) - 1
 } VTermAttrMask;
 
 int vterm_screen_get_attrs_extent(const VTermScreen *screen, VTermRect *extent, VTermPos pos, VTermAttrMask attrs);

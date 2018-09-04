@@ -57,6 +57,12 @@ static VTermState *vterm_state_new(VTerm *vt)
   state->rows = vt->rows;
   state->cols = vt->cols;
 
+  state->mouse_col     = 0;
+  state->mouse_row     = 0;
+  state->mouse_buttons = 0;
+
+  state->mouse_protocol = MOUSE_X10;
+
   state->callbacks = NULL;
   state->cbdata    = NULL;
 
@@ -254,7 +260,7 @@ static int on_text(const char bytes[], size_t len, void *user)
    * for even a single codepoint
    */
   if(!npoints)
-    return 0;
+    return eaten;
 
   if(state->gsingle_set && npoints)
     state->gsingle_set = 0;
@@ -750,21 +756,15 @@ static void set_dec_mode(VTermState *state, int num, int val)
   case 1000:
   case 1002:
   case 1003:
-    if(val) {
-      state->mouse_col     = 0;
-      state->mouse_row     = 0;
-      state->mouse_buttons = 0;
+    settermprop_int(state, VTERM_PROP_MOUSE,
+        !val          ? VTERM_PROP_MOUSE_NONE  :
+        (num == 1000) ? VTERM_PROP_MOUSE_CLICK :
+        (num == 1002) ? VTERM_PROP_MOUSE_DRAG  :
+                        VTERM_PROP_MOUSE_MOVE);
+    break;
 
-      state->mouse_protocol = MOUSE_X10;
-
-      settermprop_int(state, VTERM_PROP_MOUSE,
-          (num == 1000) ? VTERM_PROP_MOUSE_CLICK :
-          (num == 1002) ? VTERM_PROP_MOUSE_DRAG  :
-                          VTERM_PROP_MOUSE_MOVE);
-    }
-    else
-      settermprop_int(state, VTERM_PROP_MOUSE, VTERM_PROP_MOUSE_NONE);
-
+  case 1004:
+    state->mode.report_focus = val;
     break;
 
   case 1005:
@@ -847,6 +847,10 @@ static void request_dec_mode(VTermState *state, int num)
       reply = state->mouse_flags == (MOUSE_WANT_CLICK|MOUSE_WANT_MOVE);
       break;
 
+    case 1004:
+      reply = state->mode.report_focus;
+      break;
+
     case 1005:
       reply = state->mouse_protocol == MOUSE_UTF8;
       break;
@@ -865,6 +869,7 @@ static void request_dec_mode(VTermState *state, int num)
 
     case 2004:
       reply = state->mode.bracketpaste;
+      break;
 
     default:
       vterm_push_output_sprintf_ctrl(state->vt, C1_CSI, "?%d;%d$y", num, 0);
@@ -1681,6 +1686,7 @@ void vterm_state_reset(VTermState *state, int hard)
   state->mode.origin          = 0;
   state->mode.leftrightmargin = 0;
   state->mode.bracketpaste    = 0;
+  state->mode.report_focus    = 0;
 
   state->vt->mode.ctrl8bit   = 0;
 
@@ -1817,9 +1823,24 @@ int vterm_state_set_termprop(VTermState *state, VTermProp prop, VTermValue *val)
     if(val->number == VTERM_PROP_MOUSE_MOVE)
       state->mouse_flags |= MOUSE_WANT_MOVE;
     return 1;
+
+  case VTERM_N_PROPS:
+    return 0;
   }
 
   return 0;
+}
+
+void vterm_state_focus_in(VTermState *state)
+{
+  if(state->mode.report_focus)
+    vterm_push_output_sprintf_ctrl(state->vt, C1_CSI, "I");
+}
+
+void vterm_state_focus_out(VTermState *state)
+{
+  if(state->mode.report_focus)
+    vterm_push_output_sprintf_ctrl(state->vt, C1_CSI, "O");
 }
 
 const VTermLineInfo *vterm_state_get_lineinfo(const VTermState *state, int row)
