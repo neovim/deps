@@ -11,15 +11,15 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\..\test_threads\test_threads.cpp">
+    <ClCompile Include="test_threads.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\..\test_threads\test_threads_main.cpp">
+    <ClCompile Include="test_threads_main.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\..\..\test_threads\test_threads.h">
+    <ClInclude Include="test_threads.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
