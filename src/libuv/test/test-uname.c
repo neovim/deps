@@ -1,4 +1,4 @@
-/* Copyright Joyent, Inc. and other Node contributors. All rights reserved.
+/* Copyright libuv project contributors. All rights reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to
@@ -19,23 +19,51 @@
  * IN THE SOFTWARE.
  */
 
-/* Don't complain about write(), fileno() etc. being deprecated. */
-#ifdef _MSC_VER
-#pragma warning(disable : 4996)
+#include "uv.h"
+#include "task.h"
+#include <string.h>
+
+#ifndef _WIN32
+# include <sys/utsname.h>
 #endif
 
-
-#include <winsock2.h>
-#include <windows.h>
-#include <stdio.h>
-
-#if !defined(snprintf) && defined(_MSC_VER) && _MSC_VER < 1900
-extern int snprintf(char*, size_t, const char*, ...);
+TEST_IMPL(uname) {
+#ifndef _WIN32
+  struct utsname buf;
 #endif
+#ifdef _AIX
+  char temp[256];
+#endif
+  uv_utsname_t buffer;
+  int r;
 
-typedef struct {
-  HANDLE process;
-  HANDLE stdio_in;
-  HANDLE stdio_out;
-  char *name;
-} process_info_t;
+  /* Verify that NULL is handled properly. */
+  r = uv_os_uname(NULL);
+  ASSERT(r == UV_EINVAL);
+
+  /* Verify the happy path. */
+  r = uv_os_uname(&buffer);
+  ASSERT(r == 0);
+
+#ifndef _WIN32
+  ASSERT(uname(&buf) != -1);
+  ASSERT(strcmp(buffer.sysname, buf.sysname) == 0);
+  ASSERT(strcmp(buffer.version, buf.version) == 0);
+
+# ifdef _AIX
+  snprintf(temp, sizeof(temp), "%s.%s", buf.version, buf.release);
+  ASSERT(strcmp(buffer.release, temp) == 0);
+# else
+  ASSERT(strcmp(buffer.release, buf.release) == 0);
+# endif /* _AIX */
+
+# if defined(_AIX) || defined(__PASE__)
+  ASSERT(strcmp(buffer.machine, "ppc64") == 0);
+# else
+  ASSERT(strcmp(buffer.machine, buf.machine) == 0);
+# endif /* defined(_AIX) || defined(__PASE__) */
+
+#endif /* _WIN32 */
+
+  return 0;
+}
