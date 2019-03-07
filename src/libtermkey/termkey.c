@@ -3,14 +3,20 @@
 
 #include <ctype.h>
 #include <errno.h>
-#include <poll.h>
-#include <unistd.h>
+#ifndef _WIN32
+# include <poll.h>
+# include <unistd.h>
+# include <strings.h>
+#endif
 #include <string.h>
-#include <strings.h>
 
 #include <stdio.h>
 
-#define strcaseeq(a,b) (strcasecmp(a,b) == 0)
+#ifdef _MSC_VER
+# define strcaseeq(a,b) (_stricmp(a,b) == 0)
+#else
+# define strcaseeq(a,b) (strcasecmp(a,b) == 0)
+#endif
 
 void termkey_check_version(int major, int minor)
 {
@@ -111,10 +117,13 @@ static struct {
   { 0, NULL },
 };
 
+// Mouse event names
+static const char *evnames[] = { "Unknown", "Press", "Drag", "Release" };
+
 #define CHARAT(i) (tk->buffer[tk->buffstart + (i)])
 
 #ifdef DEBUG
-/* Some internal deubgging functions */
+/* Some internal debugging functions */
 
 static void print_buffer(TermKey *tk)
 {
@@ -282,7 +291,9 @@ static TermKey *termkey_alloc(void)
   tk->buffsize  = 256; /* bytes */
   tk->hightide  = 0;
 
+#ifdef HAVE_TERMIOS
   tk->restore_termios_valid = 0;
+#endif
 
   tk->ti_getstr_hook = NULL;
   tk->ti_getstr_hook_data = NULL;
@@ -483,6 +494,7 @@ int termkey_start(TermKey *tk)
   if(tk->is_started)
     return 1;
 
+#ifdef HAVE_TERMIOS
   if(tk->fd != -1 && !(tk->flags & TERMKEY_FLAG_NOTERMIOS)) {
     struct termios termios;
     if(tcgetattr(tk->fd, &termios) == 0) {
@@ -517,6 +529,7 @@ int termkey_start(TermKey *tk)
       tcsetattr(tk->fd, TCSANOW, &termios);
     }
   }
+#endif
 
   struct TermKeyDriverNode *p;
   for(p = tk->drivers; p; p = p->next)
@@ -542,8 +555,10 @@ int termkey_stop(TermKey *tk)
     if(p->driver->stop_driver)
       (*p->driver->stop_driver)(tk, p->info);
 
+#ifdef HAVE_TERMIOS
   if(tk->restore_termios_valid)
     tcsetattr(tk->fd, TCSANOW, &tk->restore_termios);
+#endif
 
   tk->is_started = 0;
 
@@ -768,12 +783,12 @@ static void emit_codepoint(TermKey *tk, long codepoint, TermKeyKey *key)
     if(!key->code.sym) {
       key->type = TERMKEY_TYPE_UNICODE;
       /* Generically modified Unicode ought not report the SHIFT state, or else
-       * we get into complicationg trying to report Shift-; vs : and so on...
+       * we get into complications trying to report Shift-; vs : and so on...
        * In order to be able to represent Ctrl-Shift-A as CTRL modified
        * unicode A, we need to call Ctrl-A simply 'a', lowercase
        */
       if(codepoint+0x40 >= 'A' && codepoint+0x40 <= 'Z')
-        // it's a letter - use lowecase instead
+        // it's a letter - use lowercase instead
         key->code.codepoint = codepoint + 0x60;
       else
         key->code.codepoint = codepoint + 0x40;
@@ -1046,6 +1061,7 @@ TermKeyResult termkey_getkey_force(TermKey *tk, TermKeyKey *key)
   return ret;
 }
 
+#ifndef _WIN32
 TermKeyResult termkey_waitkey(TermKey *tk, TermKeyKey *key)
 {
   if(tk->fd == -1) {
@@ -1105,6 +1121,7 @@ retry:
 
   /* UNREACHABLE */
 }
+#endif
 
 TermKeyResult termkey_advisereadable(TermKey *tk)
 {
@@ -1307,7 +1324,7 @@ size_t termkey_strfkey(TermKey *tk, char *buffer, size_t len, TermKeyKey *key, T
      key->modifiers == TERMKEY_KEYMOD_CTRL) {
     long codepoint = key->code.codepoint;
 
-    // Handle some of the special casesfirst
+    // Handle some of the special cases first
     if(codepoint >= 'a' && codepoint <= 'z') {
       l = snprintf(buffer + pos, len - pos, wrapbracket ? "<^%c>" : "^%c", (char)codepoint - 0x20);
       if(l <= 0) return pos;
@@ -1372,8 +1389,6 @@ size_t termkey_strfkey(TermKey *tk, char *buffer, size_t len, TermKeyKey *key, T
       int button;
       int line, col;
       termkey_interpret_mouse(tk, key, &ev, &button, &line, &col);
-
-      static const char *evnames[] = { "Unknown", "Press", "Drag", "Release" };
 
       l = snprintf(buffer + pos, len - pos, "Mouse%s(%d)",
           evnames[ev], button);
@@ -1466,6 +1481,8 @@ const char *termkey_strpkey(TermKey *tk, const char *str, TermKeyKey *key, TermK
   size_t nbytes;
   ssize_t snbytes;
   const char *endstr;
+  int button;
+  char event_name[32];
 
   if((endstr = termkey_lookup_keyname_format(tk, str, &key->code.sym, format))) {
     key->type = TERMKEY_TYPE_KEYSYM;
@@ -1475,13 +1492,48 @@ const char *termkey_strpkey(TermKey *tk, const char *str, TermKeyKey *key, TermK
     key->type = TERMKEY_TYPE_FUNCTION;
     str += snbytes;
   }
+  else if(sscanf(str, "Mouse%31[^(](%d)%zn", event_name, &button, &snbytes) == 2) {
+    str += snbytes;
+    key->type = TERMKEY_TYPE_MOUSE;
+
+    TermKeyMouseEvent ev = TERMKEY_MOUSE_UNKNOWN;
+    for(size_t i = 0; i < sizeof(evnames)/sizeof(evnames[0]); i++) {
+      if(strcmp(evnames[i], event_name) == 0) {
+        ev = TERMKEY_MOUSE_UNKNOWN + i;
+        break;
+      }
+    }
+
+    int code;
+    switch(ev) {
+    case TERMKEY_MOUSE_PRESS:
+    case TERMKEY_MOUSE_DRAG:
+      code = button - 1;
+      if(ev == TERMKEY_MOUSE_DRAG) {
+        code |= 0x20;
+      }
+      break;
+    case TERMKEY_MOUSE_RELEASE:
+      code = 3;
+      break;
+    default:
+      code = 128;
+      break;
+    }
+    key->code.mouse[0] = code;
+
+    unsigned int line = 0, col = 0;
+    if((format & TERMKEY_FORMAT_MOUSE_POS) && sscanf(str, " @ (%u,%u)%zn", &col, &line, &snbytes) == 2) {
+      str += snbytes;
+    }
+    termkey_key_set_linecol(key, col, line);
+  }
   // Unicode must be last
   else if(parse_utf8((unsigned const char *)str, strlen(str), &key->code.codepoint, &nbytes) == TERMKEY_RES_KEY) {
     key->type = TERMKEY_TYPE_UNICODE;
     fill_utf8(key);
     str += nbytes;
   }
-  // TODO: Consider mouse events?
   else
     return NULL;
 

@@ -158,7 +158,7 @@ static TermKeyResult handle_csi_u(TermKey *tk, TermKeyKey *key, int cmd, long *a
 }
 
 /*
- * Handler for CSI M / CSI m mouse events in SRG and rxvt encodings
+ * Handler for CSI M / CSI m mouse events in SGR and rxvt encodings
  * Note: This does not handle X10 encoding
  */
 
@@ -569,6 +569,9 @@ static TermKeyResult peekkey_csi(TermKey *tk, TermKeyCsi *csi, size_t introlen, 
   if(result == TERMKEY_RES_NONE) {
 #ifdef DEBUG
     switch(args) {
+      case 0:
+        fprintf(stderr, "CSI: Unknown cmd=%c\n", (char)cmd);
+        break;
       case 1:
         fprintf(stderr, "CSI: Unknown arg1=%ld cmd=%c\n", arg[0], (char)cmd);
         break;
@@ -585,6 +588,7 @@ static TermKeyResult peekkey_csi(TermKey *tk, TermKeyCsi *csi, size_t introlen, 
 #endif
     key->type = TERMKEY_TYPE_UNKNOWN_CSI;
     key->code.number = cmd;
+    key->modifiers = 0;
 
     tk->hightide = csi_len - introlen;
     *nbytep = introlen; // Do not yet eat the data bytes

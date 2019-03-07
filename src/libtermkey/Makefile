@@ -49,10 +49,12 @@ TESTSOURCES=$(wildcard t/[0-9]*.c)
 TESTFILES=$(TESTSOURCES:.c=.t)
 
 VERSION_MAJOR=0
-VERSION_MINOR=20
+VERSION_MINOR=21
+
+VERSION=$(VERSION_MAJOR).$(VERSION_MINOR)
 
 VERSION_CURRENT=15
-VERSION_REVISION=0
+VERSION_REVISION=1
 VERSION_AGE=14
 
 PREFIX=/usr/local
@@ -110,7 +112,7 @@ install-inc: termkey.h
 	install -d $(DESTDIR)$(INCDIR)
 	install -m644 termkey.h $(DESTDIR)$(INCDIR)
 	install -d $(DESTDIR)$(LIBDIR)/pkgconfig
-	sed "s,@LIBDIR@,$(LIBDIR),;s,@INCDIR@,$(INCDIR)," <termkey.pc.in >$(DESTDIR)$(LIBDIR)/pkgconfig/termkey.pc
+	LIBDIR=$(LIBDIR) INCDIR=$(INCDIR) VERSION=$(VERSION) sh termkey.pc.sh >$(DESTDIR)$(LIBDIR)/pkgconfig/termkey.pc
 
 install-lib: $(LIBRARY)
 	install -d $(DESTDIR)$(LIBDIR)
