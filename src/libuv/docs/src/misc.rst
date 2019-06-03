@@ -65,6 +65,28 @@ Data types
 
     .. versionadded:: 1.16.0
 
+.. c:type:: uv_timeval_t
+
+    Data type for storing times.
+
+    ::
+
+        typedef struct {
+            long tv_sec;
+            long tv_usec;
+        } uv_timeval_t;
+
+.. c:type:: uv_timeval64_t
+
+    Alternative data type for storing times.
+
+    ::
+
+        typedef struct {
+            int64_t tv_sec;
+            int32_t tv_usec;
+        } uv_timeval64_t;
+
 .. c:type:: uv_rusage_t
 
     Data type for resource usage results.
@@ -439,6 +461,19 @@ API
 
     Gets memory information (in bytes).
 
+.. c:function:: uint64_t uv_get_constrained_memory(void)
+
+    Gets the amount of memory available to the process (in bytes) based on
+    limits imposed by the OS. If there is no such constraint, or the constraint
+    is unknown, `0` is returned. Note that it is not unusual for this value to
+    be less than or greater than :c:func:`uv_get_total_memory`.
+
+    .. note::
+        This function currently only returns a non-zero value on Linux, based
+        on cgroups if it is present.
+
+    .. versionadded:: 1.29.0
+
 .. c:function:: uint64_t uv_hrtime(void)
 
     Returns the current high-resolution real time. This is expressed in
@@ -578,3 +613,10 @@ API
     zero on success, and a non-zero error value otherwise.
 
     .. versionadded:: 1.25.0
+
+.. c:function:: int uv_gettimeofday(uv_timeval64_t* tv)
+
+    Cross-platform implementation of :man:`gettimeofday(2)`. The timezone
+    argument to `gettimeofday()` is not supported, as it is considered obsolete.
+
+    .. versionadded:: 1.28.0
