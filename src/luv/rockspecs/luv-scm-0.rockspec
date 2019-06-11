@@ -1,8 +1,8 @@
 -- Alternate rockspec that uses luarocks builtin builder
 package = "luv"
-version = "1.9.1-1"
+version = "scm-0"
 source = {
-  url = 'https://github.com/luvit/luv/releases/download/'..version..'/luv-'..version..'.tar.gz'
+  url = 'git://github.com/luvit/luv.git'
 }
 
 description = {
@@ -24,6 +24,9 @@ dependencies = {
 external_dependencies = {
   LIBUV = {
     header = 'uv.h'
+  },
+  LUA_COMPAT53 = {
+    header = "c-api/compat-5.3.h"
   }
 }
 
@@ -34,7 +37,7 @@ build = {
     ['luv'] = {
       sources = {'src/luv.c'},
       libraries = {'uv'},
-      incdirs = {"$(LIBUV_INCDIR)"},
+      incdirs = {"$(LIBUV_INCDIR)","$(LUA_COMPAT53_INCDIR)"},
       libdirs = {"$(LIBUV_LIBDIR)"}
     }
   };
@@ -68,6 +71,7 @@ build = {
         ['luv'] = {
           libraries = {
             nil;
+            'User32';
             'psapi';
             'iphlpapi';
             'userenv';

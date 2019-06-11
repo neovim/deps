@@ -5,7 +5,7 @@ luv
 
 [![Windows Build status](https://ci.appveyor.com/api/projects/status/uo1qhdcc0vcqsiok/branch/master?svg=true)](https://ci.appveyor.com/project/racker-buildbot/luv/branch/master)
 
-[libuv](https://github.com/joyent/libuv) bindings for
+[libuv](https://github.com/libuv/libuv) bindings for
 [luajit](http://luajit.org/) and [lua](http://www.lua.org/)
 [5.1](http://www.lua.org/manual/5.1/manual.html)/
 [5.2](http://www.lua.org/manual/5.2/manual.html)/
@@ -82,12 +82,25 @@ local server = create_server("0.0.0.0", 0, function (client)
   end)
 end)
 
-print("TCP Echo serverr listening on port " .. server:getsockname().port)
+print("TCP Echo server listening on port " .. server:getsockname().port)
 
 uv.run()
 ```
 
 More examples can be found in the [examples](examples) and [tests](tests) folders.
+
+## Luarocks
+
+Luv is available on Luarocks [here](https://luarocks.org/modules/creationix/luv). It can be installed via:
+
+```
+luarocks install luv
+```
+
+Note: To require `luv` using `require 'uv'` (to maintain compatibility with how luv is required in [luvi](https://github.com/luvit/luvi)) create a `uv.lua` with the contents:
+```
+return require 'luv'
+```
 
 ## Building From Source
 

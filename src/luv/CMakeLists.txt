@@ -7,7 +7,7 @@ endif()
 project (luv C ASM)
 
 set(LUV_VERSION_MAJOR 1)
-set(LUV_VERSION_MINOR 9)
+set(LUV_VERSION_MINOR 29)
 set(LUV_VERSION_PATCH 1)
 set(LUV_VERSION ${LUV_VERSION_MAJOR}.${LUV_VERSION_MINOR}.${LUV_VERSION_PATCH})
 
@@ -18,6 +18,20 @@ option(WITH_SHARED_LIBUV "Link to a shared libuv library instead of static linki
 if (MINGW)
   add_definitions(-D_WIN32_WINNT=0x0600)
 endif (MINGW)
+
+if (WIN32)
+  # replace /MD to /MT to avoid link msvcr*.dll
+  # this needs to be before add_subdirectory calls so that they inherit the modified flags
+  set(CompilerFlags
+    CMAKE_C_FLAGS
+    CMAKE_C_FLAGS_DEBUG
+    CMAKE_C_FLAGS_MINSIZEREL
+    CMAKE_C_FLAGS_RELWITHDEBINFO
+    CMAKE_C_FLAGS_RELEASE)
+  foreach(CompilerFlag ${CompilerFlags})
+    string(REPLACE "/MD" "/MT" ${CompilerFlag} "${${CompilerFlag}}")
+  endforeach()
+endif ()
 
 if (NOT WITH_LUA_ENGINE)
   set(WITH_LUA_ENGINE "LuaJIT"
@@ -50,11 +64,13 @@ if (WITH_SHARED_LIBUV)
     include_directories(${LIBUV_INCLUDE_DIR})
   endif (LIBUV_FOUND)
 else (WITH_SHARED_LIBUV)
-  include(deps/uv.cmake)
+  include_directories(deps/libuv/include)
+  add_subdirectory(deps/libuv EXCLUDE_FROM_ALL)
   if (BUILD_MODULE)
     add_definitions( -DBUILDING_UV_SHARED )
   endif (BUILD_MODULE)
-  set(LIBUV_LIBRARIES uv)
+  set(LIBUV_LIBRARIES uv_a)
+  set_target_properties(uv_a PROPERTIES COMPILE_FLAGS "-fPIC")
 endif (WITH_SHARED_LIBUV)
 
 if (LUA)
@@ -77,7 +93,7 @@ if (LUA)
     NAMES luajit libluajit
     PATHS ${LUA_LIBDIR}
     NO_DEFAULT_PATH)
-  ELSEIF(LUA_EXEC_NAME STREQUAL "lua")
+  ELSEIF(LUA_EXEC_NAME MATCHES "lua.*")
     FIND_LIBRARY(LUA_LIBRARIES
       NAMES lua lua53 lua52 lua51 liblua liblua53 liblua52 liblua51
       PATHS ${LUA_LIBDIR}
@@ -139,6 +155,14 @@ if(APPLE)
   # )
 endif()
 
+if(NOT LUA_COMPAT53_DIR)
+  set(LUA_COMPAT53_DIR deps/lua-compat-5.3)
+endif()
+if(DEFINED ENV{LUA_COMPAT53_DIR})
+  set(LUA_COMPAT53_DIR $ENV{LUA_COMPAT53_DIR})
+endif()
+include_directories(${LUA_COMPAT53_DIR})
+
 if(WIN32)
   add_definitions(-DLUA_BUILD_AS_DLL -DLUA_LIB)
   if (LUA)
@@ -154,16 +178,6 @@ if(WIN32)
       endif (LUA_BUILD_TYPE STREQUAL System)
     endif (USE_LUAJIT)
   endif (LUA)
-  # replace /MD to /MT to avoid link msvcr*.dll
-  set(CompilerFlags
-    CMAKE_C_FLAGS
-    CMAKE_C_FLAGS_DEBUG
-    CMAKE_C_FLAGS_MINSIZEREL
-    CMAKE_C_FLAGS_RELWITHDEBINFO
-    CMAKE_C_FLAGS_RELEASE)
-  foreach(CompilerFlag ${CompilerFlags})
-    string(REPLACE "/MD" "/MT" ${CompilerFlag} "${${CompilerFlag}}")
-  endforeach()
 elseif("${CMAKE_SYSTEM_NAME}" MATCHES "Linux")
   target_link_libraries(luv ${LIBUV_LIBRARIES} rt)
 else()

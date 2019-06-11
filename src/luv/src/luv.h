@@ -50,26 +50,24 @@
 #define MAX_TITLE_LENGTH (8192)
 #endif
 
-#if LUA_VERSION_NUM < 502
-# define lua_rawlen lua_objlen
-/* lua_...uservalue: Something very different, but it should get the job done */
-# define lua_getuservalue lua_getfenv
-# define lua_setuservalue lua_setfenv
-# define luaL_newlib(L,l) (lua_newtable(L), luaL_register(L,NULL,l))
-# define luaL_setfuncs(L,l,n) (assert(n==0), luaL_register(L,NULL,l))
-# define lua_resume(L,F,n) lua_resume(L,n)
-# define lua_pushglobaltable(L) lua_pushvalue(L, LUA_GLOBALSINDEX)
+#if defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-function"
 #endif
-
 /* There is a 1-1 relation between a lua_State and a uv_loop_t
    These helpers will give you one if you have the other
    These are exposed for extensions built with luv
    This allows luv to be used in multithreaded applications.
 */
-LUALIB_API lua_State* luv_state(uv_loop_t* loop);
+LUALIB_API lua_State* luv_state(lua_State* L);
 /* All libuv callbacks will lua_call directly from this root-per-thread state
 */
 LUALIB_API uv_loop_t* luv_loop(lua_State* L);
+
+/* Set or clear an external uv_loop_t in a lua_State
+   This must be called before luaopen_luv, so luv doesn't init an own loop
+*/
+LUALIB_API void luv_set_loop(lua_State* L, uv_loop_t* loop);
 
 /* This is the main hook to load the library.
    This can be called multiple times in a process as long
@@ -81,6 +79,7 @@ LUALIB_API int luaopen_luv (lua_State *L);
 #include "lhandle.h"
 #include "lreq.h"
 
+#ifdef LUV_SOURCE
 /* From stream.c */
 static uv_stream_t* luv_check_stream(lua_State* L, int index);
 static void luv_alloc_cb(uv_handle_t* handle, size_t suggested_size, uv_buf_t* buf);
@@ -88,7 +87,7 @@ static void luv_check_buf(lua_State *L, int idx, uv_buf_t *pbuf);
 static uv_buf_t* luv_prep_bufs(lua_State* L, int index, size_t *count);
 
 /* from tcp.c */
-static void parse_sockaddr(lua_State* L, struct sockaddr_storage* address, int addrlen);
+static void parse_sockaddr(lua_State* L, struct sockaddr_storage* address);
 static void luv_connect_cb(uv_connect_t* req, int status);
 
 /* From fs.c */
@@ -101,9 +100,13 @@ static int luv_sock_string_to_num(const char* string);
 static const char* luv_sock_num_to_string(const int num);
 static int luv_sig_string_to_num(const char* string);
 static const char* luv_sig_num_to_string(const int num);
+#endif
 
 typedef lua_State* (*luv_acquire_vm)();
 typedef void (*luv_release_vm)(lua_State* L);
 LUALIB_API void luv_set_thread_cb(luv_acquire_vm acquire, luv_release_vm release);
 
+#if defined(__clang__)
+#pragma clang diagnostic pop
+#endif
 #endif

@@ -64,8 +64,7 @@ IF(SIZEOF_VOID_P EQUAL 8)
 ENDIF()
 
 if ( WIN32 AND NOT CYGWIN )
-  add_definitions ( -DLUAJIT_OS=LUAJIT_OS_WINDOWS)
-  set ( LJVM_MODE coffasm )
+  set ( LJVM_MODE peobj )
 elseif ( APPLE )
   set ( CMAKE_EXE_LINKER_FLAGS "-pagezero_size 10000 -image_base 100000000 ${CMAKE_EXE_LINKER_FLAGS}" )
   set ( LJVM_MODE machasm )
@@ -91,6 +90,10 @@ ENDIF(NOT WIN32)
 check_library_exists(m sin "" LUA_USE_LIBM)
 if ( LUA_USE_LIBM )
   list ( APPEND LIBS m )
+endif ()
+
+if ( CMAKE_SYSTEM_NAME MATCHES "OpenBSD")
+  list ( APPEND LIBS pthread c++abi )
 endif ()
 
 ## SOURCES
@@ -207,6 +210,7 @@ add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/buildvm_arch.h
   DEPENDS ${LUAJIT_DIR}/dynasm/dynasm.lua minilua
 )
 
+## Source Lists
 SET(SRC_LJLIB
   ${LUAJIT_DIR}/src/lib_base.c
   ${LUAJIT_DIR}/src/lib_math.c
@@ -218,74 +222,17 @@ SET(SRC_LJLIB
   ${LUAJIT_DIR}/src/lib_package.c
   ${LUAJIT_DIR}/src/lib_debug.c
   ${LUAJIT_DIR}/src/lib_jit.c
-  ${LUAJIT_DIR}/src/lib_ffi.c)
+  ${LUAJIT_DIR}/src/lib_ffi.c
+)
 
-SET(SRC_LJCORE
-  ${LUAJIT_DIR}/src/lj_gc.c
-  ${LUAJIT_DIR}/src/lj_err.c
-  ${LUAJIT_DIR}/src/lj_char.c
-  ${LUAJIT_DIR}/src/lj_buf.c
-  ${LUAJIT_DIR}/src/lj_profile.c
-  ${LUAJIT_DIR}/src/lj_strfmt.c
-  ${LUAJIT_DIR}/src/lj_strfmt_num.c
-  ${LUAJIT_DIR}/src/lj_bc.c
-  ${LUAJIT_DIR}/src/lj_obj.c
-  ${LUAJIT_DIR}/src/lj_str.c
-  ${LUAJIT_DIR}/src/lj_tab.c
-  ${LUAJIT_DIR}/src/lj_func.c
-  ${LUAJIT_DIR}/src/lj_udata.c
-  ${LUAJIT_DIR}/src/lj_meta.c
-  ${LUAJIT_DIR}/src/lj_debug.c
-  ${LUAJIT_DIR}/src/lj_state.c
-  ${LUAJIT_DIR}/src/lj_dispatch.c
-  ${LUAJIT_DIR}/src/lj_vmevent.c
-  ${LUAJIT_DIR}/src/lj_vmmath.c
-  ${LUAJIT_DIR}/src/lj_strscan.c
-  ${LUAJIT_DIR}/src/lj_api.c
-  ${LUAJIT_DIR}/src/lj_lex.c
-  ${LUAJIT_DIR}/src/lj_parse.c
-  ${LUAJIT_DIR}/src/lj_bcread.c
-  ${LUAJIT_DIR}/src/lj_bcwrite.c
-  ${LUAJIT_DIR}/src/lj_load.c
-  ${LUAJIT_DIR}/src/lj_ir.c
-  ${LUAJIT_DIR}/src/lj_opt_mem.c
-  ${LUAJIT_DIR}/src/lj_opt_fold.c
-  ${LUAJIT_DIR}/src/lj_opt_narrow.c
-  ${LUAJIT_DIR}/src/lj_opt_dce.c
-  ${LUAJIT_DIR}/src/lj_opt_loop.c
-  ${LUAJIT_DIR}/src/lj_opt_split.c
-  ${LUAJIT_DIR}/src/lj_opt_sink.c
-  ${LUAJIT_DIR}/src/lj_mcode.c
-  ${LUAJIT_DIR}/src/lj_snap.c
-  ${LUAJIT_DIR}/src/lj_record.c
-  ${LUAJIT_DIR}/src/lj_crecord.c
-  ${LUAJIT_DIR}/src/lj_ffrecord.c
-  ${LUAJIT_DIR}/src/lj_asm.c
-  ${LUAJIT_DIR}/src/lj_trace.c
-  ${LUAJIT_DIR}/src/lj_gdbjit.c
-  ${LUAJIT_DIR}/src/lj_ctype.c
-  ${LUAJIT_DIR}/src/lj_cdata.c
-  ${LUAJIT_DIR}/src/lj_cconv.c
-  ${LUAJIT_DIR}/src/lj_ccall.c
-  ${LUAJIT_DIR}/src/lj_ccallback.c
-  ${LUAJIT_DIR}/src/lj_carith.c
-  ${LUAJIT_DIR}/src/lj_clib.c
-  ${LUAJIT_DIR}/src/lj_cparse.c
-  ${LUAJIT_DIR}/src/lj_lib.c
-  ${LUAJIT_DIR}/src/lj_alloc.c
-  ${LUAJIT_DIR}/src/lj_vmmath.c
+SET(SRC_LIBAUX
   ${LUAJIT_DIR}/src/lib_aux.c
   ${LUAJIT_DIR}/src/lib_init.c
-  ${SRC_LJLIB})
-
-SET(SRC_BUILDVM
-  ${LUAJIT_DIR}/src/host/buildvm.c
-  ${LUAJIT_DIR}/src/host/buildvm_asm.c
-  ${LUAJIT_DIR}/src/host/buildvm_peobj.c
-  ${LUAJIT_DIR}/src/host/buildvm_lib.c
-  ${LUAJIT_DIR}/src/host/buildvm_fold.c
-  ${CMAKE_CURRENT_BINARY_DIR}/buildvm_arch.h)
-
+)
+file (GLOB_RECURSE SRC_LJCORE   "${LUAJIT_DIR}/src/lj_*.c")
+list (APPEND SRC_LJCORE ${SRC_LJLIB} ${SRC_LIBAUX})
+file (GLOB_RECURSE SRC_BUILDVM  "${LUAJIT_DIR}/src/host/buildvm*.c")
+list (APPEND SRC_BUILDVM ${CMAKE_CURRENT_BINARY_DIR}/buildvm_arch.h)
 
 ## GENERATE
 ADD_EXECUTABLE(buildvm ${SRC_BUILDVM})
@@ -299,7 +246,7 @@ macro(add_buildvm_target _target _mode)
   )
 endmacro(add_buildvm_target)
 
-if (MSVC)
+if (WIN32)
   add_buildvm_target ( lj_vm.obj peobj )
   set (LJ_VM_SRC ${CMAKE_CURRENT_BINARY_DIR}/lj_vm.obj)
 else ()
@@ -366,7 +313,9 @@ MACRO(LUAJIT_add_custom_commands luajit_target)
   SET(target_srcs "")
   FOREACH(file ${ARGN})
     IF(${file} MATCHES ".*\\.lua$")
-      set(file "${CMAKE_CURRENT_SOURCE_DIR}/${file}")
+      if(NOT IS_ABSOLUTE ${file})
+        set(file "${CMAKE_CURRENT_SOURCE_DIR}/${file}")
+      endif()
       set(source_file ${file})
       string(LENGTH ${CMAKE_SOURCE_DIR} _luajit_source_dir_length)
       string(LENGTH ${file} _luajit_file_length)

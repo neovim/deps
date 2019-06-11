@@ -88,8 +88,32 @@ return require('lib/tap')(function (test)
     p(time)
   end)
 
-  test("test_getpid", function (print, p, expect, uv)
+  test("uv.getpid", function (print, p, expect, uv)
     assert(uv.getpid())
+  end)
+
+  test("uv.os_uname", function(print, p, expect, uv)
+    local version = 0x10000 + 25*0x100 + 0
+    if uv.version() >= version then
+      local uname = assert(uv.os_uname())
+      p(uname)
+    else
+      print("skipped")
+    end
+  end)
+
+  test("uv.gettimeofday", function(print, p, expect, uv)
+    local version = 0x10000 + 28*0x100 + 0
+    if uv.version() >= version then
+      local now = os.time()
+      local sec, usec = assert(uv.gettimeofday())
+      print('        os.time', now)
+      print('uv.gettimeofday',string.format("%f",sec+usec/10^9))
+      assert(type(sec)=='number')
+      assert(type(usec)=='number')
+    else
+      print("skipped")
+    end
   end)
 
 end)

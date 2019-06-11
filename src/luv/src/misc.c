@@ -352,7 +352,6 @@ static int luv_setgid(lua_State* L){
   return 0;
 }
 
-#ifndef _WIN32
 static int luv_print_all_handles(lua_State* L){
   uv_print_all_handles(luv_loop(L), stderr);
   return 0;
@@ -364,4 +363,177 @@ static int luv_print_active_handles(lua_State* L){
 }
 #endif
 
+#if LUV_UV_VERSION_GEQ(1, 12, 0)
+static int luv_os_getenv(lua_State* L) {
+  const char* name = luaL_checkstring(L, 1);
+  size_t size = luaL_optinteger(L, 2, LUAL_BUFFERSIZE);
+  char *buff = malloc(size);
+  int ret = uv_os_getenv(name, buff, &size);
+  if (ret == 0) {
+    lua_pushlstring(L, buff, size);
+    ret = 1;
+  } else
+    ret = luv_error(L, ret);
+  free(buff);
+  return ret;
+}
+
+static int luv_os_setenv(lua_State* L) {
+  const char* name = luaL_checkstring(L, 1);
+  const char* value = luaL_checkstring(L, 2);
+  int ret = uv_os_setenv(name, value);
+  if (ret == 0)
+    return luv_error(L, ret);
+  else
+    lua_pushboolean(L, 1);
+  return 1;
+}
+
+static int luv_os_unsetenv(lua_State* L) {
+  const char* name = luaL_checkstring(L, 1);
+  int ret = uv_os_unsetenv(name);
+  if (ret == 0)
+    return luv_error(L, ret);
+  else
+    lua_pushboolean(L, 1);
+  return 1;
+}
+
+static int luv_os_gethostname(lua_State* L) {
+#if LUV_UV_VERSION_GEQ(1, 26, 0)
+  char hostname[UV_MAXHOSTNAMESIZE];
+#else
+  char hostname[PATH_MAX];
 #endif
+  size_t size = sizeof(hostname);
+  int ret = uv_os_gethostname(hostname, &size);
+  if (ret == 0) {
+    lua_pushlstring(L, hostname, size);
+    ret = 1;
+  }
+  else
+    ret = luv_error(L, ret);
+  return ret;
+}
+#endif
+
+#if LUV_UV_VERSION_GEQ(1, 16, 0)
+static int luv_if_indextoname(lua_State* L) {
+  /* 40 bytes address, 16 bytes device name, plus reserve. */
+  char scoped_addr[128];
+  size_t scoped_addr_len = sizeof(scoped_addr);
+  unsigned int ifindex = (unsigned int)luaL_checkinteger(L, 1);
+
+  int ret = uv_if_indextoname(ifindex - 1, scoped_addr, &scoped_addr_len);
+  if (ret == 0) {
+    lua_pushlstring(L, scoped_addr, scoped_addr_len);
+    ret = 1;
+  }
+  else
+    ret = luv_error(L, ret);
+  return ret;
+}
+
+static int luv_if_indextoiid(lua_State* L) {
+  char interface_id[UV_IF_NAMESIZE];
+  size_t interface_id_len = sizeof(interface_id);
+  unsigned int ifindex = (unsigned int)luaL_checkinteger(L, 1);
+
+  int ret = uv_if_indextoiid(ifindex - 1, interface_id, &interface_id_len);
+  if (ret == 0) {
+    lua_pushlstring(L, interface_id, interface_id_len);
+    ret = 1;
+  }
+  else
+    ret = luv_error(L, ret);
+  return ret;
+}
+
+static int luv_os_getppid(lua_State* L) {
+  lua_pushnumber(L, uv_os_getppid());
+  return 1;
+}
+#endif
+
+#if LUV_UV_VERSION_GEQ(1, 18, 0)
+static int luv_os_getpid(lua_State* L) {
+  lua_pushnumber(L, uv_os_getpid());
+  return 1;
+}
+#endif
+
+#if LUV_UV_VERSION_GEQ(1, 23, 0)
+static int luv_os_getpriority(lua_State* L) {
+  int priority;
+  uv_pid_t pid = luaL_checkinteger(L, 1);
+  int ret = uv_os_getpriority(pid, &priority);
+  if (ret == 0) {
+    lua_pushnumber(L, priority);
+    ret = 1;
+  }
+  else {
+    ret = luv_error(L, ret);
+  }
+  return ret;
+}
+#endif
+
+#if LUV_UV_VERSION_GEQ(1, 23, 0)
+static int luv_os_setpriority(lua_State* L) {
+  uv_pid_t pid = luaL_checkinteger(L, 1);
+  int priority= luaL_checkinteger(L, 2);
+  int ret = uv_os_setpriority(pid, priority);
+  if (ret == 0) {
+    lua_pushboolean(L, 1);
+    ret = 1;
+  }
+  else
+    ret = luv_error(L, ret);
+  return ret;
+}
+#endif
+
+#if LUV_UV_VERSION_GEQ(1, 25, 0)
+static int luv_os_uname(lua_State* L) {
+  uv_utsname_t uname;
+
+  int ret = uv_os_uname(&uname);
+  if (ret == 0) {
+    lua_newtable(L);
+    lua_pushstring(L, uname.sysname);
+    lua_setfield(L, -2, "sysname");
+    lua_pushstring(L, uname.release);
+    lua_setfield(L, -2, "release");
+    lua_pushstring(L, uname.version);
+    lua_setfield(L, -2, "version");
+    lua_pushstring(L, uname.machine);
+    lua_setfield(L, -2, "machine");
+    ret = 1;
+  }
+  else
+    ret = luv_error(L, ret);
+  return ret;
+}
+#endif
+
+#if LUV_UV_VERSION_GEQ(1, 28, 0)
+static int luv_gettimeofday(lua_State* L) {
+  uv_timeval64_t tv = { 0 };
+
+  int ret = uv_gettimeofday(&tv);
+  if (ret == 0)
+  {
+#if defined(__LP64__)
+    lua_pushinteger(L, tv.tv_sec);
+#else
+    lua_pushnumber(L, tv.tv_sec);
+#endif
+    lua_pushinteger(L, tv.tv_usec);
+    return 2;
+  }
+  else
+    ret = luv_error(L, ret);
+  return ret;
+}
+#endif
+

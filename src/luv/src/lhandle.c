@@ -17,6 +17,7 @@
 #include "lhandle.h"
 
 static luv_handle_t* luv_setup_handle(lua_State* L) {
+  lua_State* luvL = luv_state(L);
   luv_handle_t* data;
   const uv_handle_t* handle;
   void *udata;
@@ -49,12 +50,39 @@ static luv_handle_t* luv_setup_handle(lua_State* L) {
   data->ref = luaL_ref(L, LUA_REGISTRYINDEX);
   data->callbacks[0] = LUA_NOREF;
   data->callbacks[1] = LUA_NOREF;
+  data->L = luvL;
   data->extra = NULL;
   return data;
 }
 
+static int luv_is_callable(lua_State* L, int index) {
+  if (luaL_getmetafield(L, index, "__call") != LUA_TNIL) {
+    // getmetatable(x).__call must be a function for x() to work
+    int callable = lua_isfunction(L, -1);
+    lua_pop(L, 1);
+    return callable;
+  }
+  return lua_isfunction(L, index);
+}
+
+static void luv_check_callable(lua_State* L, int index) {
+  const char *msg;
+  const char *typearg;  /* name for the type of the actual argument */
+  if (luv_is_callable(L, index))
+    return;
+
+  if (luaL_getmetafield(L, index, "__name") == LUA_TSTRING)
+    typearg = lua_tostring(L, -1);  /* use the given type name */
+  else if (lua_type(L, index) == LUA_TLIGHTUSERDATA)
+    typearg = "light userdata";  /* special name for messages */
+  else
+    typearg = luaL_typename(L, index);  /* standard name */
+  msg = lua_pushfstring(L, "function or callable table expected, got %s", typearg);
+  luaL_argerror(L, index, msg);
+}
+
 static void luv_check_callback(lua_State* L, luv_handle_t* data, luv_callback_id id, int index) {
-  luaL_checktype(L, index, LUA_TFUNCTION);
+  luv_check_callable(L, index);
   luaL_unref(L, LUA_REGISTRYINDEX, data->callbacks[id]);
   lua_pushvalue(L, index);
   data->callbacks[id] = luaL_ref(L, LUA_REGISTRYINDEX);
@@ -87,11 +115,15 @@ static void luv_call_callback(lua_State* L, luv_handle_t* data, luv_callback_id 
     lua_pop(L, nargs);
   }
   else {
+    int errfunc, ret;
+
     // Get the traceback function in case of error
     lua_pushcfunction(L, traceback);
+    errfunc = lua_gettop(L);
     // And insert it before the args if there are any.
     if (nargs) {
       lua_insert(L, -1 - nargs);
+      errfunc -= nargs;
     }
     // Get the callback
     lua_rawgeti(L, LUA_REGISTRYINDEX, ref);
@@ -100,10 +132,23 @@ static void luv_call_callback(lua_State* L, luv_handle_t* data, luv_callback_id 
       lua_insert(L, -1 - nargs);
     }
 
-    if (lua_pcall(L, nargs, 0, -2 - nargs)) {
-      fprintf(stderr, "Uncaught Error: %s\n", lua_tostring(L, -1));
+    ret = lua_pcall(L, nargs, 0, errfunc);
+    switch (ret) {
+    case 0:
+      break;
+    case LUA_ERRMEM:
+      fprintf(stderr, "System Error: %s\n", lua_tostring(L, -1));
       exit(-1);
+      break;
+    case LUA_ERRRUN:
+    case LUA_ERRSYNTAX:
+    case LUA_ERRERR:
+    default:
+      fprintf(stderr, "Uncaught Error: %s\n", lua_tostring(L, -1));
+      lua_pop(L, 1);
+      break;
     }
+
     // Remove the traceback function
     lua_pop(L, 1);
   }
