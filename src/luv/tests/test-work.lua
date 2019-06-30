@@ -8,11 +8,12 @@ return require('lib/tap')(function (test)
         function(n,s) --work,in threadpool
             local uv = require('luv')
             local t = uv.thread_self()
-            uv.sleep(100)
+            uv.sleep(10)
             return n,n*n, tostring(uv.thread_self()),s
         end,
         function(n,r,id, s)
             assert(n*n==r)
+            assert(#s==4096)
             if step < count then
                 _uv.queue_work(ctx,n,s)
                 step = step + 1

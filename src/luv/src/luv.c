@@ -508,53 +508,91 @@ static void luv_handle_init(lua_State* L) {
   lua_setfield(L, LUA_REGISTRYINDEX, "uv_stream");
 }
 
-// TODO: see if we can avoid using a string key for this to increase performance
-static const char* luv_loop_key = "luv_loop";
-static const char* luv_state_key = "luv_main_thread";
+// Call lua function, will pop nargs values from top of vm stack and push some
+// values according to nresults. When error occurs, it will print error message
+// to stderr, and memory allocation error will cause exit.
+LUALIB_API int luv_cfpcall(lua_State* L, int nargs, int nresult, int flags) {
+  int ret, top, errfunc;
 
-// Get main thread, ensure coroutines works
-// Only called when luv setup uv_handle_t or uv_req_t
-LUALIB_API lua_State* luv_state(lua_State* L) {
-  lua_State* lstate;
-  lua_pushstring(L, luv_state_key);
-  lua_rawget(L, LUA_REGISTRYINDEX);
-  lstate = lua_tothread(L, -1);
-  lua_pop(L, 1);
-  if (lstate==NULL) {
-    luaL_error(L, "cannot get main thread");
+  // Get the traceback function in case of error
+  if ((flags & (LUVF_CALLBACK_NOTRACEBACK|LUVF_CALLBACK_NOERRMSG) ) == 0)
+  {
+    lua_pushcfunction(L, luv_traceback);
+    errfunc = lua_gettop(L);
+    // And insert it before the function and args
+    lua_insert(L, -2 - nargs);
+    errfunc -= (nargs+1);
+  }else
+    errfunc = 0;
+  top  = lua_gettop(L);
+
+  ret = lua_pcall(L, nargs, nresult, errfunc);
+  switch (ret) {
+  case LUA_OK:
+    break;
+  case LUA_ERRMEM:
+    if ((flags & LUVF_CALLBACK_NOERRMSG) == 0)
+      fprintf(stderr, "System Error: %s\n", lua_tostring(L, -1));
+    if ((flags & LUVF_CALLBACK_NOEXIT) == 0)
+      exit(-1);
+    lua_pop(L, 1);
+    ret = -ret;
+    break;
+  case LUA_ERRRUN:
+  case LUA_ERRSYNTAX:
+  case LUA_ERRERR:
+  default:
+    if ((flags & LUVF_CALLBACK_NOERRMSG) == 0)
+      fprintf(stderr, "Uncaught Error: %s\n", lua_tostring(L, -1));
+    lua_pop(L, 1);
+    ret = -ret;
+    break;
   }
-  return lstate;
+  if ((flags & (LUVF_CALLBACK_NOTRACEBACK|LUVF_CALLBACK_NOERRMSG) ) == 0)
+  {
+    lua_remove(L, errfunc);
+  }
+  if (ret == LUA_OK) {
+    if(nresult == LUA_MULTRET)
+      nresult = lua_gettop(L) - top + nargs + 1;
+    return nresult;
+  }
+  return ret;
 }
 
-// Called when luv init uv_handle_t
-LUALIB_API uv_loop_t* luv_loop(lua_State* L) {
-  uv_loop_t* loop;
-  lua_pushstring(L, luv_loop_key);
+// TODO: see if we can avoid using a string key for this to increase performance
+static const char* luv_ctx_key = "luv_context";
+
+// Please look at luv_ctx_t in luv.h
+LUALIB_API luv_ctx_t* luv_context(lua_State* L) {
+  luv_ctx_t* ctx;
+  lua_pushstring(L, luv_ctx_key);
   lua_rawget(L, LUA_REGISTRYINDEX);
-  if (lua_isnil(L, -1))
-    loop = NULL;
-  else
-    loop = *(uv_loop_t**)lua_touserdata(L, -1);
-  lua_pop(L, 1);
-  return loop;
-}
-
-// Set an extran loop, before luaopen_luv
-LUALIB_API void luv_set_loop(lua_State* L, uv_loop_t* loop) {
-  if (loop==NULL) {
-    lua_pushstring(L, luv_loop_key);
-    lua_pushnil(L);
+  if (lua_isnil(L, -1)) {
+    // create it if not exist in registry
+    lua_pushstring(L, luv_ctx_key);
+    ctx = (luv_ctx_t*)lua_newuserdata(L, sizeof(*ctx));
+    memset(ctx, 0, sizeof(*ctx));
     lua_rawset(L, LUA_REGISTRYINDEX);
   } else {
-    lua_pushstring(L, luv_loop_key);
-    *((uv_loop_t**)lua_newuserdata(L, sizeof(uv_loop_t**))) = loop;
-    lua_rawset(L, LUA_REGISTRYINDEX);
-
-    // Push main thread with luv_state_key in registry table
-    lua_pushstring(L, luv_state_key);
-    lua_pushthread(L);
-    lua_rawset(L, LUA_REGISTRYINDEX);
+    ctx = (luv_ctx_t*)lua_touserdata(L, -1);
   }
+  lua_pop(L, 1);
+  return ctx;
+}
+
+// Set an external loop, before luaopen_luv
+LUALIB_API void luv_set_loop(lua_State* L, uv_loop_t* loop) {
+  luv_ctx_t* ctx = luv_context(L);
+
+  ctx->loop = loop;
+  ctx->L = L;
+}
+
+// Set an external event callback routine, before luaopen_luv
+LUALIB_API void luv_set_callback(lua_State* L, luv_CFpcall pcall) {
+  luv_ctx_t* ctx = luv_context(L);
+  ctx->pcall = pcall;
 }
 
 static void walk_cb(uv_handle_t *handle, void *arg)
@@ -566,7 +604,8 @@ static void walk_cb(uv_handle_t *handle, void *arg)
 }
 
 static int loop_gc(lua_State *L) {
-  uv_loop_t* loop = luv_loop(L);
+  luv_ctx_t *ctx = luv_context(L);
+  uv_loop_t* loop = ctx->loop;
   if (loop==NULL)
     return 0;
   // Call uv_close on every active handle
@@ -579,12 +618,14 @@ static int loop_gc(lua_State *L) {
 }
 
 LUALIB_API int luaopen_luv (lua_State* L) {
-  uv_loop_t* loop = luv_loop(L);
+  luv_ctx_t* ctx = luv_context(L);
+
+  luaL_newlib(L, luv_functions);
 
   // loop is NULL, luv need to create an inner loop
-  if (loop==NULL) {
+  if (ctx->loop==NULL) {
     int ret;
-    void* p;
+    uv_loop_t* loop;
 
     // Setup the uv_loop meta table for a proper __gc
     luaL_newmetatable(L, "uv_loop.meta");
@@ -593,27 +634,25 @@ LUALIB_API int luaopen_luv (lua_State* L) {
     lua_settable(L, -3);
     lua_pop(L, 1);
 
-    // Push luv_loop_key as key for registry table
-    lua_pushstring(L, luv_loop_key);
-    // userdata content is: pointer of loop, and followed by loop
-    p = lua_newuserdata(L, sizeof(uv_loop_t*) + sizeof(uv_loop_t));
-    loop = (uv_loop_t*)((char*)p + sizeof(uv_loop_t*));
-    *((uv_loop_t**)p) = loop;
+    lua_pushstring(L, "_loop");
+    loop = (uv_loop_t*)lua_newuserdata(L, sizeof(*loop));
+    lua_rawset(L, -3);  // ref to loop, avoid __gc early
+
     // setup the metatable for __gc
     luaL_getmetatable(L, "uv_loop.meta");
     lua_setmetatable(L, -2);
-    // rawset registry
-    lua_rawset(L, LUA_REGISTRYINDEX);
 
-    // Push main thread with luv_state_key in registry table
-    lua_pushstring(L, luv_state_key);
-    lua_pushthread(L);
-    lua_rawset(L, LUA_REGISTRYINDEX);
+    ctx->loop = loop;
+    ctx->L = L;
 
     ret = uv_loop_init(loop);
     if (ret < 0) {
       return luaL_error(L, "%s: %s\n", uv_err_name(ret), uv_strerror(ret));
     }
+  }
+  // pcall is NULL, luv use default callback routine
+  if (ctx->pcall==NULL) {
+    ctx->pcall = luv_cfpcall;
   }
 
   luv_req_init(L);
@@ -621,7 +660,6 @@ LUALIB_API int luaopen_luv (lua_State* L) {
   luv_thread_init(L);
   luv_work_init(L);
 
-  luaL_newlib(L, luv_functions);
   luv_constants(L);
   lua_setfield(L, -2, "constants");
   return 1;

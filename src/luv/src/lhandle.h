@@ -42,13 +42,16 @@
 typedef struct {
   int ref;
   int callbacks[2];
-  lua_State* L;
+  luv_ctx_t* ctx;
   void* extra;
 } luv_handle_t;
 
 #ifdef LUV_SOURCE
+/* Traceback for lua_pcall */
+static int luv_traceback (lua_State *L);
+
 /* Setup the handle at the top of the stack */
-static luv_handle_t* luv_setup_handle(lua_State* L);
+static luv_handle_t* luv_setup_handle(lua_State* L, luv_ctx_t* ctx);
 
 /* Return true if the object is a function or a callable table */
 static int luv_is_callable(lua_State* L, int index);

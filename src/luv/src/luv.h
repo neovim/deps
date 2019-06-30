@@ -54,21 +54,64 @@
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wunused-function"
 #endif
+
+// luv flags to control luv_CFpcall routine
+#define LUVF_CALLBACK_NOEXIT       0x01       // Don't exit when LUA_ERRMEM
+#define LUVF_CALLBACK_NOTRACEBACK  0x02       // Don't traceback when error
+#define LUVF_CALLBACK_NOERRMSG     0x04       // Don't output err message
+
+/* Prototype of external callback routine.
+ * The caller and the implementer exchanges data by the lua vm stack.
+ * The caller push a lua function and nargs values onto the stack, then call it.
+ * The implementer remove nargs(argument)+1(function) values from vm stack,
+ * push all returned values by lua function onto the stack, and return an
+ * integer as result code. If the result >= 0, that means the number of
+ * values leave on the stack, or the callback routine error, nothing leave on
+ * the stack, -result is the error value returned by lua_pcall.
+ *
+ * When LUVF_CALLBACK_NOEXIT is set, the implementer should not exit.
+ * When LUVF_CALLBACK_NOTRACEBACK is set, the implementer will not do traceback.
+ *
+ * Need to notice that the implementer must balance the lua vm stack, and maybe
+ * exit when memory allocation error.
+ */
+typedef int (*luv_CFpcall) (lua_State* L, int nargs, int nresults, int flags);
+
+/* Default implemention of event callback */
+LUALIB_API int luv_cfpcall(lua_State* L, int nargs, int nresult, int flags);
+
+typedef struct {
+  uv_loop_t*   loop;        /* main loop */
+  lua_State*   L;           /* main thread,ensure coroutines works */
+  luv_CFpcall  pcall;       /* luv event callback function in protected mode */
+
+  void* extra;              /* extra data */
+} luv_ctx_t;
+
+/* This is combined of old luv_state() and luv_loop() c apis, they are replaced
+ * with macro to this API */
+LUALIB_API luv_ctx_t* luv_context(lua_State* L);
+
 /* There is a 1-1 relation between a lua_State and a uv_loop_t
    These helpers will give you one if you have the other
    These are exposed for extensions built with luv
    This allows luv to be used in multithreaded applications.
 */
-LUALIB_API lua_State* luv_state(lua_State* L);
+#define luv_state(L) (luv_context(L)->L)
+
 /* All libuv callbacks will lua_call directly from this root-per-thread state
 */
-LUALIB_API uv_loop_t* luv_loop(lua_State* L);
+#define luv_loop(L)  (luv_context(L)->loop)
 
 /* Set or clear an external uv_loop_t in a lua_State
    This must be called before luaopen_luv, so luv doesn't init an own loop
 */
 LUALIB_API void luv_set_loop(lua_State* L, uv_loop_t* loop);
 
+/* Set or clear an external c routine for luv event callback
+   This must be called before luaopen_luv, so luv doesn't init an own routine
+*/
+LUALIB_API void luv_set_callback(lua_State* L, luv_CFpcall pcall);
 /* This is the main hook to load the library.
    This can be called multiple times in a process as long
    as you use a different lua_State and thread for each.
