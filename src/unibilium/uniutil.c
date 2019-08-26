@@ -26,7 +26,12 @@ along with unibilium.  If not, see <http://www.gnu.org/licenses/>.
 #include <string.h>
 #include <errno.h>
 #include <assert.h>
-#include <unistd.h>
+#ifdef _MSC_VER
+# include <BaseTsd.h>
+# define ssize_t SSIZE_T
+#else
+# include <unistd.h>
+#endif
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -157,7 +162,7 @@ static unibi_term *from_dirs(const char *list, const char *term) {
         z = strchr(a, ':');
 
         ut = from_dir(a, z, NULL, term);
-        if (ut) {
+        if (ut || errno != ENOENT) {
             return ut;
         }
 
@@ -183,12 +188,15 @@ unibi_term *unibi_from_term(const char *term) {
     }
 
     if ((env = getenv("TERMINFO"))) {
-        return from_dir(env, NULL, NULL, term);
+        ut = from_dir(env, NULL, NULL, term);
+        if (ut) {
+            return ut;
+        }
     }
 
     if ((env = getenv("HOME"))) {
         ut = from_dir(env, NULL, ".terminfo", term);
-        if (ut) {
+        if (ut || errno != ENOENT) {
             return ut;
         }
     }
