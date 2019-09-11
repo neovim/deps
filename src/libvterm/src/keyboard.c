@@ -90,10 +90,10 @@ static keycodes_s keycodes[] = {
 
 static keycodes_s keycodes_fn[] = {
   { KEYCODE_NONE },            // F0 - shouldn't happen
-  { KEYCODE_SS3, 'P' }, // F1
-  { KEYCODE_SS3, 'Q' }, // F2
-  { KEYCODE_SS3, 'R' }, // F3
-  { KEYCODE_SS3, 'S' }, // F4
+  { KEYCODE_SS3,    'P' },     // F1
+  { KEYCODE_SS3,    'Q' },     // F2
+  { KEYCODE_SS3,    'R' },     // F3
+  { KEYCODE_SS3,    'S' },     // F4
   { KEYCODE_CSINUM, '~', 15 }, // F5
   { KEYCODE_CSINUM, '~', 17 }, // F6
   { KEYCODE_CSINUM, '~', 18 }, // F7

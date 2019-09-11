@@ -52,9 +52,15 @@ VTerm *vterm_new_with_allocator(int rows, int cols, VTermAllocatorFunctions *fun
   vt->parser.strbuffer_cur = 0;
   vt->parser.strbuffer = vterm_allocator_malloc(vt, vt->parser.strbuffer_len);
 
+  vt->outfunc = NULL;
+  vt->outdata = NULL;
+
   vt->outbuffer_len = 64;
   vt->outbuffer_cur = 0;
   vt->outbuffer = vterm_allocator_malloc(vt, vt->outbuffer_len);
+
+  vt->tmpbuffer_len = 64;
+  vt->tmpbuffer = vterm_allocator_malloc(vt, vt->tmpbuffer_len);
 
   return vt;
 }
@@ -69,6 +75,7 @@ void vterm_free(VTerm *vt)
 
   vterm_allocator_free(vt, vt->parser.strbuffer);
   vterm_allocator_free(vt, vt->outbuffer);
+  vterm_allocator_free(vt, vt->tmpbuffer);
 
   vterm_allocator_free(vt, vt);
 }
@@ -110,39 +117,32 @@ void vterm_set_utf8(VTerm *vt, int is_utf8)
   vt->mode.utf8 = is_utf8;
 }
 
+void vterm_output_set_callback(VTerm *vt, VTermOutputCallback *func, void *user)
+{
+  vt->outfunc = func;
+  vt->outdata = user;
+}
+
 INTERNAL void vterm_push_output_bytes(VTerm *vt, const char *bytes, size_t len)
 {
-  if(len > vt->outbuffer_len - vt->outbuffer_cur) {
-    DEBUG_LOG("vterm_push_output(): buffer overflow; truncating output\n");
-    len = vt->outbuffer_len - vt->outbuffer_cur;
+  if(vt->outfunc) {
+    (vt->outfunc)(bytes, len, vt->outdata);
+    return;
   }
+
+  if(len > vt->outbuffer_len - vt->outbuffer_cur)
+    return;
 
   memcpy(vt->outbuffer + vt->outbuffer_cur, bytes, len);
   vt->outbuffer_cur += len;
 }
 
-static int outbuffer_is_full(VTerm *vt)
-{
-  return vt->outbuffer_cur >= vt->outbuffer_len - 1;
-}
-
 INTERNAL void vterm_push_output_vsprintf(VTerm *vt, const char *format, va_list args)
 {
-  if(outbuffer_is_full(vt)) {
-    DEBUG_LOG("vterm_push_output(): buffer overflow; truncating output\n");
-    return;
-  }
-
-  int written = vsnprintf(vt->outbuffer + vt->outbuffer_cur,
-      vt->outbuffer_len - vt->outbuffer_cur,
+  size_t len = vsnprintf(vt->tmpbuffer, vt->tmpbuffer_len,
       format, args);
 
-  if(written == vt->outbuffer_len - vt->outbuffer_cur) {
-    /* output was truncated */
-    vt->outbuffer_cur = vt->outbuffer_len - 1;
-  }
-  else
-    vt->outbuffer_cur += written;
+  vterm_push_output_bytes(vt, vt->tmpbuffer, len);
 }
 
 INTERNAL void vterm_push_output_sprintf(VTerm *vt, const char *format, ...)
@@ -155,40 +155,56 @@ INTERNAL void vterm_push_output_sprintf(VTerm *vt, const char *format, ...)
 
 INTERNAL void vterm_push_output_sprintf_ctrl(VTerm *vt, unsigned char ctrl, const char *fmt, ...)
 {
-  size_t orig_cur = vt->outbuffer_cur;
+  size_t cur;
 
   if(ctrl >= 0x80 && !vt->mode.ctrl8bit)
-    vterm_push_output_sprintf(vt, ESC_S "%c", ctrl - 0x40);
+    cur = snprintf(vt->tmpbuffer, vt->tmpbuffer_len,
+        ESC_S "%c", ctrl - 0x40);
   else
-    vterm_push_output_sprintf(vt, "%c", ctrl);
+    cur = snprintf(vt->tmpbuffer, vt->tmpbuffer_len,
+        "%c", ctrl);
+
+  if(cur >= vt->tmpbuffer_len)
+    return;
 
   va_list args;
   va_start(args, fmt);
-  vterm_push_output_vsprintf(vt, fmt, args);
+  cur += vsnprintf(vt->tmpbuffer + cur, vt->tmpbuffer_len - cur,
+      fmt, args);
   va_end(args);
 
-  if(outbuffer_is_full(vt))
-    vt->outbuffer_cur = orig_cur;
+  if(cur >= vt->tmpbuffer_len)
+    return;
+
+  vterm_push_output_bytes(vt, vt->tmpbuffer, cur);
 }
 
 INTERNAL void vterm_push_output_sprintf_dcs(VTerm *vt, const char *fmt, ...)
 {
-  size_t orig_cur = vt->outbuffer_cur;
+  size_t cur = 0;
 
-  if(!vt->mode.ctrl8bit)
-    vterm_push_output_sprintf(vt, ESC_S "%c", C1_DCS - 0x40);
-  else
-    vterm_push_output_sprintf(vt, "%c", C1_DCS);
+  cur += snprintf(vt->tmpbuffer + cur, vt->tmpbuffer_len - cur,
+      vt->mode.ctrl8bit ? "\x90" : ESC_S "P"); // DCS
+
+  if(cur >= vt->tmpbuffer_len)
+    return;
 
   va_list args;
   va_start(args, fmt);
-  vterm_push_output_vsprintf(vt, fmt, args);
+  cur += vsnprintf(vt->tmpbuffer + cur, vt->tmpbuffer_len - cur,
+      fmt, args);
   va_end(args);
 
-  vterm_push_output_sprintf_ctrl(vt, C1_ST, "");
+  if(cur >= vt->tmpbuffer_len)
+    return;
 
-  if(outbuffer_is_full(vt))
-    vt->outbuffer_cur = orig_cur;
+  cur += snprintf(vt->tmpbuffer + cur, vt->tmpbuffer_len - cur,
+      vt->mode.ctrl8bit ? "\x9C" : ESC_S "\\"); // ST
+
+  if(cur >= vt->tmpbuffer_len)
+    return;
+
+  vterm_push_output_bytes(vt, vt->tmpbuffer, cur);
 }
 
 size_t vterm_output_get_buffer_size(const VTerm *vt)

@@ -46,11 +46,6 @@ struct VTermPen
   unsigned int font:4; /* To store 0-9 */
 };
 
-static inline int vterm_color_equal(VTermColor a, VTermColor b)
-{
-  return a.red == b.red && a.green == b.green && a.blue == b.blue;
-}
-
 struct VTermState
 {
   VTerm *vt;
@@ -126,8 +121,6 @@ struct VTermState
   VTermColor default_bg;
   VTermColor colors[16]; // Store the 8 ANSI and the 8 ANSI high-brights only
 
-  int fg_index;
-  int bg_index;
   int bold_is_highbright;
 
   unsigned int protected_cell : 1;
@@ -197,9 +190,15 @@ struct VTerm
 
   /* len == malloc()ed size; cur == number of valid bytes */
 
+  VTermOutputCallback *outfunc;
+  void                *outdata;
+
   char  *outbuffer;
   size_t outbuffer_len;
   size_t outbuffer_cur;
+
+  char  *tmpbuffer;
+  size_t tmpbuffer_len;
 
   VTermState *state;
   VTermScreen *screen;

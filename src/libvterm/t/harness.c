@@ -47,6 +47,7 @@ static VTermKey strp_key(char *str)
     { "Tab",   VTERM_KEY_TAB },
     { "Enter", VTERM_KEY_ENTER },
     { "KP0",   VTERM_KEY_KP_0 },
+    { "F1",    VTERM_KEY_FUNCTION(1) },
     { NULL,    VTERM_KEY_NONE },
   };
 
@@ -58,11 +59,38 @@ static VTermKey strp_key(char *str)
   return VTERM_KEY_NONE;
 }
 
+static void print_color(const VTermColor *col)
+{
+  if (VTERM_COLOR_IS_RGB(col)) {
+    printf("rgb(%d,%d,%d", col->rgb.red, col->rgb.green, col->rgb.blue);
+  }
+  else if (VTERM_COLOR_IS_INDEXED(col)) {
+    printf("idx(%d", col->indexed.idx);
+  }
+  else {
+    printf("invalid(%d", col->type);
+  }
+  if (VTERM_COLOR_IS_DEFAULT_FG(col)) {
+    printf(",is_default_fg");
+  }
+  if (VTERM_COLOR_IS_DEFAULT_BG(col)) {
+    printf(",is_default_bg");
+  }
+  printf(")");
+}
+
 static VTerm *vt;
 static VTermState *state;
 static VTermScreen *screen;
 
 static VTermEncodingInstance encoding;
+
+static void term_output(const char *s, size_t len, void *user)
+{
+  printf("output ");
+  for(int i = 0; i < len; i++)
+    printf("%x%s", (unsigned char)s[i], i < len-1 ? "," : "\n");
+}
 
 static int parser_text(const char bytes[], size_t len, void *user)
 {
@@ -222,7 +250,9 @@ static int settermprop(VTermProp prop, VTermValue *val, void *user)
     printf("settermprop %d \"%s\"\n", prop, val->string);
     return 1;
   case VTERM_VALUETYPE_COLOR:
-    printf("settermprop %d rgb(%d,%d,%d)\n", prop, val->color.red, val->color.green, val->color.blue);
+    printf("settermprop %d ", prop);
+    print_color(&val->color);
+    printf("\n");
     return 1;
 
   case VTERM_N_VALUETYPES:
@@ -443,6 +473,8 @@ int main(int argc, char **argv)
     if(streq(line, "INIT")) {
       if(!vt)
         vt = vterm_new(25, 80);
+
+      vterm_output_set_callback(vt, term_output, NULL);
     }
 
     else if(streq(line, "WANTPARSER")) {
@@ -749,10 +781,12 @@ int main(int argc, char **argv)
             printf("%d\n", state_pen.font);
         }
         else if(streq(linep, "foreground")) {
-          printf("rgb(%d,%d,%d)\n", state_pen.foreground.red, state_pen.foreground.green, state_pen.foreground.blue);
+          print_color(&state_pen.foreground);
+          printf("\n");
         }
         else if(streq(linep, "background")) {
-          printf("rgb(%d,%d,%d)\n", state_pen.background.red, state_pen.background.green, state_pen.background.blue);
+          print_color(&state_pen.background);
+          printf("\n");
         }
         else
           printf("?\n");
@@ -843,8 +877,13 @@ int main(int argc, char **argv)
         printf("} ");
         if(cell.attrs.dwl)       printf("dwl ");
         if(cell.attrs.dhl)       printf("dhl-%s ", cell.attrs.dhl == 2 ? "bottom" : "top");
-        printf("fg=rgb(%d,%d,%d) ",  cell.fg.red, cell.fg.green, cell.fg.blue);
-        printf("bg=rgb(%d,%d,%d)\n", cell.bg.red, cell.bg.green, cell.bg.blue);
+        printf("fg=");
+        vterm_screen_convert_color_to_rgb(screen, &cell.fg);
+        print_color(&cell.fg);
+        printf(" bg=");
+        vterm_screen_convert_color_to_rgb(screen, &cell.bg);
+        print_color(&cell.bg);
+        printf("\n");
       }
       else if(strstartswith(line, "?screen_eol ")) {
         char *linep = line + 12;
@@ -891,9 +930,7 @@ int main(int argc, char **argv)
       char outbuff[outlen];
       vterm_output_read(vt, outbuff, outlen);
 
-      printf("output ");
-      for(int i = 0; i < outlen; i++)
-        printf("%x%s", (unsigned char)outbuff[i], i < outlen-1 ? "," : "\n");
+      term_output(outbuff, outlen, NULL);
     }
 
     printf(err ? "?\n" : "DONE\n");
