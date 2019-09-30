@@ -8,7 +8,7 @@ project (luv C ASM)
 
 set(LUV_VERSION_MAJOR 1)
 set(LUV_VERSION_MINOR 30)
-set(LUV_VERSION_PATCH 0)
+set(LUV_VERSION_PATCH 1)
 set(LUV_VERSION ${LUV_VERSION_MAJOR}.${LUV_VERSION_MINOR}.${LUV_VERSION_PATCH})
 
 option(BUILD_MODULE "Build as module" ON)
@@ -59,10 +59,8 @@ endif ()
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/Modules/")
 
 if (WITH_SHARED_LIBUV)
-  find_package(Libuv)
-  if (LIBUV_FOUND)
-    include_directories(${LIBUV_INCLUDE_DIR})
-  endif (LIBUV_FOUND)
+  find_package(Libuv REQUIRED)
+  include_directories(${LIBUV_INCLUDE_DIR})
 else (WITH_SHARED_LIBUV)
   include_directories(deps/libuv/include)
   add_subdirectory(deps/libuv EXCLUDE_FROM_ALL)
@@ -201,6 +199,14 @@ if (CMAKE_INSTALL_PREFIX)
     LIBRARY DESTINATION "${INSTALL_LIB_DIR}"
   )
   if (NOT BUILD_MODULE)
+    if(UNIX)
+      set(prefix ${CMAKE_INSTALL_PREFIX})
+      set(includedir ${INSTALL_INC_DIR})
+      set(libdir ${INSTALL_LIB_DIR})
+      configure_file(libluv.pc.in ${CMAKE_CURRENT_BINARY_DIR}/libluv.pc @ONLY)
+      install(FILES ${CMAKE_CURRENT_BINARY_DIR}/libluv.pc
+        DESTINATION ${INSTALL_LIB_DIR}/pkgconfig)
+    endif()
     install(
       FILES src/luv.h src/util.h src/lhandle.h src/lreq.h
       DESTINATION "${INSTALL_INC_DIR}"
