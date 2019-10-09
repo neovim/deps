@@ -36,14 +36,11 @@ INCFILES=$(TBLFILES:.tbl=.inc)
 
 HFILES_INT=$(sort $(wildcard src/*.h)) $(HFILES)
 
-VERSION_MAJOR=0
-VERSION_MINOR=1
-
 VERSION_CURRENT=0
-VERSION_REVISION=0
+VERSION_REVISION=2
 VERSION_AGE=0
 
-VERSION=$(VERSION_MAJOR).$(VERSION_MINOR)
+VERSION=0.1.2
 
 PREFIX=/usr/local
 BINDIR=$(PREFIX)/bin
@@ -117,7 +114,7 @@ DISTDIR=libvterm-$(VERSION)
 
 distdir: $(INCFILES)
 	mkdir __distdir
-	cp LICENSE __distdir
+	cp LICENSE CONTRIBUTING __distdir
 	mkdir __distdir/src
 	cp src/*.c src/*.h src/*.inc __distdir/src
 	mkdir __distdir/src/encoding
