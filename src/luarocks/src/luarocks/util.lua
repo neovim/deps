@@ -2,9 +2,22 @@
 --- Assorted utilities for managing tables, plus a scheduler for rollback functions.
 -- Does not requires modules directly (only as locals
 -- inside specific functions) to avoid interdependencies,
--- as this is used in the bootstrapping stage of luarocks.cfg.
+-- as this is used in the bootstrapping stage of luarocks.core.cfg.
 
 local util = {}
+
+local core = require("luarocks.core.util")
+
+util.cleanup_path = core.cleanup_path
+util.split_string = core.split_string
+util.sortedpairs = core.sortedpairs
+util.deep_merge = core.deep_merge
+util.deep_merge_under = core.deep_merge_under
+util.popen_read = core.popen_read
+util.show_table = core.show_table
+util.printerr = core.printerr
+util.warning = core.warning
+util.keys = core.keys
 
 local unpack = unpack or table.unpack
 
@@ -46,7 +59,9 @@ end
 -- Functions are executed in the inverse order they were scheduled.
 function util.run_scheduled_functions()
    local fs = require("luarocks.fs")
-   fs.change_dir_to_root()
+   if fs.change_dir_to_root then
+      fs.change_dir_to_root()
+   end
    for i = #scheduled_functions, 1, -1 do
       local item = scheduled_functions[i]
       item.fn(unpack(item.args))
@@ -62,213 +77,7 @@ function util.matchquote(s)
    return (s:gsub("[?%-+*%[%].%%()$^]","%%%1"))
 end
 
---- List of supported arguments.
--- Arguments that take no parameters are marked with the boolean true.
--- Arguments that take a parameter are marked with a descriptive string.
--- Arguments that may take an empty string are described in quotes,
--- (as in the value for --detailed="<text>").
--- For all other string values, it means the parameter is mandatory.
-local supported_flags = {
-   ["all"] = true,
-   ["api-key"] = "<key>",
-   ["append"] = true,
-   ["arch"] = "<arch>",
-   ["bin"] = true,
-   ["binary"] = true,
-   ["branch"] = "<branch-name>",
-   ["debug"] = true,
-   ["deps"] = true,
-   ["deps-mode"] = "<mode>",
-   ["detailed"] = "\"<text>\"",
-   ["force"] = true,
-   ["force-fast"] = true,
-   ["from"] = "<server>",
-   ["help"] = true,
-   ["home"] = true,
-   ["homepage"] = "\"<url>\"",
-   ["keep"] = true,
-   ["lib"] = "<library>",
-   ["license"] = "\"<text>\"",
-   ["list"] = true,
-   ["local"] = true,
-   ["local-tree"] = true,
-   ["lr-bin"] = true,
-   ["lr-cpath"] = true,
-   ["lr-path"] = true,
-   ["lua-version"] = "<vers>",
-   ["lua-ver"] = true,
-   ["lua-incdir"] = true,
-   ["lua-libdir"] = true,
-   ["modules"] = true,
-   ["mversion"] = true,
-   ["no-refresh"] = true,
-   ["nodeps"] = true,
-   ["old-versions"] = true,
-   ["only-deps"] = true,
-   ["only-from"] = "<server>",
-   ["only-server"] = "<server>",
-   ["only-sources"] = "<url>",
-   ["only-sources-from"] = "<url>",
-   ["outdated"] = true,
-   ["output"] = "<file>",
-   ["pack-binary-rock"] = true,
-   ["porcelain"] = true,
-   ["quick"] = true,
-   ["rock-dir"] = true,
-   ["rock-tree"] = true,
-   ["rock-trees"] = true,
-   ["rockspec"] = true,
-   ["rockspec-format"] = "<ver>",
-   ["server"] = "<server>",
-   ["skip-pack"] = true,
-   ["source"] = true,
-   ["summary"] = "\"<text>\"",
-   ["system-config"] = true,
-   ["tag"] = "<tag>",
-   ["timeout"] = "<seconds>",
-   ["to"] = "<path>",
-   ["tree"] = "<path>",
-   ["user-config"] = true,
-   ["verbose"] = true,
-   ["version"] = true,
-}
-
---- Extract flags from an arguments list.
--- Given string arguments, extract flag arguments into a flags set.
--- For example, given "foo", "--tux=beep", "--bla", "bar", "--baz",
--- it would return the following:
--- {["bla"] = true, ["tux"] = "beep", ["baz"] = true}, "foo", "bar".
-function util.parse_flags(...)
-   local args = {...}
-   local flags = {}
-   local i = 1
-   local out = {}
-   local ignore_flags = false
-   while i <= #args do
-      local flag = args[i]:match("^%-%-(.*)")
-      if flag == "--" then
-         ignore_flags = true
-      end
-      if flag and not ignore_flags then
-         local var,val = flag:match("([a-z_%-]*)=(.*)")
-         if val then
-            local vartype = supported_flags[var]
-            if type(vartype) == "string" then
-               if val == "" and vartype:sub(1,1) ~= '"' then
-                  return { ERROR = "Invalid argument: parameter to flag --"..var.."="..vartype.." cannot be empty." }
-               end
-               flags[var] = val
-            else
-               if vartype then
-                  return { ERROR = "Invalid argument: flag --"..var.." does not take an parameter." }
-               else
-                  return { ERROR = "Invalid argument: unknown flag --"..var.."." }
-               end
-            end
-         else
-            local var = flag
-            local vartype = supported_flags[var]
-            if type(vartype) == "string" then
-               i = i + 1
-               local val = args[i]
-               if not val then
-                  return { ERROR = "Invalid argument: flag --"..var.."="..vartype.." expects a parameter." }
-               end
-               if val:match("^%-%-.*") then
-                  return { ERROR = "Invalid argument: flag --"..var.."="..vartype.." expects a parameter (if you really want to pass "..val.." as an argument to --"..var..", use --"..var.."="..val..")." }
-               else
-                  if val == "" and vartype:sub(1,1) ~= '"' then
-                     return { ERROR = "Invalid argument: parameter to flag --"..var.."="..vartype.." cannot be empty." }
-                  end
-                  flags[var] = val
-               end
-            elseif vartype == true then
-               flags[var] = true
-            else
-               return { ERROR = "Invalid argument: unknown flag --"..var.."." }
-            end
-         end
-      else
-         table.insert(out, args[i])
-      end
-      i = i + 1
-   end
-   return flags, unpack(out)
-end
-
--- Adds legacy 'run' function to a command module.
--- @param command table: command module with 'command' function,
--- the added 'run' function calls it after parseing command-line arguments.
-function util.add_run_function(command)
-   command.run = function(...) return command.command(util.parse_flags(...)) end
-end
-
---- Merges contents of src on top of dst's contents.
--- @param dst Destination table, which will receive src's contents.
--- @param src Table which provides new contents to dst.
--- @see platform_overrides
-function util.deep_merge(dst, src)
-   for k, v in pairs(src) do
-      if type(v) == "table" then
-         if not dst[k] then
-            dst[k] = {}
-         end
-         if type(dst[k]) == "table" then
-            util.deep_merge(dst[k], v)
-         else
-            dst[k] = v
-         end
-      else
-         dst[k] = v
-      end
-   end
-end
-
---- Perform platform-specific overrides on a table.
--- Overrides values of table with the contents of the appropriate
--- subset of its "platforms" field. The "platforms" field should
--- be a table containing subtables keyed with strings representing
--- platform names. Names that match the contents of the global
--- cfg.platforms setting are used. For example, if
--- cfg.platforms= {"foo"}, then the fields of
--- tbl.platforms.foo will overwrite those of tbl with the same
--- names. For table values, the operation is performed recursively
--- (tbl.platforms.foo.x.y.z overrides tbl.x.y.z; other contents of
--- tbl.x are preserved).
--- @param tbl table or nil: Table which may contain a "platforms" field;
--- if it doesn't (or if nil is passed), this function does nothing.
-function util.platform_overrides(tbl)
-   assert(type(tbl) == "table" or not tbl)
-   
-   local cfg = require("luarocks.cfg")
-   
-   if not tbl then return end
-   
-   if tbl.platforms then
-      for _, platform in ipairs(cfg.platforms) do
-         local platform_tbl = tbl.platforms[platform]
-         if platform_tbl then
-            util.deep_merge(tbl, platform_tbl)
-         end
-      end
-   end
-   tbl.platforms = nil
-end
-
 local var_format_pattern = "%$%((%a[%a%d_]+)%)"
-
---- Create a new shallow copy of a table: a new table with
--- the same keys and values. Keys point to the same objects as
--- the original table (ie, does not copy recursively).
--- @param tbl table: the input table
--- @return table: a new table with the same contents.
-function util.make_shallow_copy(tbl)
-   local copy = {}
-   for k,v in pairs(tbl) do
-      copy[k] = v
-   end
-   return copy
-end
 
 -- Check if a set of needed variables are referenced
 -- somewhere in a list of definitions, warning the user
@@ -281,7 +90,7 @@ end
 -- needed variables.
 -- @param msg string: the warning message to display.
 function util.warn_if_not_used(var_defs, needed_set, msg)
-   needed_set = util.make_shallow_copy(needed_set)
+   needed_set = core.make_shallow_copy(needed_set)
    for _, val in pairs(var_defs) do
       for used in val:gmatch(var_format_pattern) do
          needed_set[used] = nil
@@ -332,93 +141,38 @@ function util.variable_substitutions(tbl, vars)
    end
 end
 
---- Return an array of keys of a table.
--- @param tbl table: The input table.
--- @return table: The array of keys.
-function util.keys(tbl)
-   local ks = {}
-   for k,_ in pairs(tbl) do
-      table.insert(ks, k)
-   end
-   return ks
-end
-
-local function default_sort(a, b)
-   local ta = type(a)
-   local tb = type(b)
-   if ta == "number" and tb == "number" then
-      return a < b
-   elseif ta == "number" then
-      return true
-   elseif tb == "number" then
-      return false
-   else
-      return tostring(a) < tostring(b)
-   end
-end
-
---- A table iterator generator that returns elements sorted by key,
--- to be used in "for" loops.
--- @param tbl table: The table to be iterated.
--- @param sort_function function or table or nil: An optional comparison function
--- to be used by table.sort when sorting keys, or an array listing an explicit order
--- for keys. If a value itself is an array, it is taken so that the first element
--- is a string representing the field name, and the second element is a priority table
--- for that key, which is returned by the iterator as the third value after the key
--- and the value.
--- @return function: the iterator function.
-function util.sortedpairs(tbl, sort_function)
-   sort_function = sort_function or default_sort
-   local keys = util.keys(tbl)
-   local sub_orders = {}
-
-   if type(sort_function) == "function" then
-      table.sort(keys, sort_function)
-   else
-      local order = sort_function
-      local ordered_keys = {}
-      local all_keys = keys
-      keys = {}
-
-      for _, order_entry in ipairs(order) do
-         local key, sub_order
-         if type(order_entry) == "table" then
-            key = order_entry[1]
-            sub_order = order_entry[2]
-         else
-            key = order_entry
-         end
-
-         if tbl[key] then
-            ordered_keys[key] = true
-            sub_orders[key] = sub_order
-            table.insert(keys, key)
-         end
-      end
-
-      table.sort(all_keys, default_sort)
-      for _, key in ipairs(all_keys) do
-         if not ordered_keys[key] then
-            table.insert(keys, key)
-         end
-      end
-   end
-
-   local i = 1
-   return function()
-      local key = keys[i]
-      i = i + 1
-      return key, tbl[key], sub_orders[key]
-   end
-end
-
-function util.lua_versions()
-   local versions = { "5.1", "5.2", "5.3" }
+function util.lua_versions(sort)
+   local versions = { "5.1", "5.2", "5.3", "5.4" }
    local i = 0
-   return function()
-      i = i + 1
-      return versions[i]
+   if sort == "descending" then
+      i = #versions + 1
+      return function()
+         i = i - 1
+         return versions[i]
+      end
+   else
+      return function()
+         i = i + 1
+         return versions[i]
+      end
    end
+end
+
+function util.lua_path_variables()
+   local cfg = require("luarocks.core.cfg")
+   local lpath_var = "LUA_PATH"
+   local lcpath_var = "LUA_CPATH"
+
+   local lv = cfg.lua_version:gsub("%.", "_")
+   if lv ~= "5_1" then
+      if os.getenv("LUA_PATH_" .. lv) then
+         lpath_var = "LUA_PATH_" .. lv
+      end
+      if os.getenv("LUA_CPATH_" .. lv) then
+         lcpath_var = "LUA_CPATH_" .. lv
+      end
+   end
+   return lpath_var, lcpath_var
 end
 
 function util.starts_with(s, prefix)
@@ -429,18 +183,6 @@ end
 function util.printout(...)
    io.stdout:write(table.concat({...},"\t"))
    io.stdout:write("\n")
-end
-
---- Print a line to standard error
-function util.printerr(...)
-   io.stderr:write(table.concat({...},"\t"))
-   io.stderr:write("\n")
-end
-
---- Display a warning message.
--- @param msg string: the warning message
-function util.warning(msg)
-   util.printerr("Warning: "..msg)
 end
 
 function util.title(msg, porcelain, underline)
@@ -461,34 +203,50 @@ function util.this_program(default)
       cur = dbg.source
       i=i+1
    end
-   return last:sub(2)
+   local prog = last:sub(1,1) == "@" and last:sub(2) or last
+
+   -- Check if we found the true path of a script that has a wrapper
+   local lrdir, binpath = prog:match("^(.*)/lib/luarocks/rocks%-[0-9.]*/[^/]+/[^/]+(/bin/[^/]+)$")
+   if lrdir then
+      -- Return the wrapper instead
+      return lrdir .. binpath
+   end
+
+   return prog
 end
 
-function util.deps_mode_help(program)
-   local cfg = require("luarocks.cfg")
-   return [[
---deps-mode=<mode>  How to handle dependencies. Four modes are supported:
-                    * all - use all trees from the rocks_trees list
-                      for finding dependencies
-                    * one - use only the current tree (possibly set
-                      with --tree)
-                    * order - use trees based on order (use the current
-                      tree and all trees below it on the rocks_trees list)
-                    * none - ignore dependencies altogether.
-                    The default mode may be set with the deps_mode entry
-                    in the configuration file.
-                    The current default is "]]..cfg.deps_mode..[[".
-                    Type ']]..util.this_program(program or "luarocks")..[[' with no arguments to see
-                    your list of rocks trees.
-]]
+function util.deps_mode_option(parser, program)
+   local cfg = require("luarocks.core.cfg")
+
+   parser:option("--deps-mode", "How to handle dependencies. Four modes are supported:\n"..
+      "* all - use all trees from the rocks_trees list for finding dependencies\n"..
+      "* one - use only the current tree (possibly set with --tree)\n"..
+      "* order - use trees based on order (use the current tree and all "..
+      "trees below it on the rocks_trees list)\n"..
+      "* none - ignore dependencies altogether.\n"..
+      "The default mode may be set with the deps_mode entry in the configuration file.\n"..
+      'The current default is "'..cfg.deps_mode..'".\n'..
+      "Type '"..util.this_program(program or "luarocks").."' with no "..
+      "arguments to see your list of rocks trees.")
+      :argname("<mode>")
+      :choices({"all", "one", "order", "none"})
+   parser:flag("--nodeps"):hidden(true)
 end
 
 function util.see_help(command, program)
    return "See '"..util.this_program(program or "luarocks")..' help'..(command and " "..command or "").."'."
 end
 
+function util.see_also(text)
+   local see_also = "See also:\n"
+   if text then
+      see_also = see_also..text.."\n"
+   end
+   return see_also.."   '"..util.this_program("luarocks").." help' for general options and configuration."
+end
+
 function util.announce_install(rockspec)
-   local cfg = require("luarocks.cfg")
+   local cfg = require("luarocks.core.cfg")
    local path = require("luarocks.path")
 
    local suffix = ""
@@ -496,8 +254,7 @@ function util.announce_install(rockspec)
       suffix = " (license: "..rockspec.description.license..")"
    end
 
-   local root_dir = path.root_dir(cfg.rocks_dir)
-   util.printout(rockspec.name.." "..rockspec.version.." is now installed in "..root_dir..suffix)
+   util.printout(rockspec.name.." "..rockspec.version.." is now installed in "..path.root_dir(cfg.root_dir)..suffix)
    util.printout()
 end
 
@@ -511,7 +268,7 @@ local function collect_rockspecs(versions, paths, unnamed_paths, subdir)
    local fs = require("luarocks.fs")
    local dir = require("luarocks.dir")
    local path = require("luarocks.path")
-   local deps = require("luarocks.deps")
+   local vers = require("luarocks.core.vers")
 
    if fs.is_dir(subdir) then
       for file in fs.dir(subdir) do
@@ -521,7 +278,7 @@ local function collect_rockspecs(versions, paths, unnamed_paths, subdir)
             local rock, version = path.parse_name(file)
 
             if rock then
-               if not versions[rock] or deps.compare_versions(version, versions[rock]) then
+               if not versions[rock] or vers.compare_versions(version, versions[rock]) then
                   versions[rock] = version
                   paths[rock] = file
                end
@@ -551,6 +308,14 @@ function util.get_default_rockspec()
          return unnamed_paths[1]
       end
    else
+      local fs = require("luarocks.fs")
+      local dir = require("luarocks.dir")
+      local basename = dir.base_name(fs.current_dir())
+
+      if paths[basename] then
+         return paths[basename]
+      end
+
       local rock = next(versions)
 
       if rock then
@@ -566,144 +331,6 @@ function util.get_default_rockspec()
    end
 end
 
--- from http://lua-users.org/wiki/SplitJoin
--- by PhilippeLhoste
-function util.split_string(str, delim, maxNb)
-   -- Eliminate bad cases...
-   if string.find(str, delim) == nil then
-      return { str }
-   end
-   if maxNb == nil or maxNb < 1 then
-      maxNb = 0    -- No limit
-   end
-   local result = {}
-   local pat = "(.-)" .. delim .. "()"
-   local nb = 0
-   local lastPos
-   for part, pos in string.gmatch(str, pat) do
-      nb = nb + 1
-      result[nb] = part
-      lastPos = pos
-      if nb == maxNb then break end
-   end
-   -- Handle the last field
-   if nb ~= maxNb then
-      result[nb + 1] = string.sub(str, lastPos)
-   end
-   return result
-end
-
---- Remove repeated entries from a path-style string.
--- Example: given ("a;b;c;a;b;d", ";"), returns "a;b;c;d".
--- @param list string: A path string (from $PATH or package.path)
--- @param sep string: The separator
-function util.remove_path_dupes(list, sep)
-   assert(type(list) == "string")
-   assert(type(sep) == "string")
-   local parts = util.split_string(list, sep)
-   local final, entries = {}, {}
-   for _, part in ipairs(parts) do
-      part = part:gsub("//", "/")
-      if not entries[part] then
-         table.insert(final, part)
-         entries[part] = true
-      end
-   end
-   return table.concat(final, sep)
-end
-
----
--- Formats tables with cycles recursively to any depth.
--- References to other tables are shown as values.
--- Self references are indicated.
--- The string returned is "Lua code", which can be procesed
--- (in the case in which indent is composed by spaces or "--").
--- Userdata and function keys and values are shown as strings,
--- which logically are exactly not equivalent to the original code.
--- This routine can serve for pretty formating tables with
--- proper indentations, apart from printing them:
--- io.write(table.show(t, "t"))   -- a typical use
--- Written by Julio Manuel Fernandez-Diaz,
--- Heavily based on "Saving tables with cycles", PIL2, p. 113.
--- @param t table: is the table.
--- @param name string: is the name of the table (optional)
--- @param indent string: is a first indentation (optional).
--- @return string: the pretty-printed table
-function util.show_table(t, name, indent)
-   local cart     -- a container
-   local autoref  -- for self references
-
-   local function isemptytable(t) return next(t) == nil end
-   
-   local function basicSerialize (o)
-      local so = tostring(o)
-      if type(o) == "function" then
-         local info = debug.getinfo(o, "S")
-         -- info.name is nil because o is not a calling level
-         if info.what == "C" then
-            return ("%q"):format(so .. ", C function")
-         else 
-            -- the information is defined through lines
-            return ("%q"):format(so .. ", defined in (" .. info.linedefined .. "-" .. info.lastlinedefined .. ")" .. info.source)
-         end
-      elseif type(o) == "number" then
-         return so
-      else
-         return ("%q"):format(so)
-      end
-   end
-   
-   local function addtocart (value, name, indent, saved, field)
-      indent = indent or ""
-      saved = saved or {}
-      field = field or name
-      
-      cart = cart .. indent .. field
-      
-      if type(value) ~= "table" then
-         cart = cart .. " = " .. basicSerialize(value) .. ";\n"
-      else
-         if saved[value] then
-            cart = cart .. " = {}; -- " .. saved[value] .. " (self reference)\n"
-            autoref = autoref ..  name .. " = " .. saved[value] .. ";\n"
-         else
-            saved[value] = name
-            --if tablecount(value) == 0 then
-            if isemptytable(value) then
-               cart = cart .. " = {};\n"
-            else
-               cart = cart .. " = {\n"
-               for k, v in pairs(value) do
-                  k = basicSerialize(k)
-                  local fname = ("%s[%s]"):format(name, k)
-                  field = ("[%s]"):format(k)
-                  -- three spaces between levels
-                  addtocart(v, fname, indent .. "   ", saved, field)
-               end
-               cart = cart .. indent .. "};\n"
-            end
-         end
-      end
-   end
-   
-   name = name or "__unnamed__"
-   if type(t) ~= "table" then
-      return name .. " = " .. basicSerialize(t)
-   end
-   cart, autoref = "", ""
-   addtocart(t, name, indent)
-   return cart .. autoref
-end
-
-function util.array_contains(tbl, value)
-   for _, v in ipairs(tbl) do
-      if v == value then
-         return true
-      end
-   end
-   return false
-end
-
 -- Quote Lua string, analogous to fs.Q.
 -- @param s A string, such as "hello"
 -- @return string: A quoted string, such as '"hello"'
@@ -711,4 +338,295 @@ function util.LQ(s)
    return ("%q"):format(s)
 end
 
+--- Normalize the --namespace option and the user/rock syntax for namespaces.
+-- If a namespace is given in user/rock syntax, update the --namespace option;
+-- If a namespace is given in --namespace option, update the user/rock syntax.
+-- In case of conflicts, the user/rock syntax takes precedence.
+function util.adjust_name_and_namespace(ns_name, args)
+   assert(type(ns_name) == "string" or not ns_name)
+   assert(type(args) == "table")
+
+   if not ns_name then
+      return
+   elseif ns_name:match("%.rockspec$") or ns_name:match("%.rock$") then
+      return ns_name
+   end
+
+   local name, namespace = util.split_namespace(ns_name)
+   if namespace then
+      args.namespace = namespace
+   end
+   if args.namespace then
+      name = args.namespace .. "/" .. name
+   end
+   return name:lower()
+end
+
+-- Split name and namespace of a package name.
+-- @param ns_name a name that may be in "namespace/name" format
+-- @return string, string? - name and optionally a namespace
+function util.split_namespace(ns_name)
+   local p1, p2 = ns_name:match("^([^/]+)/([^/]+)$")
+   if p1 then
+      return p2, p1
+   end
+   return ns_name
+end
+
+function util.deep_copy(tbl)
+   local copy = {}
+   for k, v in pairs(tbl) do
+      if type(v) == "table" then
+         copy[k] = util.deep_copy(v)
+      else
+         copy[k] = v
+      end
+   end
+   return copy
+end
+
+-- An ode to the multitude of JSON libraries out there...
+function util.require_json()
+   local list = { "cjson", "dkjson", "json" }
+   for _, lib in ipairs(list) do
+      local json_ok, json = pcall(require, lib)
+      if json_ok then
+         pcall(json.use_lpeg) -- optional feature in dkjson
+         return json_ok, json
+      end
+   end
+   local errmsg = "Failed loading "
+   for i, name in ipairs(list) do
+      if i == #list then
+         errmsg = errmsg .."and '"..name.."'. Use 'luarocks search <partial-name>' to search for a library and 'luarocks install <name>' to install one."
+      else
+         errmsg = errmsg .."'"..name.."', "
+      end
+   end
+   return nil, errmsg
+end
+
+-- A portable version of fs.exists that can be used at early startup,
+-- before the platform has been determined and luarocks.fs has been
+-- initialized.
+function util.exists(file)
+   local fd, _, code = io.open(file, "r")
+   if code == 13 then
+      -- code 13 means "Permission denied" on both Unix and Windows
+      -- io.open on folders always fails with code 13 on Windows
+      return true
+   end
+   if fd then
+      fd:close()
+      return true
+   end
+   return false
+end
+
+do
+   local function Q(pathname)
+      if pathname:match("^.:") then
+         return pathname:sub(1, 2) .. '"' .. pathname:sub(3) .. '"'
+      end
+      return '"' .. pathname .. '"'
+   end
+
+   function util.check_lua_version(lua_exe, luaver)
+      if not util.exists(lua_exe) then
+         return nil
+      end
+      local lv, err = util.popen_read(Q(lua_exe) .. ' -e "io.write(_VERSION:sub(5))"')
+      if lv == "" then
+         return nil
+      end
+      if luaver and luaver ~= lv then
+         return nil
+      end
+      return lv
+   end
+
+   function util.get_luajit_version()
+      local cfg = require("luarocks.core.cfg")
+      if cfg.cache.luajit_version_checked then
+         return cfg.cache.luajit_version 
+      end
+      cfg.cache.luajit_version_checked = true
+
+      local ljv
+      if cfg.lua_version == "5.1" then
+         ljv = util.popen_read(Q(cfg.variables["LUA_BINDIR"] .. "/" .. cfg.lua_interpreter) .. ' -e "io.write(tostring(jit and jit.version:gsub([[^%w-JIT ]], [[]])))"')
+         if ljv == "nil" then
+            ljv = nil
+         end
+      end
+      cfg.cache.luajit_version = ljv
+      return ljv
+   end
+
+   local find_lua_bindir
+   do
+      local exe_suffix = (package.config:sub(1, 1) == "\\" and ".exe" or "")
+
+      local function insert_lua_variants(names, luaver)
+         local variants = {
+            "lua" .. luaver .. exe_suffix,
+            "lua" .. luaver:gsub("%.", "") .. exe_suffix,
+            "lua-" .. luaver .. exe_suffix,
+            "lua-" .. luaver:gsub("%.", "") .. exe_suffix,
+         }
+         for _, name in ipairs(variants) do
+            names[name] = luaver
+            table.insert(names, name)
+         end
+      end
+
+      find_lua_bindir = function(prefix, luaver)
+         local names = {}
+         if luaver then
+            insert_lua_variants(names, luaver)
+         else
+            for v in util.lua_versions("descending") do
+               insert_lua_variants(names, v)
+            end
+         end
+         if luaver == "5.1" or not luaver then
+            table.insert(names, "luajit" .. exe_suffix)
+         end
+         table.insert(names, "lua" .. exe_suffix)
+
+         local bindirs = { prefix .. "/bin", prefix }
+         local tried = {}
+         for _, d in ipairs(bindirs) do
+            for _, name in ipairs(names) do
+               local lua_exe = d .. "/" .. name
+               local is_wrapper, err = util.lua_is_wrapper(lua_exe)
+               if is_wrapper == false then
+                  local lv = util.check_lua_version(lua_exe, luaver)
+                  if lv then
+                     return name, d, lv
+                  end
+               elseif is_wrapper == true or err == nil then
+                  table.insert(tried, lua_exe)
+               else
+                  table.insert(tried, string.format("%-13s (%s)", lua_exe, err))
+               end
+            end
+         end
+         local interp = luaver
+                        and ("Lua " .. luaver .. " interpreter")
+                        or  "Lua interpreter"
+         return nil, interp .. " not found at " .. prefix .. "\n" ..
+                     "Tried:\t" .. table.concat(tried, "\n\t")
+      end
+   end
+
+   function util.find_lua(prefix, luaver)
+      local lua_interpreter, bindir
+      lua_interpreter, bindir, luaver = find_lua_bindir(prefix, luaver)
+      if not lua_interpreter then
+         return nil, bindir
+      end
+
+      return {
+         lua_version = luaver,
+         lua_interpreter = lua_interpreter,
+         lua_dir = prefix,
+         lua_bindir = bindir,
+      }
+   end
+end
+
+function util.lua_is_wrapper(interp)
+   local fd, err = io.open(interp, "r")
+   if not fd then
+      return nil, err
+   end
+   local data, err = fd:read(1000)
+   fd:close()
+   if not data then
+      return nil, err
+   end
+   return not not data:match("LUAROCKS_SYSCONFDIR")
+end
+
+function util.opts_table(type_name, valid_opts)
+   local opts_mt = {}
+   
+   opts_mt.__index = opts_mt
+   
+   function opts_mt.type()
+      return type_name
+   end
+
+   return function(opts)
+      for k, v in pairs(opts) do
+         local tv = type(v)
+         if not valid_opts[k] then
+            error("invalid option: "..k)
+         end
+         local vo, optional = valid_opts[k]:match("^(.-)(%??)$")
+         if not (tv == vo or (optional == "?" and tv == nil)) then
+            error("invalid type option: "..k.." - got "..tv..", expected "..vo)
+         end
+      end
+      for k, v in pairs(valid_opts) do
+         if (not v:find("?", 1, true)) and opts[k] == nil then
+            error("missing option: "..k)
+         end
+      end
+      return setmetatable(opts, opts_mt)
+   end
+end
+
+--- Return a table of modules that are already provided by the VM, which
+-- can be specified as dependencies without having to install an actual rock.
+-- @param rockspec (optional) a rockspec table, so that rockspec format
+-- version compatibility can be checked. If not given, maximum compatibility
+-- is assumed.
+-- @return a table with rock names as keys and versions and values,
+-- specifying modules that are already provided by the VM (including
+-- "lua" for the Lua version and, for format 3.0+, "luajit" if detected).
+function util.get_rocks_provided(rockspec)
+   local cfg = require("luarocks.core.cfg")
+   
+   if not rockspec and cfg.cache.rocks_provided then
+      return cfg.cache.rocks_provided
+   end
+
+   local rocks_provided = {}
+
+   local lv = cfg.lua_version
+
+   rocks_provided["lua"] = lv.."-1"
+
+   if lv == "5.2" or lv == "5.3" then
+      rocks_provided["bit32"] = lv.."-1"
+   end
+
+   if lv == "5.3" or lv == "5.4" then
+      rocks_provided["utf8"] = lv.."-1"
+   end
+
+   if lv == "5.1" then
+      local ljv = util.get_luajit_version()
+      if ljv then
+         rocks_provided["luabitop"] = ljv.."-1"
+         if (not rockspec) or rockspec:format_is_at_least("3.0") then
+            rocks_provided["luajit"] = ljv.."-1"
+         end
+      end
+   end
+
+   if cfg.rocks_provided then
+      util.deep_merge_under(rocks_provided, cfg.rocks_provided)
+   end
+
+   if not rockspec then
+      cfg.cache.rocks_provided = rocks_provided
+   end
+
+   return rocks_provided
+end
+
 return util
+

@@ -416,7 +416,7 @@ M.parse = function(target)
           name = "Characteristics"},
       }, f)
   end
-  -- we now have section data, so add RVA convertion method
+  -- we now have section data, so add RVA conversion method
   out.get_fileoffset = M.get_fileoffset
   
   -- get the import table
@@ -548,6 +548,21 @@ function M.msvcrt(infile)
   end
 
   return nil, "No msvcrt found"
+end
+
+function M.get_architecture(program)
+   -- detect processor arch interpreter was compiled for
+   local proc = (M.parse(program) or {}).Machine
+   if not proc then
+      return nil, "Could not detect processor architecture used in "..program
+   end
+   proc = M.const.Machine[proc]  -- collect name from constant value
+   if proc == "IMAGE_FILE_MACHINE_I386" then
+      proc = "x86"
+   else
+      proc = "x86_64"
+   end
+   return proc
 end
 
 return M
