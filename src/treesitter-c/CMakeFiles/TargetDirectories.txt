@@ -1,0 +1,7 @@
+/home/travis/build/neovim/bot-ci/build/deps-src/build/src/treesitter-c/CMakeFiles/install/strip.dir
+/home/travis/build/neovim/bot-ci/build/deps-src/build/src/treesitter-c/CMakeFiles/install/local.dir
+/home/travis/build/neovim/bot-ci/build/deps-src/build/src/treesitter-c/CMakeFiles/parser.dir
+/home/travis/build/neovim/bot-ci/build/deps-src/build/src/treesitter-c/CMakeFiles/edit_cache.dir
+/home/travis/build/neovim/bot-ci/build/deps-src/build/src/treesitter-c/CMakeFiles/rebuild_cache.dir
+/home/travis/build/neovim/bot-ci/build/deps-src/build/src/treesitter-c/CMakeFiles/install.dir
+/home/travis/build/neovim/bot-ci/build/deps-src/build/src/treesitter-c/CMakeFiles/list_install_components.dir
