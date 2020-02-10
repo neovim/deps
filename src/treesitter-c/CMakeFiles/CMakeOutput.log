@@ -15,15 +15,15 @@ The C compiler identification is GNU, found in "/home/travis/build/neovim/bot-ci
 Determining if the C compiler works passed with the following output:
 Change Dir: /home/travis/build/neovim/bot-ci/build/deps-src/build/src/treesitter-c/CMakeFiles/CMakeTmp
 
-Run Build Command:"/usr/bin/make" "cmTC_3488e/fast"
+Run Build Command:"/usr/bin/make" "cmTC_8d023/fast"
 make[3]: Entering directory '/home/travis/build/neovim/bot-ci/build/deps-src/build/src/treesitter-c/CMakeFiles/CMakeTmp'
-/usr/bin/make -f CMakeFiles/cmTC_3488e.dir/build.make CMakeFiles/cmTC_3488e.dir/build
+/usr/bin/make -f CMakeFiles/cmTC_8d023.dir/build.make CMakeFiles/cmTC_8d023.dir/build
 make[4]: Entering directory '/home/travis/build/neovim/bot-ci/build/deps-src/build/src/treesitter-c/CMakeFiles/CMakeTmp'
-Building C object CMakeFiles/cmTC_3488e.dir/testCCompiler.c.o
-/usr/bin/gcc-5    -o CMakeFiles/cmTC_3488e.dir/testCCompiler.c.o   -c /home/travis/build/neovim/bot-ci/build/deps-src/build/src/treesitter-c/CMakeFiles/CMakeTmp/testCCompiler.c
-Linking C executable cmTC_3488e
-/usr/local/cmake-3.12.4/bin/cmake -E cmake_link_script CMakeFiles/cmTC_3488e.dir/link.txt --verbose=1
-/usr/bin/gcc-5      -rdynamic CMakeFiles/cmTC_3488e.dir/testCCompiler.c.o  -o cmTC_3488e 
+Building C object CMakeFiles/cmTC_8d023.dir/testCCompiler.c.o
+/usr/bin/gcc-5    -o CMakeFiles/cmTC_8d023.dir/testCCompiler.c.o   -c /home/travis/build/neovim/bot-ci/build/deps-src/build/src/treesitter-c/CMakeFiles/CMakeTmp/testCCompiler.c
+Linking C executable cmTC_8d023
+/usr/local/cmake-3.12.4/bin/cmake -E cmake_link_script CMakeFiles/cmTC_8d023.dir/link.txt --verbose=1
+/usr/bin/gcc-5      -rdynamic CMakeFiles/cmTC_8d023.dir/testCCompiler.c.o  -o cmTC_8d023 
 make[4]: Leaving directory '/home/travis/build/neovim/bot-ci/build/deps-src/build/src/treesitter-c/CMakeFiles/CMakeTmp'
 make[3]: Leaving directory '/home/travis/build/neovim/bot-ci/build/deps-src/build/src/treesitter-c/CMakeFiles/CMakeTmp'
 
@@ -31,15 +31,15 @@ make[3]: Leaving directory '/home/travis/build/neovim/bot-ci/build/deps-src/buil
 Detecting C compiler ABI info compiled with the following output:
 Change Dir: /home/travis/build/neovim/bot-ci/build/deps-src/build/src/treesitter-c/CMakeFiles/CMakeTmp
 
-Run Build Command:"/usr/bin/make" "cmTC_c6aeb/fast"
+Run Build Command:"/usr/bin/make" "cmTC_d4008/fast"
 make[3]: Entering directory '/home/travis/build/neovim/bot-ci/build/deps-src/build/src/treesitter-c/CMakeFiles/CMakeTmp'
-/usr/bin/make -f CMakeFiles/cmTC_c6aeb.dir/build.make CMakeFiles/cmTC_c6aeb.dir/build
+/usr/bin/make -f CMakeFiles/cmTC_d4008.dir/build.make CMakeFiles/cmTC_d4008.dir/build
 make[4]: Entering directory '/home/travis/build/neovim/bot-ci/build/deps-src/build/src/treesitter-c/CMakeFiles/CMakeTmp'
-Building C object CMakeFiles/cmTC_c6aeb.dir/CMakeCCompilerABI.c.o
-/usr/bin/gcc-5    -o CMakeFiles/cmTC_c6aeb.dir/CMakeCCompilerABI.c.o   -c /usr/local/cmake-3.12.4/share/cmake-3.12/Modules/CMakeCCompilerABI.c
-Linking C executable cmTC_c6aeb
-/usr/local/cmake-3.12.4/bin/cmake -E cmake_link_script CMakeFiles/cmTC_c6aeb.dir/link.txt --verbose=1
-/usr/bin/gcc-5     -v -rdynamic CMakeFiles/cmTC_c6aeb.dir/CMakeCCompilerABI.c.o  -o cmTC_c6aeb 
+Building C object CMakeFiles/cmTC_d4008.dir/CMakeCCompilerABI.c.o
+/usr/bin/gcc-5    -o CMakeFiles/cmTC_d4008.dir/CMakeCCompilerABI.c.o   -c /usr/local/cmake-3.12.4/share/cmake-3.12/Modules/CMakeCCompilerABI.c
+Linking C executable cmTC_d4008
+/usr/local/cmake-3.12.4/bin/cmake -E cmake_link_script CMakeFiles/cmTC_d4008.dir/link.txt --verbose=1
+/usr/bin/gcc-5     -v -rdynamic CMakeFiles/cmTC_d4008.dir/CMakeCCompilerABI.c.o  -o cmTC_d4008 
 Using built-in specs.
 COLLECT_GCC=/usr/bin/gcc-5
 COLLECT_LTO_WRAPPER=/usr/lib/gcc/x86_64-linux-gnu/5/lto-wrapper
@@ -49,8 +49,8 @@ Thread model: posix
 gcc version 5.5.0 20171010 (Ubuntu 5.5.0-12ubuntu1~16.04) 
 COMPILER_PATH=/usr/lib/gcc/x86_64-linux-gnu/5/:/usr/lib/gcc/x86_64-linux-gnu/5/:/usr/lib/gcc/x86_64-linux-gnu/:/usr/lib/gcc/x86_64-linux-gnu/5/:/usr/lib/gcc/x86_64-linux-gnu/
 LIBRARY_PATH=/usr/lib/gcc/x86_64-linux-gnu/5/:/usr/lib/gcc/x86_64-linux-gnu/5/../../../x86_64-linux-gnu/:/usr/lib/gcc/x86_64-linux-gnu/5/../../../../lib/:/lib/x86_64-linux-gnu/:/lib/../lib/:/usr/lib/x86_64-linux-gnu/:/usr/lib/../lib/:/usr/lib/gcc/x86_64-linux-gnu/5/../../../:/lib/:/usr/lib/
-COLLECT_GCC_OPTIONS='-v' '-rdynamic' '-o' 'cmTC_c6aeb' '-mtune=generic' '-march=x86-64'
- /usr/lib/gcc/x86_64-linux-gnu/5/collect2 -plugin /usr/lib/gcc/x86_64-linux-gnu/5/liblto_plugin.so -plugin-opt=/usr/lib/gcc/x86_64-linux-gnu/5/lto-wrapper -plugin-opt=-fresolution=/tmp/ccr2QSlz.res -plugin-opt=-pass-through=-lgcc -plugin-opt=-pass-through=-lgcc_s -plugin-opt=-pass-through=-lc -plugin-opt=-pass-through=-lgcc -plugin-opt=-pass-through=-lgcc_s --sysroot=/ --build-id --eh-frame-hdr -m elf_x86_64 --hash-style=gnu --as-needed -export-dynamic -dynamic-linker /lib64/ld-linux-x86-64.so.2 -z relro -o cmTC_c6aeb /usr/lib/gcc/x86_64-linux-gnu/5/../../../x86_64-linux-gnu/crt1.o /usr/lib/gcc/x86_64-linux-gnu/5/../../../x86_64-linux-gnu/crti.o /usr/lib/gcc/x86_64-linux-gnu/5/crtbegin.o -L/usr/lib/gcc/x86_64-linux-gnu/5 -L/usr/lib/gcc/x86_64-linux-gnu/5/../../../x86_64-linux-gnu -L/usr/lib/gcc/x86_64-linux-gnu/5/../../../../lib -L/lib/x86_64-linux-gnu -L/lib/../lib -L/usr/lib/x86_64-linux-gnu -L/usr/lib/../lib -L/usr/lib/gcc/x86_64-linux-gnu/5/../../.. CMakeFiles/cmTC_c6aeb.dir/CMakeCCompilerABI.c.o -lgcc --push-state --as-needed -lgcc_s --pop-state -lc -lgcc --push-state --as-needed -lgcc_s --pop-state /usr/lib/gcc/x86_64-linux-gnu/5/crtend.o /usr/lib/gcc/x86_64-linux-gnu/5/../../../x86_64-linux-gnu/crtn.o
+COLLECT_GCC_OPTIONS='-v' '-rdynamic' '-o' 'cmTC_d4008' '-mtune=generic' '-march=x86-64'
+ /usr/lib/gcc/x86_64-linux-gnu/5/collect2 -plugin /usr/lib/gcc/x86_64-linux-gnu/5/liblto_plugin.so -plugin-opt=/usr/lib/gcc/x86_64-linux-gnu/5/lto-wrapper -plugin-opt=-fresolution=/tmp/ccEgvcFJ.res -plugin-opt=-pass-through=-lgcc -plugin-opt=-pass-through=-lgcc_s -plugin-opt=-pass-through=-lc -plugin-opt=-pass-through=-lgcc -plugin-opt=-pass-through=-lgcc_s --sysroot=/ --build-id --eh-frame-hdr -m elf_x86_64 --hash-style=gnu --as-needed -export-dynamic -dynamic-linker /lib64/ld-linux-x86-64.so.2 -z relro -o cmTC_d4008 /usr/lib/gcc/x86_64-linux-gnu/5/../../../x86_64-linux-gnu/crt1.o /usr/lib/gcc/x86_64-linux-gnu/5/../../../x86_64-linux-gnu/crti.o /usr/lib/gcc/x86_64-linux-gnu/5/crtbegin.o -L/usr/lib/gcc/x86_64-linux-gnu/5 -L/usr/lib/gcc/x86_64-linux-gnu/5/../../../x86_64-linux-gnu -L/usr/lib/gcc/x86_64-linux-gnu/5/../../../../lib -L/lib/x86_64-linux-gnu -L/lib/../lib -L/usr/lib/x86_64-linux-gnu -L/usr/lib/../lib -L/usr/lib/gcc/x86_64-linux-gnu/5/../../.. CMakeFiles/cmTC_d4008.dir/CMakeCCompilerABI.c.o -lgcc --push-state --as-needed -lgcc_s --pop-state -lc -lgcc --push-state --as-needed -lgcc_s --pop-state /usr/lib/gcc/x86_64-linux-gnu/5/crtend.o /usr/lib/gcc/x86_64-linux-gnu/5/../../../x86_64-linux-gnu/crtn.o
 make[4]: Leaving directory '/home/travis/build/neovim/bot-ci/build/deps-src/build/src/treesitter-c/CMakeFiles/CMakeTmp'
 make[3]: Leaving directory '/home/travis/build/neovim/bot-ci/build/deps-src/build/src/treesitter-c/CMakeFiles/CMakeTmp'
 
@@ -59,15 +59,15 @@ Parsed C implicit link information from above output:
   link line regex: [^( *|.*[/\])(ld|CMAKE_LINK_STARTFILE-NOTFOUND|([^/\]+-)?ld|collect2)[^/\]*( |$)]
   ignore line: [Change Dir: /home/travis/build/neovim/bot-ci/build/deps-src/build/src/treesitter-c/CMakeFiles/CMakeTmp]
   ignore line: []
-  ignore line: [Run Build Command:"/usr/bin/make" "cmTC_c6aeb/fast"]
+  ignore line: [Run Build Command:"/usr/bin/make" "cmTC_d4008/fast"]
   ignore line: [make[3]: Entering directory '/home/travis/build/neovim/bot-ci/build/deps-src/build/src/treesitter-c/CMakeFiles/CMakeTmp']
-  ignore line: [/usr/bin/make -f CMakeFiles/cmTC_c6aeb.dir/build.make CMakeFiles/cmTC_c6aeb.dir/build]
+  ignore line: [/usr/bin/make -f CMakeFiles/cmTC_d4008.dir/build.make CMakeFiles/cmTC_d4008.dir/build]
   ignore line: [make[4]: Entering directory '/home/travis/build/neovim/bot-ci/build/deps-src/build/src/treesitter-c/CMakeFiles/CMakeTmp']
-  ignore line: [Building C object CMakeFiles/cmTC_c6aeb.dir/CMakeCCompilerABI.c.o]
-  ignore line: [/usr/bin/gcc-5    -o CMakeFiles/cmTC_c6aeb.dir/CMakeCCompilerABI.c.o   -c /usr/local/cmake-3.12.4/share/cmake-3.12/Modules/CMakeCCompilerABI.c]
-  ignore line: [Linking C executable cmTC_c6aeb]
-  ignore line: [/usr/local/cmake-3.12.4/bin/cmake -E cmake_link_script CMakeFiles/cmTC_c6aeb.dir/link.txt --verbose=1]
-  ignore line: [/usr/bin/gcc-5     -v -rdynamic CMakeFiles/cmTC_c6aeb.dir/CMakeCCompilerABI.c.o  -o cmTC_c6aeb ]
+  ignore line: [Building C object CMakeFiles/cmTC_d4008.dir/CMakeCCompilerABI.c.o]
+  ignore line: [/usr/bin/gcc-5    -o CMakeFiles/cmTC_d4008.dir/CMakeCCompilerABI.c.o   -c /usr/local/cmake-3.12.4/share/cmake-3.12/Modules/CMakeCCompilerABI.c]
+  ignore line: [Linking C executable cmTC_d4008]
+  ignore line: [/usr/local/cmake-3.12.4/bin/cmake -E cmake_link_script CMakeFiles/cmTC_d4008.dir/link.txt --verbose=1]
+  ignore line: [/usr/bin/gcc-5     -v -rdynamic CMakeFiles/cmTC_d4008.dir/CMakeCCompilerABI.c.o  -o cmTC_d4008 ]
   ignore line: [Using built-in specs.]
   ignore line: [COLLECT_GCC=/usr/bin/gcc-5]
   ignore line: [COLLECT_LTO_WRAPPER=/usr/lib/gcc/x86_64-linux-gnu/5/lto-wrapper]
@@ -77,13 +77,13 @@ Parsed C implicit link information from above output:
   ignore line: [gcc version 5.5.0 20171010 (Ubuntu 5.5.0-12ubuntu1~16.04) ]
   ignore line: [COMPILER_PATH=/usr/lib/gcc/x86_64-linux-gnu/5/:/usr/lib/gcc/x86_64-linux-gnu/5/:/usr/lib/gcc/x86_64-linux-gnu/:/usr/lib/gcc/x86_64-linux-gnu/5/:/usr/lib/gcc/x86_64-linux-gnu/]
   ignore line: [LIBRARY_PATH=/usr/lib/gcc/x86_64-linux-gnu/5/:/usr/lib/gcc/x86_64-linux-gnu/5/../../../x86_64-linux-gnu/:/usr/lib/gcc/x86_64-linux-gnu/5/../../../../lib/:/lib/x86_64-linux-gnu/:/lib/../lib/:/usr/lib/x86_64-linux-gnu/:/usr/lib/../lib/:/usr/lib/gcc/x86_64-linux-gnu/5/../../../:/lib/:/usr/lib/]
-  ignore line: [COLLECT_GCC_OPTIONS='-v' '-rdynamic' '-o' 'cmTC_c6aeb' '-mtune=generic' '-march=x86-64']
-  link line: [ /usr/lib/gcc/x86_64-linux-gnu/5/collect2 -plugin /usr/lib/gcc/x86_64-linux-gnu/5/liblto_plugin.so -plugin-opt=/usr/lib/gcc/x86_64-linux-gnu/5/lto-wrapper -plugin-opt=-fresolution=/tmp/ccr2QSlz.res -plugin-opt=-pass-through=-lgcc -plugin-opt=-pass-through=-lgcc_s -plugin-opt=-pass-through=-lc -plugin-opt=-pass-through=-lgcc -plugin-opt=-pass-through=-lgcc_s --sysroot=/ --build-id --eh-frame-hdr -m elf_x86_64 --hash-style=gnu --as-needed -export-dynamic -dynamic-linker /lib64/ld-linux-x86-64.so.2 -z relro -o cmTC_c6aeb /usr/lib/gcc/x86_64-linux-gnu/5/../../../x86_64-linux-gnu/crt1.o /usr/lib/gcc/x86_64-linux-gnu/5/../../../x86_64-linux-gnu/crti.o /usr/lib/gcc/x86_64-linux-gnu/5/crtbegin.o -L/usr/lib/gcc/x86_64-linux-gnu/5 -L/usr/lib/gcc/x86_64-linux-gnu/5/../../../x86_64-linux-gnu -L/usr/lib/gcc/x86_64-linux-gnu/5/../../../../lib -L/lib/x86_64-linux-gnu -L/lib/../lib -L/usr/lib/x86_64-linux-gnu -L/usr/lib/../lib -L/usr/lib/gcc/x86_64-linux-gnu/5/../../.. CMakeFiles/cmTC_c6aeb.dir/CMakeCCompilerABI.c.o -lgcc --push-state --as-needed -lgcc_s --pop-state -lc -lgcc --push-state --as-needed -lgcc_s --pop-state /usr/lib/gcc/x86_64-linux-gnu/5/crtend.o /usr/lib/gcc/x86_64-linux-gnu/5/../../../x86_64-linux-gnu/crtn.o]
+  ignore line: [COLLECT_GCC_OPTIONS='-v' '-rdynamic' '-o' 'cmTC_d4008' '-mtune=generic' '-march=x86-64']
+  link line: [ /usr/lib/gcc/x86_64-linux-gnu/5/collect2 -plugin /usr/lib/gcc/x86_64-linux-gnu/5/liblto_plugin.so -plugin-opt=/usr/lib/gcc/x86_64-linux-gnu/5/lto-wrapper -plugin-opt=-fresolution=/tmp/ccEgvcFJ.res -plugin-opt=-pass-through=-lgcc -plugin-opt=-pass-through=-lgcc_s -plugin-opt=-pass-through=-lc -plugin-opt=-pass-through=-lgcc -plugin-opt=-pass-through=-lgcc_s --sysroot=/ --build-id --eh-frame-hdr -m elf_x86_64 --hash-style=gnu --as-needed -export-dynamic -dynamic-linker /lib64/ld-linux-x86-64.so.2 -z relro -o cmTC_d4008 /usr/lib/gcc/x86_64-linux-gnu/5/../../../x86_64-linux-gnu/crt1.o /usr/lib/gcc/x86_64-linux-gnu/5/../../../x86_64-linux-gnu/crti.o /usr/lib/gcc/x86_64-linux-gnu/5/crtbegin.o -L/usr/lib/gcc/x86_64-linux-gnu/5 -L/usr/lib/gcc/x86_64-linux-gnu/5/../../../x86_64-linux-gnu -L/usr/lib/gcc/x86_64-linux-gnu/5/../../../../lib -L/lib/x86_64-linux-gnu -L/lib/../lib -L/usr/lib/x86_64-linux-gnu -L/usr/lib/../lib -L/usr/lib/gcc/x86_64-linux-gnu/5/../../.. CMakeFiles/cmTC_d4008.dir/CMakeCCompilerABI.c.o -lgcc --push-state --as-needed -lgcc_s --pop-state -lc -lgcc --push-state --as-needed -lgcc_s --pop-state /usr/lib/gcc/x86_64-linux-gnu/5/crtend.o /usr/lib/gcc/x86_64-linux-gnu/5/../../../x86_64-linux-gnu/crtn.o]
     arg [/usr/lib/gcc/x86_64-linux-gnu/5/collect2] ==> ignore
     arg [-plugin] ==> ignore
     arg [/usr/lib/gcc/x86_64-linux-gnu/5/liblto_plugin.so] ==> ignore
     arg [-plugin-opt=/usr/lib/gcc/x86_64-linux-gnu/5/lto-wrapper] ==> ignore
-    arg [-plugin-opt=-fresolution=/tmp/ccr2QSlz.res] ==> ignore
+    arg [-plugin-opt=-fresolution=/tmp/ccEgvcFJ.res] ==> ignore
     arg [-plugin-opt=-pass-through=-lgcc] ==> ignore
     arg [-plugin-opt=-pass-through=-lgcc_s] ==> ignore
     arg [-plugin-opt=-pass-through=-lc] ==> ignore
@@ -101,7 +101,7 @@ Parsed C implicit link information from above output:
     arg [/lib64/ld-linux-x86-64.so.2] ==> ignore
     arg [-zrelro] ==> ignore
     arg [-o] ==> ignore
-    arg [cmTC_c6aeb] ==> ignore
+    arg [cmTC_d4008] ==> ignore
     arg [/usr/lib/gcc/x86_64-linux-gnu/5/../../../x86_64-linux-gnu/crt1.o] ==> ignore
     arg [/usr/lib/gcc/x86_64-linux-gnu/5/../../../x86_64-linux-gnu/crti.o] ==> ignore
     arg [/usr/lib/gcc/x86_64-linux-gnu/5/crtbegin.o] ==> ignore
@@ -113,7 +113,7 @@ Parsed C implicit link information from above output:
     arg [-L/usr/lib/x86_64-linux-gnu] ==> dir [/usr/lib/x86_64-linux-gnu]
     arg [-L/usr/lib/../lib] ==> dir [/usr/lib/../lib]
     arg [-L/usr/lib/gcc/x86_64-linux-gnu/5/../../..] ==> dir [/usr/lib/gcc/x86_64-linux-gnu/5/../../..]
-    arg [CMakeFiles/cmTC_c6aeb.dir/CMakeCCompilerABI.c.o] ==> ignore
+    arg [CMakeFiles/cmTC_d4008.dir/CMakeCCompilerABI.c.o] ==> ignore
     arg [-lgcc] ==> lib [gcc]
     arg [--push-state] ==> ignore
     arg [--as-needed] ==> ignore
@@ -145,15 +145,15 @@ Parsed C implicit link information from above output:
 Detecting C [-std=c11] compiler features compiled with the following output:
 Change Dir: /home/travis/build/neovim/bot-ci/build/deps-src/build/src/treesitter-c/CMakeFiles/CMakeTmp
 
-Run Build Command:"/usr/bin/make" "cmTC_e7d94/fast"
+Run Build Command:"/usr/bin/make" "cmTC_46e3b/fast"
 make[3]: Entering directory '/home/travis/build/neovim/bot-ci/build/deps-src/build/src/treesitter-c/CMakeFiles/CMakeTmp'
-/usr/bin/make -f CMakeFiles/cmTC_e7d94.dir/build.make CMakeFiles/cmTC_e7d94.dir/build
+/usr/bin/make -f CMakeFiles/cmTC_46e3b.dir/build.make CMakeFiles/cmTC_46e3b.dir/build
 make[4]: Entering directory '/home/travis/build/neovim/bot-ci/build/deps-src/build/src/treesitter-c/CMakeFiles/CMakeTmp'
-Building C object CMakeFiles/cmTC_e7d94.dir/feature_tests.c.o
-/usr/bin/gcc-5   -std=c11 -o CMakeFiles/cmTC_e7d94.dir/feature_tests.c.o   -c /home/travis/build/neovim/bot-ci/build/deps-src/build/src/treesitter-c/CMakeFiles/feature_tests.c
-Linking C executable cmTC_e7d94
-/usr/local/cmake-3.12.4/bin/cmake -E cmake_link_script CMakeFiles/cmTC_e7d94.dir/link.txt --verbose=1
-/usr/bin/gcc-5      -rdynamic CMakeFiles/cmTC_e7d94.dir/feature_tests.c.o  -o cmTC_e7d94 
+Building C object CMakeFiles/cmTC_46e3b.dir/feature_tests.c.o
+/usr/bin/gcc-5   -std=c11 -o CMakeFiles/cmTC_46e3b.dir/feature_tests.c.o   -c /home/travis/build/neovim/bot-ci/build/deps-src/build/src/treesitter-c/CMakeFiles/feature_tests.c
+Linking C executable cmTC_46e3b
+/usr/local/cmake-3.12.4/bin/cmake -E cmake_link_script CMakeFiles/cmTC_46e3b.dir/link.txt --verbose=1
+/usr/bin/gcc-5      -rdynamic CMakeFiles/cmTC_46e3b.dir/feature_tests.c.o  -o cmTC_46e3b 
 make[4]: Leaving directory '/home/travis/build/neovim/bot-ci/build/deps-src/build/src/treesitter-c/CMakeFiles/CMakeTmp'
 make[3]: Leaving directory '/home/travis/build/neovim/bot-ci/build/deps-src/build/src/treesitter-c/CMakeFiles/CMakeTmp'
 
@@ -167,15 +167,15 @@ make[3]: Leaving directory '/home/travis/build/neovim/bot-ci/build/deps-src/buil
 Detecting C [-std=c99] compiler features compiled with the following output:
 Change Dir: /home/travis/build/neovim/bot-ci/build/deps-src/build/src/treesitter-c/CMakeFiles/CMakeTmp
 
-Run Build Command:"/usr/bin/make" "cmTC_90eda/fast"
+Run Build Command:"/usr/bin/make" "cmTC_8dda0/fast"
 make[3]: Entering directory '/home/travis/build/neovim/bot-ci/build/deps-src/build/src/treesitter-c/CMakeFiles/CMakeTmp'
-/usr/bin/make -f CMakeFiles/cmTC_90eda.dir/build.make CMakeFiles/cmTC_90eda.dir/build
+/usr/bin/make -f CMakeFiles/cmTC_8dda0.dir/build.make CMakeFiles/cmTC_8dda0.dir/build
 make[4]: Entering directory '/home/travis/build/neovim/bot-ci/build/deps-src/build/src/treesitter-c/CMakeFiles/CMakeTmp'
-Building C object CMakeFiles/cmTC_90eda.dir/feature_tests.c.o
-/usr/bin/gcc-5   -std=c99 -o CMakeFiles/cmTC_90eda.dir/feature_tests.c.o   -c /home/travis/build/neovim/bot-ci/build/deps-src/build/src/treesitter-c/CMakeFiles/feature_tests.c
-Linking C executable cmTC_90eda
-/usr/local/cmake-3.12.4/bin/cmake -E cmake_link_script CMakeFiles/cmTC_90eda.dir/link.txt --verbose=1
-/usr/bin/gcc-5      -rdynamic CMakeFiles/cmTC_90eda.dir/feature_tests.c.o  -o cmTC_90eda 
+Building C object CMakeFiles/cmTC_8dda0.dir/feature_tests.c.o
+/usr/bin/gcc-5   -std=c99 -o CMakeFiles/cmTC_8dda0.dir/feature_tests.c.o   -c /home/travis/build/neovim/bot-ci/build/deps-src/build/src/treesitter-c/CMakeFiles/feature_tests.c
+Linking C executable cmTC_8dda0
+/usr/local/cmake-3.12.4/bin/cmake -E cmake_link_script CMakeFiles/cmTC_8dda0.dir/link.txt --verbose=1
+/usr/bin/gcc-5      -rdynamic CMakeFiles/cmTC_8dda0.dir/feature_tests.c.o  -o cmTC_8dda0 
 make[4]: Leaving directory '/home/travis/build/neovim/bot-ci/build/deps-src/build/src/treesitter-c/CMakeFiles/CMakeTmp'
 make[3]: Leaving directory '/home/travis/build/neovim/bot-ci/build/deps-src/build/src/treesitter-c/CMakeFiles/CMakeTmp'
 
@@ -189,15 +189,15 @@ make[3]: Leaving directory '/home/travis/build/neovim/bot-ci/build/deps-src/buil
 Detecting C [-std=c90] compiler features compiled with the following output:
 Change Dir: /home/travis/build/neovim/bot-ci/build/deps-src/build/src/treesitter-c/CMakeFiles/CMakeTmp
 
-Run Build Command:"/usr/bin/make" "cmTC_8c608/fast"
+Run Build Command:"/usr/bin/make" "cmTC_e6d80/fast"
 make[3]: Entering directory '/home/travis/build/neovim/bot-ci/build/deps-src/build/src/treesitter-c/CMakeFiles/CMakeTmp'
-/usr/bin/make -f CMakeFiles/cmTC_8c608.dir/build.make CMakeFiles/cmTC_8c608.dir/build
+/usr/bin/make -f CMakeFiles/cmTC_e6d80.dir/build.make CMakeFiles/cmTC_e6d80.dir/build
 make[4]: Entering directory '/home/travis/build/neovim/bot-ci/build/deps-src/build/src/treesitter-c/CMakeFiles/CMakeTmp'
-Building C object CMakeFiles/cmTC_8c608.dir/feature_tests.c.o
-/usr/bin/gcc-5   -std=c90 -o CMakeFiles/cmTC_8c608.dir/feature_tests.c.o   -c /home/travis/build/neovim/bot-ci/build/deps-src/build/src/treesitter-c/CMakeFiles/feature_tests.c
-Linking C executable cmTC_8c608
-/usr/local/cmake-3.12.4/bin/cmake -E cmake_link_script CMakeFiles/cmTC_8c608.dir/link.txt --verbose=1
-/usr/bin/gcc-5      -rdynamic CMakeFiles/cmTC_8c608.dir/feature_tests.c.o  -o cmTC_8c608 
+Building C object CMakeFiles/cmTC_e6d80.dir/feature_tests.c.o
+/usr/bin/gcc-5   -std=c90 -o CMakeFiles/cmTC_e6d80.dir/feature_tests.c.o   -c /home/travis/build/neovim/bot-ci/build/deps-src/build/src/treesitter-c/CMakeFiles/feature_tests.c
+Linking C executable cmTC_e6d80
+/usr/local/cmake-3.12.4/bin/cmake -E cmake_link_script CMakeFiles/cmTC_e6d80.dir/link.txt --verbose=1
+/usr/bin/gcc-5      -rdynamic CMakeFiles/cmTC_e6d80.dir/feature_tests.c.o  -o cmTC_e6d80 
 make[4]: Leaving directory '/home/travis/build/neovim/bot-ci/build/deps-src/build/src/treesitter-c/CMakeFiles/CMakeTmp'
 make[3]: Leaving directory '/home/travis/build/neovim/bot-ci/build/deps-src/build/src/treesitter-c/CMakeFiles/CMakeTmp'
 
