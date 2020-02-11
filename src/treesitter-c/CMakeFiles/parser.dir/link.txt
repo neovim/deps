@@ -1,1 +1,0 @@
-/usr/bin/gcc-5 -fPIC -O3 -DNDEBUG  -shared  -o c.so CMakeFiles/parser.dir/src/parser.c.o 

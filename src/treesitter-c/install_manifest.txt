@@ -1,1 +1,0 @@
-/home/travis/build/neovim/bot-ci/build/deps-src/usr/lib/nvim/parser/c.so
