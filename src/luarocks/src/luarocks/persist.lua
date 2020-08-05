@@ -1,85 +1,14 @@
 
 --- Utility module for loading files into tables and
 -- saving tables into files.
--- Implemented separately to avoid interdependencies,
--- as it is used in the bootstrapping stage of the cfg module.
 local persist = {}
-package.loaded["luarocks.persist"] = persist
 
+local core = require("luarocks.core.persist")
 local util = require("luarocks.util")
+local dir = require("luarocks.dir")
+local fs = require("luarocks.fs")
 
---- Load and run a Lua file in an environment.
--- @param filename string: the name of the file.
--- @param env table: the environment table.
--- @return (true, any) or (nil, string, string): true and the return value
--- of the file, or nil, an error message and an error code ("open", "load"
--- or "run") in case of errors.
-local function run_file(filename, env)
-   local fd, err = io.open(filename)
-   if not fd then
-      return nil, err, "open"
-   end
-   local str, err = fd:read("*a")
-   fd:close()
-   if not str then
-      return nil, err, "open"
-   end
-   str = str:gsub("^#![^\n]*\n", "")
-   local chunk, ran
-   if _VERSION == "Lua 5.1" then -- Lua 5.1
-      chunk, err = loadstring(str, filename)
-      if chunk then
-         setfenv(chunk, env)
-         ran, err = pcall(chunk)
-      end
-   else -- Lua 5.2
-      chunk, err = load(str, filename, "t", env)
-      if chunk then
-         ran, err = pcall(chunk)
-      end
-   end
-   if not chunk then
-      return nil, "Error loading file: "..err, "load"
-   end
-   if not ran then
-      return nil, "Error running file: "..err, "run"
-   end
-   return true, err
-end
-
---- Load a Lua file containing assignments, storing them in a table.
--- The global environment is not propagated to the loaded file.
--- @param filename string: the name of the file.
--- @param tbl table or nil: if given, this table is used to store
--- loaded values.
--- @return (table, table) or (nil, string, string): a table with the file's assignments
--- as fields and set of undefined globals accessed in file,
--- or nil, an error message and an error code ("open"; couldn't open the file,
--- "load"; compile-time error, or "run"; run-time error)
--- in case of errors.
-function persist.load_into_table(filename, tbl)
-   assert(type(filename) == "string")
-   assert(type(tbl) == "table" or not tbl)
-
-   local result = tbl or {}
-   local globals = {}
-   local globals_mt = {
-      __index = function(t, k)
-         globals[k] = true
-      end
-   }
-   local save_mt = getmetatable(result)
-   setmetatable(result, globals_mt)
-   
-   local ok, err, errcode = run_file(filename, result)
-   
-   setmetatable(result, save_mt)
-
-   if not ok then
-      return nil, err, errcode
-   end
-   return result, globals
-end
+persist.load_into_table = core.load_into_table
 
 local write_table
 
@@ -91,8 +20,9 @@ local write_table
 -- @param level number: the indentation level
 -- @param sub_order table: optional prioritization table
 -- @see write_table
-local function write_value(out, v, level, sub_order)
+function persist.write_value(out, v, level, sub_order)
    if type(v) == "table" then
+      level = level or 0
       write_table(out, v, level + 1, sub_order)
    elseif type(v) == "string" then
       if v:match("[\r\n]") then
@@ -113,6 +43,51 @@ local function write_value(out, v, level, sub_order)
    end
 end
 
+local is_valid_plain_key
+do
+   local keywords = {
+      ["and"] = true,
+      ["break"] = true,
+      ["do"] = true,
+      ["else"] = true,
+      ["elseif"] = true,
+      ["end"] = true,
+      ["false"] = true,
+      ["for"] = true,
+      ["function"] = true,
+      ["goto"] = true,
+      ["if"] = true,
+      ["in"] = true,
+      ["local"] = true,
+      ["nil"] = true,
+      ["not"] = true,
+      ["or"] = true,
+      ["repeat"] = true,
+      ["return"] = true,
+      ["then"] = true,
+      ["true"] = true,
+      ["until"] = true,
+      ["while"] = true,
+   }
+   function is_valid_plain_key(k)
+      return type(k) == "string"
+             and k:match("^[a-zA-Z_][a-zA-Z0-9_]*$")
+             and not keywords[k]
+   end
+end
+
+local function write_table_key_assignment(out, k, level)
+   if is_valid_plain_key(k) then
+      out:write(k)
+   else
+      out:write("[")
+      persist.write_value(out, k, level)
+      out:write("]")
+   end
+   
+   out:write(" = ")
+end
+
 --- Write a table as Lua code in curly brackets notation to a writer object.
 -- Only numbers, strings and tables (containing numbers, strings
 -- or other recursively processed tables) are supported.
@@ -129,24 +104,16 @@ write_table = function(out, tbl, level, field_order)
    for k, v, sub_order in util.sortedpairs(tbl, field_order) do
       out:write(sep)
       if indent then
-         for n = 1,level do out:write(indentation) end
+         for _ = 1, level do out:write(indentation) end
       end
 
       if k == i then
          i = i + 1
       else
-         if type(k) == "string" and k:match("^[a-zA-Z_][a-zA-Z0-9_]*$") then
-            out:write(k)
-         else
-            out:write("[")
-            write_value(out, k, level)
-            out:write("]")
-         end
-
-         out:write(" = ")
+         write_table_key_assignment(out, k, level)
       end
 
-      write_value(out, v, level, sub_order)
+      persist.write_value(out, v, level, sub_order)
       if type(v) == "number" then
          sep = ", "
          indent = false
@@ -157,7 +124,7 @@ write_table = function(out, tbl, level, field_order)
    end
    if sep ~= "\n" then
       out:write("\n")
-      for n = 1,level-1 do out:write(indentation) end
+      for _ = 1, level - 1 do out:write(indentation) end
    end
    out:write("}")
 end
@@ -166,12 +133,31 @@ end
 -- @param out table or userdata: a writer object supporting :write() method.
 -- @param tbl table: the table to be written.
 -- @param field_order table: optional prioritization table
+-- @return true if successful; nil and error message if failed.
 local function write_table_as_assignments(out, tbl, field_order)
    for k, v, sub_order in util.sortedpairs(tbl, field_order) do
+      if not is_valid_plain_key(k) then
+         return nil, "cannot store '"..tostring(k).."' as a plain key."
+      end
       out:write(k.." = ")
-      write_value(out, v, 0, sub_order)
+      persist.write_value(out, v, 0, sub_order)
       out:write("\n")
    end
+   return true
+end
+
+--- Write a table using Lua table syntax to a writer object.
+-- @param out table or userdata: a writer object supporting :write() method.
+-- @param tbl table: the table to be written.
+local function write_table_as_table(out, tbl)
+   out:write("return {\n")
+   for k, v, sub_order in util.sortedpairs(tbl) do
+      out:write("   ")
+      write_table_key_assignment(out, k, 1)
+      persist.write_value(out, v, 1, sub_order)
+      out:write(",\n")
+   end
+   out:write("}\n")
 end
 
 --- Save the contents of a table to a string.
@@ -180,11 +166,14 @@ end
 -- or other recursively processed tables) are supported.
 -- @param tbl table: the table containing the data to be written
 -- @param field_order table: an optional array indicating the order of top-level fields.
--- @return string
+-- @return persisted data as string; or nil and an error message
 function persist.save_from_table_to_string(tbl, field_order)
    local out = {buffer = {}}
    function out:write(data) table.insert(self.buffer, data) end
-   write_table_as_assignments(out, tbl, field_order)
+   local ok, err = write_table_as_assignments(out, tbl, field_order)
+   if not ok then
+      return nil, err
+   end
    return table.concat(out.buffer)
 end
 
@@ -202,8 +191,65 @@ function persist.save_from_table(filename, tbl, field_order)
    if not out then
       return nil, "Cannot create file at "..filename
    end
-   write_table_as_assignments(out, tbl, field_order)
+   local ok, err = write_table_as_assignments(out, tbl, field_order)
    out:close()
+   if not ok then
+      return nil, err
+   end
+   return true
+end
+
+--- Save the contents of a table as a module.
+-- Each element of the table is saved as a global assignment.
+-- Only numbers, strings and tables (containing numbers, strings
+-- or other recursively processed tables) are supported.
+-- @param filename string: the output filename
+-- @param tbl table: the table containing the data to be written
+-- @return boolean or (nil, string): true if successful, or nil and a
+-- message in case of errors.
+function persist.save_as_module(filename, tbl)
+   local out = io.open(filename, "w")
+   if not out then
+      return nil, "Cannot create file at "..filename
+   end
+   write_table_as_table(out, tbl)
+   out:close()
+   return true
+end
+
+function persist.load_config_file_if_basic(filename, cfg)
+   local env = {
+      home = cfg.home
+   }
+   local result, err, errcode = persist.load_into_table(filename, env)
+   if errcode == "load" or errcode == "run" then
+      -- bad config file or depends on env, so error out
+      return nil, "Could not read existing config file " .. filename
+   end
+
+   local tbl
+   if errcode == "open" then
+      -- could not open, maybe file does not exist
+      tbl = {}
+   else
+      tbl = result
+      tbl.home = nil
+   end
+
+   return tbl
+end
+
+function persist.save_default_lua_version(prefix, lua_version)
+   local ok, err = fs.make_dir(prefix)
+   if not ok then
+      return nil, err
+   end
+   local fd, err = io.open(dir.path(prefix, "default-lua-version.lua"), "w")
+   if not fd then
+      return nil, err
+   end
+   fd:write('return "' .. lua_version .. '"\n')
+   fd:close()
    return true
 end
 

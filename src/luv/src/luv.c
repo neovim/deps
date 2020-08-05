@@ -15,6 +15,7 @@
  *
  */
 
+#include <lua.h>
 #if (LUA_VERSION_NUM != 503)
 #include "c-api/compat-5.3.h"
 #endif
@@ -250,6 +251,9 @@ static const luaL_Reg luv_functions[] = {
   {"cwd", luv_cwd},
   {"exepath", luv_exepath},
   {"get_process_title", luv_get_process_title},
+#if LUV_UV_VERSION_GEQ(1, 29, 0)
+  {"get_constrained_memory", luv_get_constrained_memory},
+#endif
   {"get_total_memory", luv_get_total_memory},
   {"get_free_memory", luv_get_free_memory},
   {"getpid", luv_getpid},
@@ -579,6 +583,14 @@ LUALIB_API luv_ctx_t* luv_context(lua_State* L) {
   }
   lua_pop(L, 1);
   return ctx;
+}
+
+LUALIB_API lua_State* luv_state(lua_State* L) {
+  return luv_context(L)->L;
+}
+
+LUALIB_API uv_loop_t* luv_loop(lua_State* L) {
+  return luv_context(L)->loop;
 }
 
 // Set an external loop, before luaopen_luv

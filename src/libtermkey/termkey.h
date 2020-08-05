@@ -9,7 +9,7 @@ extern "C" {
 #include <stdlib.h>
 
 #define TERMKEY_VERSION_MAJOR 0
-#define TERMKEY_VERSION_MINOR 21
+#define TERMKEY_VERSION_MINOR 22
 
 #define TERMKEY_CHECK_VERSION \
         termkey_check_version(TERMKEY_VERSION_MAJOR, TERMKEY_VERSION_MINOR)

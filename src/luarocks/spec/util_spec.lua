@@ -1,10 +1,9 @@
-local test_env = require("test/test_environment")
+local test_env = require("spec.util.test_env")
 local lfs = require("lfs")
 local run = test_env.run
 local testing_paths = test_env.testing_paths
-local env_variables = test_env.env_variables
 
-describe("Basic tests #blackbox #b_util", function()
+describe("Basic tests #integration", function()
 
    before_each(function()
       test_env.setup_specs()
@@ -53,74 +52,26 @@ describe("Basic tests #blackbox #b_util", function()
    it("LuaRocks only server=testing", function()
       assert.is.truthy(run.luarocks("--only-server=testing"))
    end)
-   
-   it("LuaRocks test site config", function()
-      assert.is.truthy(os.rename("src/luarocks/site_config.lua", "src/luarocks/site_config.lua.tmp"))
-      assert.is.falsy(lfs.attributes("src/luarocks/site_config.lua"))
-      assert.is.truthy(lfs.attributes("src/luarocks/site_config.lua.tmp"))
 
-      assert.is.truthy(run.luarocks(""))
-      
-      assert.is.truthy(os.rename("src/luarocks/site_config.lua.tmp", "src/luarocks/site_config.lua"))
-      assert.is.falsy(lfs.attributes("src/luarocks/site_config.lua.tmp"))
-      assert.is.truthy(lfs.attributes("src/luarocks/site_config.lua"))
-   end)
-
-   -- Disable versioned config temporarily, because it always takes
-   -- precedence over config.lua (config-5.x.lua is installed by default on Windows,
-   -- but not on Unix, so on Unix the os.rename commands below will fail silently, but this is harmless)
-   describe("LuaRocks config - more complex tests", function()
-      local scdir = testing_paths.testing_lrprefix .. "/etc/luarocks"
-      local versioned_scname = scdir .. "/config-" .. env_variables.LUA_VERSION .. ".lua"
-      local scname = scdir .. "/config.lua"
-
-      local configfile
-      if test_env.TEST_TARGET_OS == "windows" then
-         configfile = versioned_scname
-      else
-         configfile = scname
-      end
-
-      it("LuaRocks fail system config", function()
-         os.rename(versioned_scname, versioned_scname .. "bak")
-         local ok = run.luarocks_bool("config --system-config")
-         os.rename(versioned_scname .. ".bak", versioned_scname)
-         assert.is_false(ok)
-      end)
-
-      it("LuaRocks system config", function()
-         lfs.mkdir(testing_paths.testing_lrprefix)
-         lfs.mkdir(testing_paths.testing_lrprefix .. "/etc/")
-         lfs.mkdir(scdir)
-
-         local sysconfig = io.open(configfile, "w+")
-         sysconfig:write(" ")
-         sysconfig:close()
-
-         local output = run.luarocks("config --system-config")
-         os.remove(configfile)
-         assert.are.same(output, configfile)
-      end)
-
-      it("LuaRocks fail system config invalid", function()
-         lfs.mkdir(testing_paths.testing_lrprefix)
-         lfs.mkdir(testing_paths.testing_lrprefix .. "/etc/")
-         lfs.mkdir(scdir)
-
-         local sysconfig = io.open(configfile, "w+")
-         sysconfig:write("if if if")
-         sysconfig:close()
-         local ok = run.luarocks_bool("config --system-config")
-         os.remove(configfile)
-         assert.is_false(ok)
-      end)
-   end)
 end)
 
 test_env.unload_luarocks()
 local util = require("luarocks.util")
+local core_util = require("luarocks.core.util")
 
-describe("Luarocks util test #whitebox #w_util", function()
+describe("Luarocks util test #unit", function()
+   local runner
+   
+   setup(function()
+      runner = require("luacov.runner")
+      runner.init(testing_paths.testrun_dir .. "/luacov.config")
+      runner.tick = true
+   end)
+   
+   teardown(function()
+      runner.shutdown()
+   end)
+   
    describe("util.sortedpairs", function()
       local function collect(iter, state, var)
          local collected = {}
@@ -170,5 +121,70 @@ describe("Luarocks util test #whitebox #w_util", function()
             k1 = "v1", k2 = "v2", k3 = "v3", k4 = "v4", k5 = "v5"
          }, {"k3", {"k2", {"sub order"}}, "k1"})))
       end)
+   end)
+   
+   describe("core.util.show_table", function()
+      it("returns a pretty-printed string containing the representation of the given table", function()
+         local result
+         
+         local t1 = {1, 2, 3}
+         result = core_util.show_table(t1)
+         assert.truthy(result:find("[1] = 1", 1, true))
+         assert.truthy(result:find("[2] = 2", 1, true))
+         assert.truthy(result:find("[3] = 3", 1, true))
+         
+         local t2 = {a = 1, b = 2, c = 3}
+         result = core_util.show_table(t2)
+         assert.truthy(result:find("[\"a\"] = 1", 1, true))
+         assert.truthy(result:find("[\"b\"] = 2", 1, true))
+         assert.truthy(result:find("[\"c\"] = 3", 1, true))
+         
+         local t3 = {a = 1, b = "2", c = {3}}
+         result = core_util.show_table(t3)
+         assert.truthy(result:find("[\"a\"] = 1", 1, true))
+         assert.truthy(result:find("[\"b\"] = \"2\"", 1, true))
+         assert.truthy(result:find("[\"c\"] = {", 1, true))
+         assert.truthy(result:find("[1] = 3", 1, true))
+         
+         local t4 = {a = 1, b = {c = 2, d = {e = "4"}}}
+         result = core_util.show_table(t4)
+         assert.truthy(result:find("[\"a\"] = 1", 1, true))
+         assert.truthy(result:find("[\"b\"] = {", 1, true))
+         assert.truthy(result:find("[\"c\"] = 2", 1, true))
+         assert.truthy(result:find("[\"d\"] = {", 1, true))
+         assert.truthy(result:find("[\"e\"] = \"4\"", 1, true))
+      end)
+   end)
+      
+   describe("core.util.cleanup_path", function()
+     it("does not change order of existing items of prepended path", function()
+        local sys_path = '/usr/local/bin;/usr/bin'
+        local lr_path = '/home/user/.luarocks/bin;/usr/bin'
+        local path = lr_path .. ';' .. sys_path
+
+        local result = core_util.cleanup_path(path, ';', '5.3', false)
+        assert.are.equal('/home/user/.luarocks/bin;/usr/local/bin;/usr/bin', result)
+     end)
+
+     it("does not change order of existing items of appended path", function()
+        local sys_path = '/usr/local/bin;/usr/bin'
+        local lr_path = '/home/user/.luarocks/bin;/usr/bin'
+        local path = sys_path .. ';' .. lr_path
+
+        local result = core_util.cleanup_path(path, ';', '5.3', true)
+        assert.are.equal('/usr/local/bin;/usr/bin;/home/user/.luarocks/bin', result)
+     end)
+
+     it("rewrites versions that do not match the provided version", function()
+        local expected = 'a/b/lua/5.3/?.lua;a/b/c/lua/5.3/?.lua'
+        local result = core_util.cleanup_path('a/b/lua/5.2/?.lua;a/b/c/lua/5.3/?.lua', ';', '5.3')
+        assert.are.equal(expected, result)
+     end)
+
+     it("does not rewrite versions for which the provided version is a substring", function()
+        local expected = 'a/b/lua/5.3/?.lua;a/b/c/lua/5.3.4/?.lua'
+        local result = core_util.cleanup_path('a/b/lua/5.2/?.lua;a/b/c/lua/5.3.4/?.lua', ';', '5.3')
+        assert.are.equal(expected, result)
+     end)
    end)
 end)

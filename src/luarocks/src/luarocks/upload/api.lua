@@ -1,7 +1,7 @@
 
 local api = {}
 
-local cfg = require("luarocks.cfg")
+local cfg = require("luarocks.core.cfg")
 local fs = require("luarocks.fs")
 local dir = require("luarocks.dir")
 local util = require("luarocks.util")
@@ -11,18 +11,17 @@ local multipart = require("luarocks.upload.multipart")
 local Api = {}
 
 local function upload_config_file()
-   local conf = cfg.which_config()
-   if not conf.user.file then
+   if not cfg.config_files.user.file then
       return nil
    end
-   return (conf.user.file:gsub("/[^/]+$", "/upload_config.lua"))
+   return (cfg.config_files.user.file:gsub("/[^/]+$", "/upload_config.lua"))
 end
 
 function Api:load_config()
    local upload_conf = upload_config_file()
    if not upload_conf then return nil end
-   local cfg, err = persist.load_into_table(upload_conf)
-   return cfg
+   local config, err = persist.load_into_table(upload_conf)
+   return config
 end
 
 function Api:save_config()
@@ -42,7 +41,7 @@ function Api:save_config()
       return nil, err
    end
    persist.save_from_table(upload_conf, self.config)
-   fs.chmod(upload_conf, "0600")
+   fs.set_permissions(upload_conf, "read", "user")
 end
 
 function Api:check_version()
@@ -62,7 +61,7 @@ function Api:check_version()
          return nil, "Your upload client is too out of date to continue, please upgrade LuaRocks."
       end
       if res.version ~= tool_version then
-         util.printerr("Warning: Your LuaRocks is out of date, consider upgrading.")
+         util.warning("your LuaRocks is out of date, consider upgrading.")
       end
    end
    return true
@@ -109,27 +108,6 @@ local function encode_query_string(t, sep)
    return table.concat(buf)
 end
 
--- An ode to the multitude of JSON libraries out there...
-local function require_json()
-   local list = { "cjson", "dkjson", "json" }
-   for _, lib in ipairs(list) do
-      local json_ok, json = pcall(require, lib)
-      if json_ok then
-         pcall(json.use_lpeg) -- optional feature in dkjson
-         return json_ok, json
-      end
-   end
-   local errmsg = "Failed loading "
-   for i, name in ipairs(list) do
-      if i == #list then
-         errmsg = errmsg .."and '"..name.."'. Use 'luarocks search <partial-name>' to search for a library and 'luarocks install <name>' to install one."
-      else
-         errmsg = errmsg .."'"..name.."', "
-      end
-   end
-   return nil, errmsg
-end
-
 local function redact_api_url(url)
    url = tostring(url)
    return (url:gsub(".*/api/[^/]+/[^/]+", "")) or ""
@@ -140,10 +118,10 @@ if not ltn12_ok then -- If not using LuaSocket and/or LuaSec...
 
 function Api:request(url, params, post_params)
    local vars = cfg.variables
-   local json_ok, json = require_json()
+   local json_ok, json = util.require_json()
    if not json_ok then return nil, "A JSON library is required for this command. "..json end
    
-   if cfg.downloader == "wget" then
+   if fs.which_tool("downloader") == "wget" then
       local curl_ok, err = fs.is_tool_available(vars.CURL, "curl")
       if not curl_ok then
          return nil, err
@@ -161,7 +139,7 @@ function Api:request(url, params, post_params)
    local tmpfile = fs.tmpname()
    if post_params then
       method = "POST"
-      local curl_cmd = fs.Q(vars.CURL).." -f -k -L --silent --user-agent \""..cfg.user_agent.." via curl\" "
+      local curl_cmd = vars.CURL.." -f -k -L --silent --user-agent \""..cfg.user_agent.." via curl\" "
       for k,v in pairs(post_params) do
          local var = v
          if type(v) == "table" then
@@ -204,7 +182,7 @@ else -- use LuaSocket and LuaSec
 local warned_luasec = false
 
 function Api:request(url, params, post_params)
-   local json_ok, json = require_json()
+   local json_ok, json = util.require_json()
    if not json_ok then return nil, "A JSON library is required for this command. "..json end
    local server = tostring(self.config.server)
    local http_ok, http
@@ -258,32 +236,32 @@ function Api:request(url, params, post_params)
    if self.debug then
       util.printout(tostring(status))
    end
-   if status ~= 200 then
-      return nil, "API returned " .. tostring(status) .. " - " .. redact_api_url(url)
+   local pok, ret, err = pcall(json.decode, table.concat(out))
+   if pok and ret then
+      return ret
    end
-   return json.decode(table.concat(out))
+   return nil, "API returned " .. tostring(status) .. " - " .. redact_api_url(url)
 end
 
 end
 
-function api.new(flags)
+function api.new(args)
    local self = {}
    setmetatable(self, { __index = Api })
    self.config = self:load_config() or {}
-   self.config.server = flags["server"] or self.config.server or cfg.upload.server
+   self.config.server = args.server or self.config.server or cfg.upload.server
    self.config.version = self.config.version or cfg.upload.version
-   self.config.key = flags["api-key"] or self.config.key
-   self.debug = flags["debug"]
+   self.config.key = args.temp_key or args.api_key or self.config.key
+   self.debug = args.debug
    if not self.config.key then
       return nil, "You need an API key to upload rocks.\n" ..
                   "Navigate to "..self.config.server.."/settings to get a key\n" ..
                   "and then pass it through the --api-key=<key> flag."
    end
-   if flags["api-key"] then
+   if args.api_key then
       self:save_config()
    end
    return self
 end
 
 return api
-
