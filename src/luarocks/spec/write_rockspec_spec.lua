@@ -1,103 +1,72 @@
-local test_env = require("spec.util.test_env")
-local git_repo = require("spec.util.git_repo")
+local test_env = require("test/test_environment")
 local lfs = require("lfs")
 local run = test_env.run
 
-describe("LuaRocks write_rockspec tests #integration", function()
+test_env.unload_luarocks()
+
+describe("LuaRocks write_rockspec tests #blackbox #b_write_rockspec", function()
 
    before_each(function()
       test_env.setup_specs()
    end)
 
-   it("fails with invalid argument", function()
-      assert.is_false(run.luarocks_bool("write_rockspec invalid"))
-   end)
-   
-   it("fails with invalid zip", function()
-      assert.is_false(run.luarocks_bool("write_rockspec http://example.com/invalid.zip"))
-   end)
-
-   describe("from #git #unix", function()
-      local git
-   
-      setup(function()
-         git = git_repo.start()
-      end)
-      
-      teardown(function()
-         git:stop()
-      end)
-
-      it("runs with no flags/arguments", function()
-         local d = lfs.currentdir()
-         finally(function()
-            os.remove("testrock-dev-1.rockspec")
-            lfs.chdir(d)
-            test_env.remove_dir("testrock")
-         end)
-         os.execute("git clone git://localhost/testrock")
-         lfs.chdir("testrock")
+   describe("LuaRocks write_rockspec basic tests", function()
+      it("LuaRocks write_rockspec with no flags/arguments", function()
          assert.is_true(run.luarocks_bool("write_rockspec"))
-         assert.is.truthy(lfs.attributes("testrock-dev-1.rockspec"))
+         os.remove("luarocks-scm-1.rockspec")
       end)
 
-      it("runs", function()
-         finally(function() os.remove("testrock-dev-1.rockspec") end)
-         assert.is_true(run.luarocks_bool("write_rockspec git://localhost/testrock"))
-         assert.is.truthy(lfs.attributes("testrock-dev-1.rockspec"))
+      it("LuaRocks write_rockspec with invalid argument", function()
+         assert.is_false(run.luarocks_bool("write_rockspec invalid"))
       end)
       
-      it("runs with --tag", function()
-         finally(function() os.remove("testrock-2.3.0-1.rockspec") end)
-         assert.is_true(run.luarocks_bool("write_rockspec git://localhost/testrock --tag=v2.3.0"))
-         assert.is.truthy(lfs.attributes("testrock-2.3.0-1.rockspec"))
-         -- TODO check contents
-      end)
-      
-      it("runs with format flag", function()
-         finally(function() os.remove("testrock-dev-1.rockspec") end)
-         assert.is_true(run.luarocks_bool("write_rockspec git://localhost/testrock --rockspec-format=1.1 --lua-versions=5.1,5.2"))
-         assert.is.truthy(lfs.attributes("testrock-dev-1.rockspec"))
-         -- TODO check contents
-      end)
-      
-      it("runs with full flags", function()
-         finally(function() os.remove("testrock-dev-1.rockspec") end)
-         assert.is_true(run.luarocks_bool("write_rockspec git://localhost/testrock --lua-versions=5.1,5.2 --license=\"MIT/X11\" "
-                                             .. " --homepage=\"http://www.luarocks.org\" --summary=\"A package manager for Lua modules\" "))
-         assert.is.truthy(lfs.attributes("testrock-dev-1.rockspec"))
-         -- TODO check contents
-      end)
-
-      it("with various flags", function()
-         finally(function() os.remove("testrock-dev-1.rockspec") end)
-         assert.is_true(run.luarocks_bool("write_rockspec git://localhost/testrock --lib=fcgi --license=\"3-clause BSD\" " .. "--lua-versions=5.1,5.2"))
-         assert.is.truthy(lfs.attributes("testrock-dev-1.rockspec"))
-         -- TODO check contents
+      it("LuaRocks write_rockspec invalid zip", function()
+         assert.is_false(run.luarocks_bool("write_rockspec http://example.com/invalid.zip"))
       end)
    end)
 
-   describe("from tarball #mock", function()
-
-      setup(function()
-         test_env.mock_server_init()
+   describe("LuaRocks write_rockspec more complex tests", function()
+      it("LuaRocks write_rockspec git luarocks", function()
+         assert.is_true(run.luarocks_bool("write_rockspec git://github.com/keplerproject/luarocks"))
+         assert.is.truthy(lfs.attributes("luarocks-scm-1.rockspec"))
+         assert.is_true(os.remove("luarocks-scm-1.rockspec"))
       end)
-      teardown(function()
-         test_env.mock_server_done()
+      
+      it("LuaRocks write_rockspec git luarocks --tag=v2.3.0", function()
+         assert.is_true(run.luarocks_bool("write_rockspec git://github.com/keplerproject/luarocks --tag=v2.3.0"))
+         assert.is.truthy(lfs.attributes("luarocks-2.3.0-1.rockspec"))
+         assert.is_true(os.remove("luarocks-2.3.0-1.rockspec"))
       end)
-
-      it("via http", function()
-         finally(function() os.remove("an_upstream_tarball-0.1-1.rockspec") end)
-         assert.is_true(run.luarocks_bool("write_rockspec http://localhost:8080/file/an_upstream_tarball-0.1.tar.gz --lua-versions=5.1"))
-         assert.is.truthy(lfs.attributes("an_upstream_tarball-0.1-1.rockspec"))
-         -- TODO check contents
+      
+      it("LuaRocks write_rockspec git luarocks with format flag", function()
+         assert.is_true(run.luarocks_bool("write_rockspec git://github.com/mbalmer/luarocks --rockspec-format=1.1 --lua-version=5.1,5.2"))
+         assert.is.truthy(lfs.attributes("luarocks-scm-1.rockspec"))
+         assert.is_true(os.remove("luarocks-scm-1.rockspec"))
       end)
-
-      it("with a different basedir", function()
-         finally(function() os.remove("renamed_upstream_tarball-0.1-1.rockspec") end)
-         assert.is_true(run.luarocks_bool("write_rockspec http://localhost:8080/file/renamed_upstream_tarball-0.1.tar.gz --lua-versions=5.1"))
-         assert.is.truthy(lfs.attributes("renamed_upstream_tarball-0.1-1.rockspec"))
-         -- TODO check contents
+      
+      it("LuaRocks write_rockspec git luarocks with full flags", function()
+         assert.is_true(run.luarocks_bool("write_rockspec git://github.com/mbalmer/luarocks --lua-version=5.1,5.2 --license=\"MIT/X11\" "
+                                             .. " --homepage=\"http://www.luarocks.org\" --summary=\"A package manager for Lua modules\" "))
+         assert.is.truthy(lfs.attributes("luarocks-scm-1.rockspec"))
+         assert.is_true(os.remove("luarocks-scm-1.rockspec"))
+      end)
+      
+      it("LuaRocks write_rockspec rockspec via http", function()
+         assert.is_true(run.luarocks_bool("write_rockspec http://luarocks.org/releases/luarocks-2.1.0.tar.gz --lua-version=5.1"))
+         assert.is.truthy(lfs.attributes("luarocks-2.1.0-1.rockspec"))
+         assert.is_true(os.remove("luarocks-2.1.0-1.rockspec"))
+      end)
+      
+      it("LuaRocks write_rockspec base dir, luassert.tar.gz via https", function()
+         assert.is_true(run.luarocks_bool("write_rockspec https://github.com/downloads/Olivine-Labs/luassert/luassert-1.2.tar.gz --lua-version=5.1"))
+         assert.is.truthy(lfs.attributes("luassert-1.2-1.rockspec"))
+         assert.is_true(os.remove("luassert-1.2-1.rockspec"))
+      end)
+      
+      it("LuaRocks write_rockspec git luafcgi with many flags", function()
+         assert.is_true(run.luarocks_bool("write_rockspec git://github.com/mbalmer/luafcgi --lib=fcgi --license=\"3-clause BSD\" " .. "--lua-version=5.1,5.2"))
+         assert.is.truthy(lfs.attributes("luafcgi-scm-1.rockspec")) -- TODO maybe read it content and find arguments from flags?
+         assert.is_true(os.remove("luafcgi-scm-1.rockspec"))
       end)
    end)
 end)

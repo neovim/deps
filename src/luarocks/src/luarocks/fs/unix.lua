@@ -4,9 +4,8 @@ local unix = {}
 
 local fs = require("luarocks.fs")
 
-local cfg = require("luarocks.core.cfg")
+local cfg = require("luarocks.cfg")
 local dir = require("luarocks.dir")
-local path = require("luarocks.path")
 local util = require("luarocks.util")
 
 --- Annotate command string for quiet execution.
@@ -59,59 +58,33 @@ function unix.root_of(_)
 end
 
 --- Create a wrapper to make a script executable from the command-line.
--- @param script string: Pathname of script to be made executable.
--- @param target string: wrapper target pathname (without wrapper suffix).
+-- @param file string: Pathname of script to be made executable.
+-- @param dest string: Directory where to put the wrapper.
 -- @param name string: rock name to be used in loader context.
 -- @param version string: rock version to be used in loader context.
 -- @return boolean or (nil, string): True if succeeded, or nil and
 -- an error message.
-function unix.wrap_script(script, target, deps_mode, name, version, ...)
-   assert(type(script) == "string" or not script)
-   assert(type(target) == "string")
-   assert(type(deps_mode) == "string")
-   assert(type(name) == "string" or not name)
-   assert(type(version) == "string" or not version)
+function unix.wrap_script(file, dest, name, version)
+   assert(type(file) == "string")
+   assert(type(dest) == "string")
    
-   local wrapper = io.open(target, "w")
+   local base = dir.base_name(file)
+   local wrapname = fs.is_dir(dest) and dest.."/"..base or dest
+   local lpath, lcpath = cfg.package_paths()
+   local wrapper = io.open(wrapname, "w")
    if not wrapper then
-      return nil, "Could not open "..target.." for writing."
+      return nil, "Could not open "..wrapname.." for writing."
    end
-
-   local lpath, lcpath = path.package_paths(deps_mode)
-
-   local luainit = {
-      "package.path="..util.LQ(lpath..";").."..package.path",
-      "package.cpath="..util.LQ(lcpath..";").."..package.cpath",
-   }
-   if target == "luarocks" or target == "luarocks-admin" then
-      luainit = {
-         "package.path="..util.LQ(package.path),
-         "package.cpath="..util.LQ(package.cpath),
-      }
-   end
-   if name and version then
-      local addctx = "local k,l,_=pcall(require,"..util.LQ("luarocks.loader")..") _=k " ..
-                     "and l.add_context("..util.LQ(name)..","..util.LQ(version)..")"
-      table.insert(luainit, addctx)
-   end
-
-   local argv = {
-      fs.Q(dir.path(cfg.variables["LUA_BINDIR"], cfg.lua_interpreter)),
-      "-e",
-      fs.Q(table.concat(luainit, ";")),
-      script and fs.Q(script) or [[$([ "$*" ] || echo -i)]],
-      ...
-   }
-
    wrapper:write("#!/bin/sh\n\n")
-   wrapper:write("LUAROCKS_SYSCONFDIR="..fs.Q(cfg.sysconfdir) .. " ")
-   wrapper:write("exec "..table.concat(argv, " ")..' "$@"\n')
+   local lua = dir.path(cfg.variables["LUA_BINDIR"], cfg.lua_interpreter)
+   local ppaths = "package.path="..util.LQ(lpath..";").."..package.path; package.cpath="..util.LQ(lcpath..";").."..package.cpath"
+   local addctx = "local k,l,_=pcall(require,"..util.LQ("luarocks.loader")..") _=k and l.add_context("..util.LQ(name)..","..util.LQ(version)..")"
+   wrapper:write('exec '..fs.Q(lua)..' -e '..fs.Q(ppaths)..' -e '..fs.Q(addctx)..' '..fs.Q(file)..' "$@"\n')
    wrapper:close()
-
-   if fs.set_permissions(target, "exec", "all") then
+   if fs.chmod(wrapname, cfg.perm_exec) then
       return true
    else
-      return nil, "Could not make "..target.." executable."
+      return nil, "Could not make "..wrapname.." executable."
    end
 end
 
@@ -131,14 +104,14 @@ function unix.is_actual_binary(filename)
    local first = file:read(2)
    file:close()
    if not first then
-      util.warning("could not read "..filename)
+      util.printerr("Warning: could not read "..filename)
       return true
    end
    return first ~= "#!"
 end
 
 function unix.copy_binary(filename, dest) 
-   return fs.copy(filename, dest, "exec")
+   return fs.copy(filename, dest, cfg.perm_exec)
 end
 
 --- Move a file on top of the other.
@@ -161,56 +134,6 @@ end
 
 function unix.current_user()
    return os.getenv("USER")
-end
-
-function unix.export_cmd(var, val)
-   return ("export %s='%s'"):format(var, val)
-end
-
-local octal_to_rwx = {
-   ["0"] = "---",
-   ["1"] = "--x",
-   ["2"] = "-w-",
-   ["3"] = "-wx",
-   ["4"] = "r--",
-   ["5"] = "r-x",
-   ["6"] = "rw-",
-   ["7"] = "rwx",
-}
-local rwx_to_octal = {}
-for octal, rwx in pairs(octal_to_rwx) do
-   rwx_to_octal[rwx] = octal
-end
---- Moderate the given permissions based on the local umask
--- @param perms string: permissions to moderate
--- @return string: the moderated permissions
-function unix._unix_moderate_permissions(perms)
-   local umask = fs._unix_umask()
-
-   local moderated_perms = ""
-   for i = 1, 3 do
-      local p_rwx = octal_to_rwx[perms:sub(i, i)]
-      local u_rwx = octal_to_rwx[umask:sub(i, i)]
-      local new_perm = ""
-      for j = 1, 3 do
-         local p_val = p_rwx:sub(j, j)
-         local u_val = u_rwx:sub(j, j)
-         if p_val == u_val then
-            new_perm = new_perm .. "-"
-         else
-            new_perm = new_perm .. p_val
-         end
-      end
-      moderated_perms = moderated_perms .. rwx_to_octal[new_perm]
-   end
-   return moderated_perms
-end
-
-function unix.system_cache_dir()
-   if fs.is_dir("/var/cache") then
-      return "/var/cache"
-   end
-   return dir.path(fs.system_temp_dir(), "cache")
 end
 
 return unix

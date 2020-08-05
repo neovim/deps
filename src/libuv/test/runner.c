@@ -419,18 +419,13 @@ void print_lines(const char* buffer, size_t size, FILE* stream) {
 
   start = buffer;
   while ((end = memchr(start, '\n', &buffer[size] - start))) {
-    fputs("# ", stream);
-    fwrite(start, 1, (int)(end - start), stream);
-    fputs("\n", stream);
+    fprintf(stream, "# %.*s\n", (int) (end - start), start);
     fflush(stream);
     start = end + 1;
   }
 
-  end = &buffer[size];
-  if (start < end) {
-    fputs("# ", stream);
-    fwrite(start, 1, (int)(end - start), stream);
-    fputs("\n", stream);
+  if (start < &buffer[size]) {
+    fprintf(stream, "# %s\n", start);
     fflush(stream);
   }
 }

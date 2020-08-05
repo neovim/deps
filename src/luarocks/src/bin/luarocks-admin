@@ -1,18 +1,19 @@
 #!/usr/bin/env lua
 
--- Load cfg first so that luarocks.loader knows it is running inside LuaRocks
-local cfg = require("luarocks.core.cfg")
+-- this should be loaded first.
+local cfg = require("luarocks.cfg")
 
 local loader = require("luarocks.loader")
-local cmd = require("luarocks.cmd")
+local command_line = require("luarocks.command_line")
 
-local description = "LuaRocks repository administration interface"
+program_description = "LuaRocks repository administration interface"
 
-local commands = {
-   make_manifest = "luarocks.admin.cmd.make_manifest",
-   add = "luarocks.admin.cmd.add",
-   remove = "luarocks.admin.cmd.remove",
-   refresh_cache = "luarocks.admin.cmd.refresh_cache",
+commands = {
+   help = "luarocks.help",
+   make_manifest = "luarocks.make_manifest",
+   add = "luarocks.add",
+   remove = "luarocks.admin_remove",
+   refresh_cache = "luarocks.refresh_cache",
 }
 
-cmd.run_command(description, commands, "luarocks.admin.cmd.external", ...)
+command_line.run_command(...)

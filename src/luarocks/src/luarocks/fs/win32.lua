@@ -5,10 +5,11 @@ local win32 = {}
 
 local fs = require("luarocks.fs")
 
-local cfg = require("luarocks.core.cfg")
+local cfg = require("luarocks.cfg")
 local dir = require("luarocks.dir")
-local path = require("luarocks.path")
 local util = require("luarocks.util")
+
+math.randomseed(os.time())
 
 -- Monkey patch io.popen and os.execute to make sure quoting
 -- works as expected.
@@ -126,59 +127,32 @@ function win32.root_of(pathname)
 end
 
 --- Create a wrapper to make a script executable from the command-line.
--- @param script string: Pathname of script to be made executable.
--- @param target string: wrapper target pathname (without wrapper suffix).
+-- @param file string: Pathname of script to be made executable.
+-- @param dest string: Directory where to put the wrapper.
 -- @param name string: rock name to be used in loader context.
 -- @param version string: rock version to be used in loader context.
 -- @return boolean or (nil, string): True if succeeded, or nil and
 -- an error message.
-function win32.wrap_script(script, target, deps_mode, name, version, ...)
-   assert(type(script) == "string" or not script)
-   assert(type(target) == "string")
-   assert(type(deps_mode) == "string")
-   assert(type(name) == "string" or not name)
-   assert(type(version) == "string" or not version)
+function win32.wrap_script(file, dest, name, version)
+   assert(type(file) == "string")
+   assert(type(dest) == "string")
 
-   local batname = target .. ".bat"
-   local wrapper = io.open(batname, "wb")
+   local base = dir.base_name(file)
+   local wrapname = fs.is_dir(dest) and dest.."/"..base or dest
+   wrapname = wrapname..".bat"
+   local lpath, lcpath = cfg.package_paths()
+   lpath = util.remove_path_dupes(lpath, ";")
+   lcpath = util.remove_path_dupes(lcpath, ";")
+   local wrapper = io.open(wrapname, "w")
    if not wrapper then
-      return nil, "Could not open "..batname.." for writing."
+      return nil, "Could not open "..wrapname.." for writing."
    end
-
-   local lpath, lcpath = path.package_paths(deps_mode)
-
-   local luainit = {
-      "package.path="..util.LQ(lpath..";").."..package.path",
-      "package.cpath="..util.LQ(lcpath..";").."..package.cpath",
-   }
-   if target == "luarocks" or target == "luarocks-admin" then
-      luainit = {
-         "package.path="..util.LQ(package.path),
-         "package.cpath="..util.LQ(package.cpath),
-      }
-   end
-   if name and version then
-      local addctx = "local k,l,_=pcall(require,'luarocks.loader') _=k " ..
-                     "and l.add_context('"..name.."','"..version.."')"
-      table.insert(luainit, addctx)
-   end
-
-   local argv = {
-      fs.Qb(dir.path(cfg.variables["LUA_BINDIR"], cfg.lua_interpreter)),
-      "-e",
-      fs.Qb(table.concat(luainit, ";")),
-      script and fs.Qb(script) or "%I%",
-      ...
-   }
-
-   wrapper:write("@echo off\r\n")
-   wrapper:write("setlocal\r\n")
-   if not script then
-      wrapper:write([[IF "%*"=="" (set I=-i) ELSE (set I=)]] .. "\r\n")
-   end
-   wrapper:write("set "..fs.Qb("LUAROCKS_SYSCONFDIR="..cfg.sysconfdir) .. "\r\n")
-   wrapper:write(table.concat(argv, " ") .. " %*\r\n")
-   wrapper:write("exit /b %ERRORLEVEL%\r\n")
+   wrapper:write("@echo off\n")
+   local lua = dir.path(cfg.variables["LUA_BINDIR"], cfg.lua_interpreter)
+   local ppaths = "package.path="..util.LQ(lpath..";").."..package.path; package.cpath="..util.LQ(lcpath..";").."..package.cpath"
+   local addctx = "local k,l,_=pcall(require,"..util.LQ("luarocks.loader")..") _=k and l.add_context("..util.LQ(name)..","..util.LQ(version)..")"
+   wrapper:write(fs.Qb(lua)..' -e '..fs.Qb(ppaths)..' -e '..fs.Qb(addctx)..' '..fs.Qb(file)..' %*\n')
+   wrapper:write("exit /b %ERRORLEVEL%\n")
    wrapper:close()
    return true
 end
@@ -213,6 +187,19 @@ function win32.copy_binary(filename, dest)
    return true
 end
 
+function win32.chmod(filename, mode)
+   return true
+end
+
+function win32.attributes(filename, attrtype)
+   if attrtype == "permissions" then
+      return "" -- FIXME
+   elseif attrtype == "owner" then
+      return os.getenv("USERNAME") -- FIXME popen_read('powershell -Command "& {(get-acl '..filename..').owner}"'):gsub("^[^\\]*\\", "")
+   end
+   return nil
+end
+
 --- Move a file on top of the other.
 -- The new file ceases to exist under its original name,
 -- and takes over the name of the old file.
@@ -227,41 +214,6 @@ end
 function win32.replace_file(old_file, new_file)
    os.remove(old_file)
    return os.rename(new_file, old_file)
-end
-
-function win32.is_dir(file)
-   file = fs.absolute_name(file)
-   file = dir.normalize(file)
-   local fd, _, code = io.open(file, "r")
-   if code == 13 then -- directories return "Permission denied"
-      fd, _, code = io.open(file .. "\\", "r")
-      if code == 2 then -- directories return 2, files return 22
-         return true
-      end
-   end
-   if fd then
-      fd:close()
-   end
-   return false
-end
-
-function win32.is_file(file)
-   file = fs.absolute_name(file)
-   file = dir.normalize(file)
-   local fd, _, code = io.open(file, "r")
-   if code == 13 then -- if "Permission denied"
-      fd, _, code = io.open(file .. "\\", "r")
-      if code == 2 then -- directories return 2, files return 22
-         return false
-      elseif code == 22 then
-         return true
-      end
-   end
-   if fd then
-      fd:close()
-      return true
-   end
-   return false
 end
 
 --- Test is file/dir is writable.
@@ -296,14 +248,14 @@ function win32.is_writable(file)
 end
 
 --- Create a temporary directory.
--- @param name_pattern string: name pattern to use for avoiding conflicts
+-- @param name string: name pattern to use for avoiding conflicts
 -- when creating temporary directory.
 -- @return string or (nil, string): name of temporary directory or (nil, error message) on failure.
-function win32.make_temp_dir(name_pattern)
-   assert(type(name_pattern) == "string")
-   name_pattern = dir.normalize(name_pattern)
+function win32.make_temp_dir(name)
+   assert(type(name) == "string")
+   name = dir.normalize(name)
 
-   local temp_dir = os.getenv("TMP") .. "/luarocks_" .. name_pattern:gsub("/", "_") .. "-" .. tostring(math.floor(math.random() * 10000))
+   local temp_dir = os.getenv("TMP") .. "/luarocks_" .. name:gsub(dir.separator, "_") .. "-" .. tostring(math.floor(math.random() * 10000))
    local ok, err = fs.make_dir(temp_dir)
    if ok then
       return temp_dir
@@ -318,14 +270,6 @@ end
 
 function win32.current_user()
    return os.getenv("USERNAME")
-end
-
-function win32.export_cmd(var, val)
-   return ("SET %s=%s"):format(var, val)
-end
-
-function win32.system_cache_dir()
-   return dir.path(fs.system_temp_dir(), "cache")
 end
 
 return win32

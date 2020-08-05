@@ -6,7 +6,7 @@ local unpack = unpack or table.unpack
 
 local fs = require("luarocks.fs")
 local util = require("luarocks.util")
-local cfg = require("luarocks.core.cfg")
+local cfg = require("luarocks.cfg")
 
 --- Call "make" with given target and variables
 -- @param make_cmd string: the make command to be used (typically
@@ -36,10 +36,10 @@ end
 
 --- Driver function for the "make" build back-end.
 -- @param rockspec table: the loaded rockspec.
--- @return boolean or (nil, string): true if no errors occurred,
+-- @return boolean or (nil, string): true if no errors ocurred,
 -- nil and an error message otherwise.
 function make.run(rockspec)
-   assert(rockspec:type() == "rockspec")
+   assert(type(rockspec) == "table")
 
    local build = rockspec.build
    

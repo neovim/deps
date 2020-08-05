@@ -1,4 +1,4 @@
-rem=rem --[[--lua
+rem=rem --[[
 @setlocal&  set luafile="%~f0" & if exist "%~f0.bat" set luafile="%~f0.bat"
 @win32\lua5.1\bin\lua5.1.exe %luafile% %*&  exit /b ]]
 
@@ -6,8 +6,9 @@ local vars = {}
 
 
 vars.PREFIX = nil
-vars.VERSION = "3.2"
+vars.VERSION = "2.4"
 vars.SYSCONFDIR = nil
+vars.SYSCONFFORCE = nil
 vars.CONFBACKUPDIR = nil
 vars.SYSCONFFILENAME = nil
 vars.CONFIG_FILE = nil
@@ -66,17 +67,8 @@ local function exec(cmd)
 end
 
 local function exists(filename)
-	local fd, _, code = io.open(filename, "r")
-	if code == 13 then
-		-- code 13 means "Permission denied" on both Unix and Windows
-		-- io.open on folders always fails with code 13 on Windows
-		return true
-	end
-	if fd then
-		fd:close()
-		return true
-	end
-	return false
+	local cmd = [[.\win32\tools\test -e "]]..filename..[["]]
+	return exec(cmd)
 end
 
 local function mkdir (dir)
@@ -135,7 +127,7 @@ Configuring the destinations:
                if you create a self contained installation.
                
 Configuring the Lua interpreter:
-/LV [version]  Lua version to use; either 5.1, 5.2, 5.3, or 5.4.
+/LV [version]  Lua version to use; either 5.1, 5.2, or 5.3.
                Default is auto-detected.
 /LUA [dir]     Location where Lua is installed - e.g. c:\lua\5.1\
                If not provided, the installer will search the system
@@ -196,6 +188,7 @@ local function parse_options(args)
 			vars.PREFIX = option.value
 		elseif name == "/CONFIG" then
 			vars.SYSCONFDIR = option.value
+			vars.SYSCONFFORCE = true
 		elseif name == "/TREE" then
 			vars.TREE_ROOT = option.value
 		elseif name == "/SCRIPTS" then
@@ -257,8 +250,8 @@ local function check_flags()
 			die("Bundled Lua version is 5.1, cannot install "..vars.LUA_VERSION)
 		end
 	end
-	if not vars.LUA_VERSION:match("^5%.[1234]$") then
-		die("Bad argument: /LV must either be 5.1, 5.2, 5.3, or 5.4")
+	if not vars.LUA_VERSION:match("^5%.[123]$") then
+		die("Bad argument: /LV must either be 5.1, 5.2, or 5.3")
 	end
   if USE_MSVC_MANUAL and USE_MINGW then
     die("Cannot combine option /MSVC and /MW")
@@ -276,7 +269,7 @@ local function detect_lua_version(interpreter_path)
 	local full_version = handler:read("*a")
 	handler:close()
 
-	local version = full_version:match(" (5%.[1234])$")
+	local version = full_version:match(" (5%.[123])$")
 	if not version then
 		return nil, "unknown interpreter version '" .. full_version .. "'"
 	end
@@ -288,7 +281,7 @@ local function look_for_interpreter(directory)
 	if lua_version_set then
 		names = {S"lua$LUA_VERSION.exe", S"lua$LUA_SHORTV.exe"}
 	else
-		names = {"lua5.4.exe", "lua54.exe", "lua5.3.exe", "lua53.exe", "lua5.2.exe", "lua52.exe", "lua5.1.exe", "lua51.exe"}
+		names = {"lua5.3.exe", "lua53.exe", "lua5.2.exe", "lua52.exe", "lua5.1.exe", "lua51.exe"}
 	end
 	table.insert(names, "lua.exe")
 	table.insert(names, "luajit.exe")
@@ -446,7 +439,7 @@ local function get_registry(key, value)
 	return nil
 end
 
-local function get_visual_studio_directory_from_registry()
+local function get_visual_studio_directory()
 	assert(type(vars.LUA_RUNTIME)=="string", "requires vars.LUA_RUNTIME to be set before calling this function.")
 	local major, minor = vars.LUA_RUNTIME:match('VCR%u*(%d+)(%d)$') -- MSVCR<x><y> or VCRUNTIME<x><y>
 	if not major then 
@@ -467,47 +460,6 @@ local function get_visual_studio_directory_from_registry()
     end
 	end
 	return nil
-end
-
-local function get_visual_studio_directory_from_vswhere()
-	assert(type(vars.LUA_RUNTIME)=="string", "requires vars.LUA_RUNTIME to be set before calling this function.")
-	local major, minor = vars.LUA_RUNTIME:match('VCR%u*(%d+)(%d)$')
-	if not major then
-		print(S[[    Cannot auto-detect Visual Studio version from $LUA_RUNTIME]])
-		return nil
-	end
-	if tonumber(major) < 14 then
-		return nil
-	end
-	local program_dir = os.getenv('PROGRAMFILES(X86)')
-	if not program_dir then
-		return nil
-	end
-	local vswhere = program_dir.."\\Microsoft Visual Studio\\Installer\\vswhere.exe"
-	if not exists(vswhere) then
-		return nil
-	end
-	local f, msg = io.popen('"'..vswhere..'" -products * -property installationPath')
-	if not f then return nil, "failed to run vswhere: "..msg end
-	local vsdir = nil
-	while true do
-		local l, err = f:read()
-		if not l then
-			if err then
-				f:close()
-				return nil, err
-			else
-				break
-			end
-		end
-		vsdir = l
-	end
-	f:close()
-	if not vsdir then
-		return nil
-	end
-	print("    Visual Studio 2017 or higher found in: "..vsdir)
-	return vsdir
 end
 
 local function get_windows_sdk_directory()
@@ -546,22 +498,8 @@ local function get_msvc_env_setup_cmd()
 	assert(type(vars.UNAME_M) == "string", "requires vars.UNAME_M to be set before calling this function.")
 	local x64 = vars.UNAME_M=="x86_64"
 
-	-- 1. try visual studio command line tools of VS 2017 or higher
-	local vsdir, err = get_visual_studio_directory_from_vswhere()
-	if err then
-		print("    Error when finding Visual Studio directory from vswhere: "..err)
-	end
-	if vsdir then
-		local vcvarsall = vsdir .. '\\VC\\Auxiliary\\Build\\vcvarsall.bat'
-		if exists(vcvarsall) then
-			local vcvarsall_args = { x86 = "", x86_64 = " x64" }
-			assert(vcvarsall_args[vars.UNAME_M], "vars.UNAME_M: only x86 and x86_64 are supported")
-			return ('call "%s"%s'):format(vcvarsall, vcvarsall_args[vars.UNAME_M])
-		end
-	end
-
-	-- 2. try visual studio command line tools
-	local vcdir = get_visual_studio_directory_from_registry()
+	-- 1. try visual studio command line tools
+	local vcdir = get_visual_studio_directory()
 	if vcdir then
 		local vcvars_bats = {
 			x86 = {
@@ -582,7 +520,7 @@ local function get_msvc_env_setup_cmd()
 		end
 
 		-- try vcvarsall.bat in case MS changes the undocumented bat files above.
-		-- but this way we don't know if specified compiler is installed...
+		-- but this way we don't konw if specified compiler is installed...
 		local vcvarsall = vcdir .. 'vcvarsall.bat'
 		if exists(vcvarsall) then
 			local vcvarsall_args = { x86 = "", x86_64 = " amd64" }
@@ -590,7 +528,7 @@ local function get_msvc_env_setup_cmd()
 		end
 	end
 
-	-- 3. try for Windows SDKs command line tools.
+	-- 2. try for Windows SDKs command line tools.
 	local wsdkdir = get_windows_sdk_directory()
 	if wsdkdir then
 		local setenv = wsdkdir.."Bin\\SetEnv.cmd"
@@ -663,7 +601,7 @@ local function look_for_lua_install ()
 	return false
 end
 
--- backup config[x.x].lua[.bak]
+-- backup config[x.x].lua[.bak] and site_config[_x_x].lua
 local function backup_config_files()
   local temppath
   while not temppath do
@@ -673,12 +611,14 @@ local function backup_config_files()
   vars.CONFBACKUPDIR = temppath
   mkdir(vars.CONFBACKUPDIR)
   exec(S[[COPY "$PREFIX\config*.*" "$CONFBACKUPDIR" >NUL]])
+  exec(S[[COPY "$PREFIX\lua\luarocks\site_config*.*" "$CONFBACKUPDIR" >NUL]])
 end
 
 -- restore previously backed up config files
 local function restore_config_files()
   if not vars.CONFBACKUPDIR then return end -- there is no backup to restore
   exec(S[[COPY "$CONFBACKUPDIR\config*.*" "$PREFIX" >NUL]])
+  exec(S[[COPY "$CONFBACKUPDIR\site_config*.*" "$PREFIX\lua\luarocks" >NUL]])
   -- cleanup
   exec(S[[RD /S /Q "$CONFBACKUPDIR"]])
   vars.CONFBACKUPDIR = nil
@@ -888,6 +828,7 @@ vars.SYSCONFFILENAME = S"config-$LUA_VERSION.lua"
 vars.CONFIG_FILE = vars.SYSCONFDIR.."\\"..vars.SYSCONFFILENAME
 if SELFCONTAINED then
 	vars.SYSCONFDIR = vars.PREFIX
+	vars.SYSCONFFORCE = true
 	vars.TREE_ROOT = vars.PREFIX..[[\systree]]
 	REGISTRY = false
 end
@@ -1070,33 +1011,43 @@ restore_config_files()
 print()
 print("Configuring LuaRocks...")
 
--- Create hardcoded.lua
-
-local hardcoded_lua = S[[$LUADIR\luarocks\core\hardcoded.lua]]
-
-os.remove(hardcoded_lua)
-
-vars.SYSTEM = USE_MINGW and "mingw" or "windows"
-
-local f = io.open(hardcoded_lua, "w")
+-- Create a site-config file
+local site_config = S("site_config_$LUA_VERSION"):gsub("%.","_")
+if exists(S([[$LUADIR\luarocks\]]..site_config..[[.lua]])) then
+	local nname = backup(S([[$LUADIR\luarocks\]]..site_config..[[.lua]]), site_config..".lua.bak")
+	print("***************")
+	print("*** WARNING *** LuaRocks site_config file already exists: '"..site_config..".lua'. The old file has been renamed to '"..nname.."'")
+	print("***************")
+end
+local f = io.open(vars.LUADIR.."\\luarocks\\"..site_config..".lua", "w")
 f:write(S[=[
-return {
-   LUA_INCDIR=[[$LUA_INCDIR]],
-   LUA_LIBDIR=[[$LUA_LIBDIR]],
-   LUA_BINDIR=[[$LUA_BINDIR]],
-   LUA_INTERPRETER=[[$LUA_INTERPRETER]],
-   SYSTEM = [[$SYSTEM]],
-   PROCESSOR = [[$UNAME_M]],
-   PREFIX = [[$PREFIX]],
-   SYSCONFDIR = [[$SYSCONFDIR]],
-   WIN_TOOLS = [[$PREFIX/tools]],
+local site_config = {}
+site_config.LUA_INCDIR=[[$LUA_INCDIR]]
+site_config.LUA_LIBDIR=[[$LUA_LIBDIR]]
+site_config.LUA_BINDIR=[[$LUA_BINDIR]]
+site_config.LUA_INTERPRETER=[[$LUA_INTERPRETER]]
+]=])
+if USE_MINGW then
+	f:write("site_config.LUAROCKS_UNAME_S=[[MINGW]]\n")
+else
+	f:write("site_config.LUAROCKS_UNAME_S=[[WindowsNT]]\n")
+end
+f:write(S[=[
+site_config.LUAROCKS_UNAME_M=[[$UNAME_M]]
+site_config.LUAROCKS_ROCKS_TREE=[[$TREE_ROOT]]
+site_config.LUAROCKS_PREFIX=[[$PREFIX]]
+site_config.LUAROCKS_DOWNLOADER=[[wget]]
+site_config.LUAROCKS_MD5CHECKER=[[md5sum]]
 ]=])
 if FORCE_CONFIG then
-	f:write("   FORCE_CONFIG = true,\n")
+	f:write("site_config.LUAROCKS_FORCE_CONFIG=true\n")
 end
-f:write("}\n")
+if vars.SYSCONFFORCE then  -- only write this value when explcitly given, otherwise rely on defaults
+	f:write(S("site_config.LUAROCKS_SYSCONFDIR=[[$SYSCONFDIR]]\n"))
+end
+f:write("return site_config\n")
 f:close()
-print(S([[Created LuaRocks hardcoded settings file: $LUADIR\luarocks\core\hardcoded.lua]]))
+print(S([[Created LuaRocks site-config file: $LUADIR\luarocks\]]..site_config..[[.lua]]))
 
 -- create config file
 if not exists(vars.SYSCONFDIR) then
@@ -1185,8 +1136,10 @@ end
 -- ***********************************************************
 -- Cleanup
 -- ***********************************************************
--- remove registry related files, no longer needed
+-- remove regsitry related files, no longer needed
 exec( S[[del "$PREFIX\LuaRocks.reg.*" >NUL]] )
+-- remove pe-parser module
+exec( S[[del "$PREFIX\pe-parser.lua" >NUL]] )
 
 -- ***********************************************************
 -- Exit handlers 

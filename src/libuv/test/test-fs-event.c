@@ -25,10 +25,6 @@
 #include <string.h>
 #include <fcntl.h>
 
-#if defined(__APPLE__) && !TARGET_OS_IPHONE
-# include <AvailabilityMacros.h>
-#endif
-
 #ifndef HAVE_KQUEUE
 # if defined(__APPLE__) ||                                                    \
      defined(__DragonFly__) ||                                                \
@@ -51,7 +47,6 @@ static const char file_prefix[] = "fsevent-";
 static const int fs_event_file_count = 16;
 #if defined(__APPLE__) || defined(_WIN32)
 static const char file_prefix_in_subdir[] = "subdir";
-static int fs_multievent_cb_called;
 #endif
 static uv_timer_t timer;
 static int timer_cb_called;
@@ -285,7 +280,7 @@ static void fs_event_cb_dir_multi_file_in_subdir(uv_fs_event_t* handle,
   if (filename && strcmp(filename, file_prefix_in_subdir) == 0)
     return;
 #endif
-  fs_multievent_cb_called++;
+  fs_event_cb_called++;
   ASSERT(handle == &fs_event);
   ASSERT(status == 0);
   ASSERT(events == UV_CHANGE || events == UV_RENAME);
@@ -303,7 +298,7 @@ static void fs_event_cb_dir_multi_file_in_subdir(uv_fs_event_t* handle,
   if (fs_event_created + fs_event_removed == fs_event_file_count) {
     /* Once we've processed all create events, delete all files */
     ASSERT(0 == uv_timer_start(&timer, fs_event_unlink_files_in_subdir, 1, 0));
-  } else if (fs_multievent_cb_called == 2 * fs_event_file_count) {
+  } else if (fs_event_cb_called == 2 * fs_event_file_count) {
     /* Once we've processed all create and delete events, stop watching */
     uv_close((uv_handle_t*) &timer, close_cb);
     uv_close((uv_handle_t*) handle, close_cb);
@@ -398,21 +393,6 @@ static void timer_cb_watch_twice(uv_timer_t* handle) {
   uv_close((uv_handle_t*) handle, NULL);
 }
 
-static void fs_event_cb_close(uv_fs_event_t* handle,
-                              const char* filename,
-                              int events,
-                              int status) {
-  ASSERT(status == 0);
-
-  ASSERT(fs_event_cb_called < 3);
-  ++fs_event_cb_called;
-
-  if (fs_event_cb_called == 3) {
-    uv_close((uv_handle_t*) handle, close_cb);
-  }
-}
-
-
 TEST_IMPL(fs_event_watch_dir) {
 #if defined(NO_FS_EVENTS)
   RETURN_SKIP(NO_FS_EVENTS);
@@ -454,12 +434,10 @@ TEST_IMPL(fs_event_watch_dir) {
   return 0;
 }
 
-
 TEST_IMPL(fs_event_watch_dir_recursive) {
 #if defined(__APPLE__) || defined(_WIN32)
   uv_loop_t* loop;
   int r;
-  uv_fs_event_t fs_event_root;
 
   /* Setup */
   loop = uv_default_loop();
@@ -473,37 +451,17 @@ TEST_IMPL(fs_event_watch_dir_recursive) {
 
   r = uv_fs_event_init(loop, &fs_event);
   ASSERT(r == 0);
-  r = uv_fs_event_start(&fs_event,
-                        fs_event_cb_dir_multi_file_in_subdir,
-                        "watch_dir",
-                        UV_FS_EVENT_RECURSIVE);
+  r = uv_fs_event_start(&fs_event, fs_event_cb_dir_multi_file_in_subdir, "watch_dir", UV_FS_EVENT_RECURSIVE);
   ASSERT(r == 0);
   r = uv_timer_init(loop, &timer);
   ASSERT(r == 0);
   r = uv_timer_start(&timer, fs_event_create_files_in_subdir, 100, 0);
   ASSERT(r == 0);
 
-#ifndef _WIN32
-  /* Also try to watch the root directory.
-   * This will be noisier, so we're just checking for any couple events to happen. */
-  r = uv_fs_event_init(loop, &fs_event_root);
-  ASSERT(r == 0);
-  r = uv_fs_event_start(&fs_event_root,
-                        fs_event_cb_close,
-                        "/",
-                        UV_FS_EVENT_RECURSIVE);
-  ASSERT(r == 0);
-#else
-  fs_event_cb_called += 3;
-  close_cb_called += 1;
-  (void)fs_event_root;
-#endif
-
   uv_run(loop, UV_RUN_DEFAULT);
 
-  ASSERT(fs_multievent_cb_called == fs_event_created + fs_event_removed);
-  ASSERT(fs_event_cb_called == 3);
-  ASSERT(close_cb_called == 3);
+  ASSERT(fs_event_cb_called == fs_event_created + fs_event_removed);
+  ASSERT(close_cb_called == 2);
 
   /* Cleanup */
   fs_event_unlink_files_in_subdir(NULL);
@@ -638,7 +596,6 @@ TEST_IMPL(fs_event_watch_file_exact_path) {
    * versions. Give a long delay here to let the system settle before running
    * the test. */
   uv_sleep(1100);
-  uv_update_time(loop);
 #endif
 
   r = uv_fs_event_init(loop, &fs_event);
@@ -699,13 +656,6 @@ TEST_IMPL(fs_event_watch_file_current_dir) {
   /* Setup */
   remove("watch_file");
   create_file("watch_file");
-#if defined(__APPLE__) && !defined(MAC_OS_X_VERSION_10_12)
-  /* Empirically, kevent seems to (sometimes) report the preceeding
-   * create_file events prior to macOS 10.11.6 in the subsequent fs_event_start
-   * So let the system settle before running the test. */
-  uv_sleep(1100);
-  uv_update_time(loop);
-#endif
 
   r = uv_fs_event_init(loop, &fs_event);
   ASSERT(r == 0);
@@ -912,6 +862,18 @@ TEST_IMPL(fs_event_close_with_pending_event) {
 
   MAKE_VALGRIND_HAPPY();
   return 0;
+}
+
+static void fs_event_cb_close(uv_fs_event_t* handle, const char* filename,
+    int events, int status) {
+  ASSERT(status == 0);
+
+  ASSERT(fs_event_cb_called < 3);
+  ++fs_event_cb_called;
+
+  if (fs_event_cb_called == 3) {
+    uv_close((uv_handle_t*) handle, close_cb);
+  }
 }
 
 TEST_IMPL(fs_event_close_in_callback) {

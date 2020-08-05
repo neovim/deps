@@ -8,116 +8,69 @@
 local pairs = pairs
 
 local fs = {}
--- To avoid a loop when loading the other fs modules.
 package.loaded["luarocks.fs"] = fs
 
-local cfg = require("luarocks.core.cfg")
+local cfg = require("luarocks.cfg")
 
 local pack = table.pack or function(...) return { n = select("#", ...), ... } end
 local unpack = table.unpack or unpack
 
-math.randomseed(os.time())
+local old_popen, old_exec
+fs.verbose = function()    -- patch io.popen and os.execute to display commands in verbose mode
+  if old_popen or old_exec then return end
+  old_popen = io.popen
+  io.popen = function(one, two)
+    if two == nil then
+      print("\nio.popen: ", one)
+    else
+      print("\nio.popen: ", one, "Mode:", two)
+    end
+    return old_popen(one, two)
+  end
+  
+  old_exec = os.execute
+  os.execute = function(cmd)
+    -- redact api keys if present
+    print("\nos.execute: ", (cmd:gsub("(/api/[^/]+/)([^/]+)/", function(cap, key) return cap.."<redacted>/" end)) )
+    local code = pack(old_exec(cmd))
+    print("Results: "..tostring(code.n))
+    for i = 1,code.n do
+      print("  "..tostring(i).." ("..type(code[i]).."): "..tostring(code[i]))
+    end
+    return unpack(code, 1, code.n)    
+  end
+end
+if cfg.verbose then fs.verbose() end
 
-do
-   local old_popen, old_execute
-
-   -- patch io.popen and os.execute to display commands in verbose mode
-   function fs.verbose()
-      if old_popen or old_execute then return end
-      old_popen = io.popen
-      io.popen = function(one, two)
-         if two == nil then
-            print("\nio.popen: ", one)
-         else
-            print("\nio.popen: ", one, "Mode:", two)
-         end
-         return old_popen(one, two)
-      end
-
-      old_execute = os.execute
-      os.execute = function(cmd)
-         -- redact api keys if present
-         print("\nos.execute: ", (cmd:gsub("(/api/[^/]+/)([^/]+)/", function(cap, key) return cap.."<redacted>/" end)) )
-         local code = pack(old_execute(cmd))
-         print("Results: "..tostring(code.n))
-         for i = 1,code.n do
-            print("  "..tostring(i).." ("..type(code[i]).."): "..tostring(code[i]))
-         end
-         return unpack(code, 1, code.n)
+local function load_fns(fs_table)
+   for name, fn in pairs(fs_table) do
+      if not fs[name] then
+         fs[name] = fn
       end
    end
 end
 
-do
-   local function load_fns(fs_table, inits)
-      for name, fn in pairs(fs_table) do
-         if name ~= "init" and not fs[name] then
-            fs[name] = fn
-         end
-      end
-      if fs_table.init then
-         table.insert(inits, fs_table.init)
-      end
-   end
-
-   local function load_platform_fns(patt, inits)
-      local each_platform = cfg.each_platform
-
-      -- FIXME A quick hack for the experimental Windows build
-      if os.getenv("LUAROCKS_CROSS_COMPILING") then
-         each_platform = function()
-            local i = 0
-            local plats = { "linux", "unix" }
-            return function()
-               i = i + 1
-               return plats[i]
-            end
-         end
-      end
-
-      for platform in each_platform("most-specific-first") do
-         local ok, fs_plat = pcall(require, patt:format(platform))
-         if ok and fs_plat then
-            load_fns(fs_plat, inits)
-         end
-      end
-   end
-
-   function fs.init()
-      local inits = {}
-
-      if fs.current_dir then
-         -- unload luarocks fs so it can be reloaded using all modules
-         -- providing extra functionality in the current package paths
-         for k, _ in pairs(fs) do
-            if k ~= "init" and k ~= "verbose" then
-               fs[k] = nil
-            end
-         end
-         for m, _ in pairs(package.loaded) do
-            if m:match("luarocks%.fs%.") then
-               package.loaded[m] = nil
-            end
-         end
-      end
-
-      -- Load platform-specific functions
-      load_platform_fns("luarocks.fs.%s", inits)
-
-      -- Load platform-independent pure-Lua functionality
-      load_fns(require("luarocks.fs.lua"), inits)
-
-      -- Load platform-specific fallbacks for missing Lua modules
-      load_platform_fns("luarocks.fs.%s.tools", inits)
-
-      -- Load platform-independent external tool functionality
-      load_fns(require("luarocks.fs.tools"), inits)
-
-      -- Run platform-specific initializations after everything is loaded
-      for _, init in ipairs(inits) do
-         init()
-      end
+-- Load platform-specific functions
+local loaded_platform = nil
+for _, platform in ipairs(cfg.platforms) do
+   local ok, fs_plat = pcall(require, "luarocks.fs."..platform)
+   if ok and fs_plat then
+      loaded_platform = platform
+      load_fns(fs_plat)
+      break
    end
 end
+
+-- Load platform-independent pure-Lua functionality
+local fs_lua = require("luarocks.fs.lua")
+load_fns(fs_lua)
+
+-- Load platform-specific fallbacks for missing Lua modules
+local ok, fs_plat_tools = pcall(require, "luarocks.fs."..loaded_platform..".tools")
+if ok and fs_plat_tools then
+   load_fns(fs_plat_tools)
+   load_fns(require("luarocks.fs.tools"))
+end
+
 
 return fs

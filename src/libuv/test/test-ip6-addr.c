@@ -160,12 +160,3 @@ TEST_IMPL(ip6_pton) {
 
 #undef GOOD_ADDR_LIST
 #undef BAD_ADDR_LIST
-
-#ifdef SIN6_LEN
-TEST_IMPL(ip6_sin6_len) {
-  struct sockaddr_in6 s;
-  ASSERT(uv_ip6_addr("::", 0, &s) < 0);
-  ASSERT(s.sin6_len == sizeof(s));
-  return 0;
-}
-#endif

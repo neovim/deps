@@ -1,4 +1,4 @@
-local test_env = require("spec.util.test_env")
+local test_env = require("test/test_environment")
 local run = test_env.run
 local testing_paths = test_env.testing_paths
 
@@ -10,7 +10,7 @@ local extra_rocks = {
    "/luazip-1.2.4-1.rockspec"
 }
 
-describe("LuaRocks unpack tests #integration", function()
+describe("LuaRocks unpack tests #blackbox #b_unpack", function()
    
    before_each(function()
       test_env.setup_specs(extra_rocks)
@@ -26,7 +26,7 @@ describe("LuaRocks unpack tests #integration", function()
       end)
       
       it("LuaRocks unpack with invalid patch", function()
-         assert.is_false(run.luarocks_bool("unpack " .. testing_paths.fixtures_dir .. "/invalid_patch-0.1-1.rockspec"))
+         assert.is_false(run.luarocks_bool("unpack " .. testing_paths.testing_dir .. "/testfiles/invalid_patch-0.1-1.rockspec"))
       end)
    end)
 
@@ -50,15 +50,7 @@ describe("LuaRocks unpack tests #integration", function()
          os.remove("lua-cprint")
          test_env.remove_dir("cprint-0.1-2")
       end)
-
-      -- #595 luarocks unpack of a git:// rockspec fails to copy the rockspec
-      it("LuaRocks unpack git:// rockspec", function()
-         assert.is_true(run.luarocks_bool("download --rockspec luazip"))
-         assert.is_true(run.luarocks_bool("unpack luazip-1.2.4-1.rockspec"))
-         assert.is_truthy(lfs.attributes("luazip-1.2.4-1/luazip/luazip-1.2.4-1.rockspec"))
-         test_env.remove_dir("luazip-1.2.4-1")
-      end)
-
+      
       it("LuaRocks unpack binary", function()
          assert.is_true(run.luarocks_bool("build cprint"))
          assert.is_true(run.luarocks_bool("pack cprint"))
@@ -68,3 +60,5 @@ describe("LuaRocks unpack tests #integration", function()
       end)
    end)
 end)
+
+

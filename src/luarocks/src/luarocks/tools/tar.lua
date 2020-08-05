@@ -4,7 +4,7 @@ local tar = {}
 
 local fs = require("luarocks.fs")
 local dir = require("luarocks.dir")
-local fun = require("luarocks.fun")
+local util = require("luarocks.util")
 
 local blocksize = 512
 
@@ -28,14 +28,12 @@ end
 local function octal_to_number(octal)
    local exp = 0
    local number = 0
-   octal = octal:gsub("%s", "")
    for i = #octal,1,-1 do
       local digit = tonumber(octal:sub(i,i)) 
-      if not digit then
-         break
+      if digit then
+         number = number + (digit * 8^exp)
+         exp = exp + 1
       end
-      number = number + (digit * 8^exp)
-      exp = exp + 1
    end
    return number
 end
@@ -43,12 +41,10 @@ end
 local function checksum_header(block)
    local sum = 256
    for i = 1,148 do
-      local b = block:byte(i) or 0
-      sum = sum + b
+      sum = sum + block:byte(i)
    end
    for i = 157,500 do
-      local b = block:byte(i) or 0
-      sum = sum + b
+      sum = sum + block:byte(i)
    end
    return sum
 end
@@ -60,7 +56,7 @@ end
 local function read_header_block(block)
    local header = {}
    header.name = nullterm(block:sub(1,100))
-   header.mode = nullterm(block:sub(101,108)):gsub(" ", "")
+   header.mode = nullterm(block:sub(101,108))
    header.uid = octal_to_number(nullterm(block:sub(109,116)))
    header.gid = octal_to_number(nullterm(block:sub(117,124)))
    header.size = octal_to_number(nullterm(block:sub(125,136)))
@@ -75,12 +71,12 @@ local function read_header_block(block)
    header.devmajor = octal_to_number(nullterm(block:sub(330,337)))
    header.devminor = octal_to_number(nullterm(block:sub(338,345)))
    header.prefix = block:sub(346,500)
-   -- if header.magic ~= "ustar " and header.magic ~= "ustar\0" then
-   --    return false, ("Invalid header magic %6x"):format(bestring_to_number(header.magic))
-   -- end
-   -- if header.version ~= "00" and header.version ~= " \0" then
-   --    return false, "Unknown version "..header.version
-   -- end
+   if header.magic ~= "ustar " and header.magic ~= "ustar\0" then
+      return false, "Invalid header magic "..header.magic
+   end
+   if header.version ~= "00" and header.version ~= " \0" then
+      return false, "Unknown version "..header.version
+   end
    if not checksum_header(block) == header.chksum then
       return false, "Failed header checksum"
    end
@@ -91,27 +87,19 @@ function tar.untar(filename, destdir)
    assert(type(filename) == "string")
    assert(type(destdir) == "string")
 
-   local tar_handle = io.open(filename, "rb")
+   local tar_handle = io.open(filename, "r")
    if not tar_handle then return nil, "Error opening file "..filename end
    
    local long_name, long_link_name
-   local ok, err
-   local make_dir = fun.memoize(fs.make_dir)
    while true do
       local block
-      repeat
+      repeat 
          block = tar_handle:read(blocksize)
       until (not block) or checksum_header(block) > 256
       if not block then break end
-      if #block < blocksize then
-         ok, err = nil, "Invalid block size -- corrupted file?"
-         break
-      end
-      local header
-      header, err = read_header_block(block)
+      local header, err = read_header_block(block)
       if not header then
-         ok = false
-         break
+         util.printerr(err)
       end
 
       local file_data = tar_handle:read(math.ceil(header.size / blocksize) * blocksize):sub(1,header.size)
@@ -131,33 +119,21 @@ function tar.untar(filename, destdir)
          end
       end
       local pathname = dir.path(destdir, header.name)
-      pathname = fs.absolute_name(pathname)
       if header.typeflag == "directory" then
-         ok, err = make_dir(pathname)
-         if not ok then
-            break
-         end
+         local ok, err = fs.make_dir(pathname)
+         if not ok then return nil, err end
       elseif header.typeflag == "file" then
          local dirname = dir.dir_name(pathname)
          if dirname ~= "" then
-            ok, err = make_dir(dirname)
-            if not ok then
-               break
-            end
+            local ok, err = fs.make_dir(dirname)
+            if not ok then return nil, err end
          end
-         local file_handle
-         file_handle, err = io.open(pathname, "wb")
-         if not file_handle then
-            ok = nil
-            break
-         end
+         local file_handle = io.open(pathname, "wb")
          file_handle:write(file_data)
          file_handle:close()
          fs.set_time(pathname, header.mtime)
-         if header.mode:match("[75]") then
-            fs.set_permissions(pathname, "exec", "all")
-         else
-            fs.set_permissions(pathname, "read", "all")
+         if fs.chmod then
+            fs.chmod(pathname, header.mode)
          end
       end
       --[[
@@ -168,7 +144,7 @@ function tar.untar(filename, destdir)
       --]]
    end
    tar_handle:close()
-   return ok, err
+   return true
 end
 
 return tar

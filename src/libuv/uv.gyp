@@ -20,7 +20,6 @@
           '_UNIX03_SOURCE',
           '_UNIX03_WITHDRAWN',
           '_OPEN_SYS_IF_EXT',
-          '_OPEN_SYS_SOCK_EXT3',
           '_OPEN_SYS_SOCK_IPV6',
           '_OPEN_MSGQ_EXT',
           '_XOPEN_SOURCE_EXTENDED',
@@ -75,7 +74,6 @@
         'src/idna.h',
         'src/inet.c',
         'src/queue.h',
-        'src/random.c',
         'src/strscpy.c',
         'src/strscpy.h',
         'src/threadpool.c',
@@ -93,7 +91,7 @@
           '-Wno-unused-parameter',
           '-Wstrict-prototypes',
         ],
-        'OTHER_CFLAGS': [ '-g', '--std=gnu89' ],
+        'OTHER_CFLAGS': [ '-g', '--std=gnu89', '-pedantic' ],
       },
       'conditions': [
         [ 'OS=="win"', {
@@ -168,7 +166,6 @@
             'src/unix/pipe.c',
             'src/unix/poll.c',
             'src/unix/process.c',
-            'src/unix/random-devurandom.c',
             'src/unix/signal.c',
             'src/unix/spinlock.h',
             'src/unix/stream.c',
@@ -217,6 +214,7 @@
             '-fvisibility=hidden',
             '-g',
             '--std=gnu89',
+            '-pedantic',
             '-Wall',
             '-Wextra',
             '-Wno-unused-parameter',
@@ -227,8 +225,7 @@
           'sources': [
             'src/unix/darwin.c',
             'src/unix/fsevents.c',
-            'src/unix/darwin-proctitle.c',
-            'src/unix/random-getentropy.c',
+            'src/unix/darwin-proctitle.c'
           ],
           'defines': [
             '_DARWIN_USE_64_BIT_INODE=1',
@@ -243,8 +240,6 @@
             'src/unix/linux-syscalls.c',
             'src/unix/linux-syscalls.h',
             'src/unix/procfs-exepath.c',
-            'src/unix/random-getrandom.c',
-            'src/unix/random-sysctl-linux.c',
             'src/unix/sysinfo-loadavg.c',
           ],
           'link_settings': {
@@ -260,9 +255,8 @@
             'src/unix/pthread-fixes.c',
             'src/unix/android-ifaddrs.c',
             'src/unix/procfs-exepath.c',
-            'src/unix/random-getrandom.c',
-            'src/unix/random-sysctl-linux.c',
             'src/unix/sysinfo-loadavg.c',
+            'src/unix/sysinfo-memory.c',
           ],
           'link_settings': {
             'libraries': [ '-ldl' ],
@@ -325,14 +319,8 @@
         [ 'OS=="freebsd" or OS=="dragonflybsd"', {
           'sources': [ 'src/unix/freebsd.c' ],
         }],
-        [ 'OS=="freebsd"', {
-          'sources': [ 'src/unix/random-getrandom.c' ],
-        }],
         [ 'OS=="openbsd"', {
-          'sources': [
-            'src/unix/openbsd.c',
-            'src/unix/random-getentropy.c',
-          ],
+          'sources': [ 'src/unix/openbsd.c' ],
         }],
         [ 'OS=="netbsd"', {
           'link_settings': {
