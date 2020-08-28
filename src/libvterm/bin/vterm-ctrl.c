@@ -1,4 +1,4 @@
-#define _XOPEN_SOURCE 500  /* strdup */
+#define _XOPEN_SOURCE 600  /* strdup */
 
 #include <stdbool.h>
 #include <stdio.h>
