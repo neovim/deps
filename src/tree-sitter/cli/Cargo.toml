@@ -1,0 +1,63 @@
+[package]
+name = "tree-sitter-cli"
+description = "CLI tool for developing, testing, and using Tree-sitter parsers"
+version = "0.17.3"
+authors = ["Max Brunsfeld <maxbrunsfeld@gmail.com>"]
+edition = "2018"
+license = "MIT"
+readme = "README.md"
+keywords = ["incremental", "parsing"]
+categories = ["command-line-utilities", "parsing"]
+repository = "https://github.com/tree-sitter/tree-sitter"
+
+[[bin]]
+name = "tree-sitter"
+path = "src/main.rs"
+
+[[bench]]
+name = "benchmark"
+harness = false
+
+[dependencies]
+ansi_term = "0.11"
+cc = "1.0"
+atty = "0.2"
+clap = "2.32"
+difference = "2.0"
+dirs = "2.0.2"
+glob = "0.3.0"
+lazy_static = "1.2.0"
+libloading = "0.5"
+once_cell = "0.1.8"
+regex = "1"
+regex-syntax = "0.6.4"
+serde = "1.0"
+serde_derive = "1.0"
+smallbitvec = "2.3.0"
+tiny_http = "0.6"
+webbrowser = "0.5.1"
+
+[dependencies.tree-sitter]
+version = ">= 0.17.0"
+path = "../lib"
+
+[dependencies.tree-sitter-highlight]
+version = ">= 0.3.0"
+path = "../highlight"
+
+[dependencies.tree-sitter-tags]
+version = ">= 0.1.0"
+path = "../tags"
+
+[dependencies.serde_json]
+version = "1.0"
+features = ["preserve_order"]
+
+[dependencies.log]
+version = "0.4.6"
+features = ["std"]
+
+[dev-dependencies]
+rand = "0.7.0"
+spin = "0.5"
+tempfile = "3"
