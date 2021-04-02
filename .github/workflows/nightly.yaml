@@ -1,0 +1,58 @@
+name: Update deps
+on:
+  schedule:
+    - cron: '5 5 * * *'
+  workflow_dispatch:
+
+env:
+  NEOVIM_DIR: ${{ format('{0}/neovim', github.workspace) }}
+  NEOVIM_REPO: 'neovim/neovim'
+
+jobs:
+  deps:
+    runs-on: ubuntu-20.04
+    steps:
+      - uses: actions/checkout@v2
+
+      - uses: actions/checkout@v2
+        with:
+          repository: ${{ env.NEOVIM_REPO }}
+          path: ${{ env.NEOVIM_DIR }}
+
+      - name: Setup git config
+        run: |
+          git config --global user.name 'marvim'
+          git config --global user.email 'marvim@users.noreply.github.com'
+
+      - name: Install apt packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y autoconf automake build-essential cmake gettext gperf ninja-build libtool-bin locales pkg-config rsync
+
+      - name: Build third-party
+        run: |
+          cd "$NEOVIM_DIR"
+          mkdir deps
+          cd deps
+          cmake -G Ninja -DUSE_BUNDLED_BUSTED=OFF "${NEOVIM_DIR}/third-party/"
+          ninja
+
+      - name: Cleanup src/
+        run: |
+          cd "${NEOVIM_DIR}/deps/build/src"
+          rm -rf ./*-build
+          rm -r ./*-stamp/*-{configure,build,install,done}
+          while read dir; do
+            cd "${NEOVIM_DIR}/deps/build/src/${dir}"
+            echo "Cleaning ${dir}."
+            rm -rf autom4te.cache
+            make clean || true
+            make distclean || true
+          done <<< "$(find . -maxdepth 1 -mindepth 1 -type d -printf '%f\n')"
+
+      - name: Update deps repo
+        run: |
+          rsync -av --delete "${NEOVIM_DIR}/deps/build/src/" "${GITHUB_WORKSPACE}/src/"
+          git add "${GITHUB_WORKSPACE}/src/"
+          git commit -m 'deps src: Automatic update' || true
+          git push https://${GITHUB_ACTOR}:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}
