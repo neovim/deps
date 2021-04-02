@@ -1,8 +1,5 @@
-use crate::generate::grammars::{
-    LexicalGrammar, Production, ProductionStep, SyntaxGrammar,
-};
-use crate::generate::rules::Associativity;
-use crate::generate::rules::{Symbol, SymbolType, TokenSet};
+use crate::generate::grammars::{LexicalGrammar, Production, ProductionStep, SyntaxGrammar};
+use crate::generate::rules::{Associativity, Precedence, Symbol, SymbolType, TokenSet};
 use lazy_static::lazy_static;
 use std::cmp::Ordering;
 use std::fmt;
@@ -17,7 +14,7 @@ lazy_static! {
                 index: 0,
                 kind: SymbolType::NonTerminal,
             },
-            precedence: 0,
+            precedence: Precedence::None,
             associativity: None,
             alias: None,
             field_name: None,
@@ -25,18 +22,42 @@ lazy_static! {
     };
 }
 
+/// A ParseItem represents an in-progress match of a single production in a grammar.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct ParseItem<'a> {
+    /// The index of the parent rule within the grammar.
     pub variable_index: u32,
+    /// The number of symbols that have already been matched.
     pub step_index: u32,
+    /// The production being matched.
     pub production: &'a Production,
+    /// A boolean indicating whether any of the already-matched children were
+    /// hidden nodes and had fields. Ordinarily, a parse item's behavior is not
+    /// affected by the symbols of its preceding children; it only needs to
+    /// keep track of their fields and aliases.
+    ///
+    /// Take for example these two items:
+    ///   X -> a b • c
+    ///   X -> a g • c
+    ///
+    /// They can be considered equivalent, for the purposes of parse table
+    /// generation, because they entail the same actions. But if this flag is
+    /// true, then the item's set of inherited fields may depend on the specific
+    /// symbols of its preceding children.
+    pub has_preceding_inherited_fields: bool,
 }
 
+/// A ParseItemSet represents a set of in-progress matches of productions in a
+/// grammar, and for each in-progress match, a set of "lookaheads" - tokens that
+/// are allowed to *follow* the in-progress rule. This object corresponds directly
+/// to a state in the final parse table.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct ParseItemSet<'a> {
     pub entries: Vec<(ParseItem<'a>, TokenSet)>,
 }
 
+/// A ParseItemSetCore is like a ParseItemSet, but without the lookahead
+/// information. Parse states with the same core are candidates for merging.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct ParseItemSetCore<'a> {
     pub entries: Vec<ParseItem<'a>>,
@@ -67,6 +88,7 @@ impl<'a> ParseItem<'a> {
             variable_index: u32::MAX,
             production: &START_PRODUCTION,
             step_index: 0,
+            has_preceding_inherited_fields: false,
         }
     }
 
@@ -82,8 +104,9 @@ impl<'a> ParseItem<'a> {
         self.prev_step().and_then(|step| step.associativity)
     }
 
-    pub fn precedence(&self) -> i32 {
-        self.prev_step().map_or(0, |step| step.precedence)
+    pub fn precedence(&self) -> &Precedence {
+        self.prev_step()
+            .map_or(&Precedence::None, |step| &step.precedence)
     }
 
     pub fn prev_step(&self) -> Option<&'a ProductionStep> {
@@ -102,12 +125,22 @@ impl<'a> ParseItem<'a> {
         self.variable_index == u32::MAX
     }
 
+    /// Create an item like this one, but advanced by one step.
     pub fn successor(&self) -> ParseItem<'a> {
         ParseItem {
             variable_index: self.variable_index,
             production: self.production,
             step_index: self.step_index + 1,
+            has_preceding_inherited_fields: self.has_preceding_inherited_fields,
         }
+    }
+
+    /// Create an item identical to this one, but with a different production.
+    /// This is used when dynamically "inlining" certain symbols in a production.
+    pub fn substitute_production(&self, production: &'a Production) -> ParseItem<'a> {
+        let mut result = self.clone();
+        result.production = production;
+        result
     }
 }
 
@@ -165,12 +198,12 @@ impl<'a> fmt::Display for ParseItemDisplay<'a> {
             if i == self.0.step_index as usize {
                 write!(f, " •")?;
                 if let Some(associativity) = step.associativity {
-                    if step.precedence != 0 {
+                    if !step.precedence.is_none() {
                         write!(f, " ({} {:?})", step.precedence, associativity)?;
                     } else {
                         write!(f, " ({:?})", associativity)?;
                     }
-                } else if step.precedence != 0 {
+                } else if !step.precedence.is_none() {
                     write!(f, " ({})", step.precedence)?;
                 }
             }
@@ -197,12 +230,12 @@ impl<'a> fmt::Display for ParseItemDisplay<'a> {
             write!(f, " •")?;
             if let Some(step) = self.0.production.steps.last() {
                 if let Some(associativity) = step.associativity {
-                    if step.precedence != 0 {
+                    if !step.precedence.is_none() {
                         write!(f, " ({} {:?})", step.precedence, associativity)?;
                     } else {
                         write!(f, " ({:?})", associativity)?;
                     }
-                } else if step.precedence != 0 {
+                } else if !step.precedence.is_none() {
                     write!(f, " ({})", step.precedence)?;
                 }
             }
@@ -257,22 +290,21 @@ impl<'a> Hash for ParseItem<'a> {
         hasher.write_u32(self.step_index);
         hasher.write_i32(self.production.dynamic_precedence);
         hasher.write_usize(self.production.steps.len());
-        hasher.write_i32(self.precedence());
+        self.precedence().hash(hasher);
         self.associativity().hash(hasher);
 
-        // When comparing two parse items, the symbols that were already consumed by
-        // both items don't matter. Take for example these two items:
-        //   X -> a b • c
-        //   X -> a d • c
-        // These two items can be considered equivalent, for the purposes of parse
-        // table generation, because they entail the same actions. However, if the
-        // productions have different aliases or field names, they *cannot* be
-        // treated as equivalent, because those details are ultimately stored as
-        // attributes of the `REDUCE` action that will be performed when the item
-        // is finished.
+        // The already-matched children don't play any role in the parse state for
+        // this item, unless any of the following are true:
+        //   * the children have fields
+        //   * the children have aliases
+        //   * the children are hidden and
+        // See the docs for `has_preceding_inherited_fields`.
         for step in &self.production.steps[0..self.step_index as usize] {
             step.alias.hash(hasher);
             step.field_name.hash(hasher);
+            if self.has_preceding_inherited_fields {
+                step.symbol.hash(hasher);
+            }
         }
         for step in &self.production.steps[self.step_index as usize..] {
             step.hash(hasher);
@@ -288,6 +320,7 @@ impl<'a> PartialEq for ParseItem<'a> {
             || self.production.steps.len() != other.production.steps.len()
             || self.precedence() != other.precedence()
             || self.associativity() != other.associativity()
+            || self.has_preceding_inherited_fields != other.has_preceding_inherited_fields
         {
             return false;
         }
@@ -300,6 +333,11 @@ impl<'a> PartialEq for ParseItem<'a> {
                     return false;
                 }
                 if step.field_name != other.production.steps[i].field_name {
+                    return false;
+                }
+                if self.has_preceding_inherited_fields
+                    && step.symbol != other.production.steps[i].symbol
+                {
                     return false;
                 }
             } else if *step != other.production.steps[i] {

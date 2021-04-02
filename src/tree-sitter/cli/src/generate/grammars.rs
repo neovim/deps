@@ -1,6 +1,7 @@
 use super::nfa::Nfa;
-use super::rules::{Alias, Associativity, Rule, Symbol};
+use super::rules::{Alias, Associativity, Precedence, Rule, Symbol};
 use std::collections::HashMap;
+use std::fmt;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum VariableType {
@@ -19,12 +20,19 @@ pub(crate) struct Variable {
     pub rule: Rule,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub(crate) enum PrecedenceEntry {
+    Name(String),
+    Symbol(String),
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) struct InputGrammar {
     pub name: String,
     pub variables: Vec<Variable>,
     pub extra_symbols: Vec<Rule>,
     pub expected_conflicts: Vec<Vec<String>>,
+    pub precedence_orderings: Vec<Vec<PrecedenceEntry>>,
     pub external_tokens: Vec<Rule>,
     pub variables_to_inline: Vec<String>,
     pub supertype_symbols: Vec<String>,
@@ -52,7 +60,7 @@ pub(crate) struct LexicalGrammar {
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub(crate) struct ProductionStep {
     pub symbol: Symbol,
-    pub precedence: i32,
+    pub precedence: Precedence,
     pub associativity: Option<Associativity>,
     pub alias: Option<Alias>,
     pub field_name: Option<String>,
@@ -93,6 +101,7 @@ pub(crate) struct SyntaxGrammar {
     pub supertype_symbols: Vec<Symbol>,
     pub variables_to_inline: Vec<Symbol>,
     pub word_token: Option<Symbol>,
+    pub precedence_orderings: Vec<Vec<PrecedenceEntry>>,
 }
 
 #[cfg(test)]
@@ -100,14 +109,18 @@ impl ProductionStep {
     pub(crate) fn new(symbol: Symbol) -> Self {
         Self {
             symbol,
-            precedence: 0,
+            precedence: Precedence::None,
             associativity: None,
             alias: None,
             field_name: None,
         }
     }
 
-    pub(crate) fn with_prec(self, precedence: i32, associativity: Option<Associativity>) -> Self {
+    pub(crate) fn with_prec(
+        self,
+        precedence: Precedence,
+        associativity: Option<Associativity>,
+    ) -> Self {
         Self {
             symbol: self.symbol,
             precedence,
@@ -225,6 +238,10 @@ impl SyntaxVariable {
     pub fn is_auxiliary(&self) -> bool {
         self.kind == VariableType::Auxiliary
     }
+
+    pub fn is_hidden(&self) -> bool {
+        self.kind == VariableType::Hidden || self.kind == VariableType::Auxiliary
+    }
 }
 
 impl InlinedProductionMap {
@@ -241,5 +258,14 @@ impl InlinedProductionMap {
                     .cloned()
                     .map(move |index| &self.productions[index])
             })
+    }
+}
+
+impl fmt::Display for PrecedenceEntry {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            PrecedenceEntry::Name(n) => write!(f, "'{}'", n),
+            PrecedenceEntry::Symbol(s) => write!(f, "$.{}", s),
+        }
     }
 }

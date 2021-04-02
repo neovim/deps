@@ -37,7 +37,7 @@ declare module 'web-tree-sitter' {
 
     export type Logger = (
       message: string,
-      params: {[param: string]: string},
+      params: { [param: string]: string },
       type: "parse" | "lex"
     ) => void;
 
@@ -48,9 +48,9 @@ declare module 'web-tree-sitter' {
     ) => string | null;
 
     export interface SyntaxNode {
+      id: number;
       tree: Tree;
       type: string;
-      isNamed: boolean;
       text: string;
       startPosition: Point;
       endPosition: Point;
@@ -74,6 +74,7 @@ declare module 'web-tree-sitter' {
       hasError(): boolean;
       equals(other: SyntaxNode): boolean;
       isMissing(): boolean;
+      isNamed(): boolean;
       toString(): string;
       child(index: number): SyntaxNode | null;
       namedChild(index: number): SyntaxNode | null;
@@ -126,13 +127,43 @@ declare module 'web-tree-sitter' {
     }
 
     class Language {
-      static load(path: string): Promise<Language>;
+      static load(input: string | Uint8Array): Promise<Language>;
 
       readonly version: number;
       readonly fieldCount: number;
+      readonly nodeTypeCount: number;
 
-      fieldNameForId(fieldId: number): string | null
-      fieldIdForName(fieldName: string): number | null
+      fieldNameForId(fieldId: number): string | null;
+      fieldIdForName(fieldName: string): number | null;
+      idForNodeType(type: string, named: boolean): number;
+      nodeTypeForId(typeId: number): string | null;
+      nodeTypeIsNamed(typeId: number): boolean;
+      nodeTypeIsVisible(typeId: number): boolean;
+      query(source: string): Query;
+    }
+
+    interface QueryCapture {
+      name: string;
+      node: SyntaxNode;
+    }
+
+    interface QueryMatch {
+      pattern: number;
+      captures: QueryCapture[];
+    }
+
+    interface PredicateResult {
+      operator: string;
+      operands: { name: string; type: string }[];
+    }
+
+    class Query {
+      captureNames: string[];
+
+      delete(): void;
+      matches(node: SyntaxNode, startPosition?: Point, endPosition?: Point): QueryMatch[];
+      captures(node: SyntaxNode, startPosition?: Point, endPosition?: Point): QueryCapture[];
+      predicatesForPattern(patternIndex: number): PredicateResult[];
     }
   }
 

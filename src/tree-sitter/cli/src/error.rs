@@ -2,6 +2,7 @@ use super::test_highlight;
 use std::fmt::Write;
 use std::io;
 use tree_sitter::{QueryError, QueryErrorKind};
+use walkdir;
 
 #[derive(Debug)]
 pub struct Error(pub Vec<String>);
@@ -13,8 +14,9 @@ impl Error {
         Error(vec![format!("Grammar error: {}", message)])
     }
 
-    pub fn regex(message: &str) -> Self {
-        Error(vec![format!("Regex error: {}", message)])
+    pub fn regex(mut message: String) -> Self {
+        message.insert_str(0, "Regex error: ");
+        Error(vec![message])
     }
 
     pub fn undefined_symbol(name: &str) -> Self {
@@ -103,6 +105,12 @@ impl From<glob::GlobError> for Error {
     }
 }
 
+impl From<libloading::Error> for Error {
+    fn from(error: libloading::Error) -> Self {
+        Error::new(error.to_string())
+    }
+}
+
 impl From<regex_syntax::ast::Error> for Error {
     fn from(error: regex_syntax::ast::Error) -> Self {
         Error::new(error.to_string())
@@ -118,5 +126,11 @@ impl From<test_highlight::Failure> for Error {
 impl From<String> for Error {
     fn from(error: String) -> Self {
         Error::new(error)
+    }
+}
+
+impl From<walkdir::Error> for Error {
+    fn from(error: walkdir::Error) -> Self {
+        Error::new(error.to_string())
     }
 }

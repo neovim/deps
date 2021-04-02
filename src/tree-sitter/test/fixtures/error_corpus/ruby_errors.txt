@@ -10,10 +10,10 @@ c
 ---
 
 (program
-  (method_call
+  (call
     method: (identifier)
     (ERROR (heredoc_beginning))
     arguments: (argument_list
-      (heredoc_body (heredoc_end))
+      (heredoc_body (heredoc_content) (heredoc_end))
       (identifier)
       (MISSING ")"))))

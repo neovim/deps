@@ -1,11 +1,10 @@
-use super::helpers::allocations;
 use super::helpers::fixtures::get_language;
 use lazy_static::lazy_static;
 use std::env;
 use std::fmt::Write;
 use tree_sitter::{
-    Language, Node, Parser, Query, QueryCapture, QueryCursor, QueryError, QueryErrorKind,
-    QueryMatch, QueryPredicate, QueryPredicateArg, QueryProperty,
+    allocations, Language, Node, Parser, Query, QueryCapture, QueryCursor, QueryError,
+    QueryErrorKind, QueryMatch, QueryPredicate, QueryPredicateArg, QueryProperty,
 };
 
 lazy_static! {
@@ -116,6 +115,18 @@ fn test_query_errors_on_invalid_syntax() {
             [
                 r#"((identifier) @x (#eq? @x a"#,
                 r#"                           ^"#,
+            ]
+            .join("\n")
+        );
+
+        // tree-sitter/tree-sitter/issues/968
+        assert_eq!(
+            Query::new(get_language("c"), r#"(parameter_list [ ")" @foo)"#)
+                .unwrap_err()
+                .message,
+            [
+                r#"(parameter_list [ ")" @foo)"#,
+                r#"                          ^"#
             ]
             .join("\n")
         );
@@ -639,6 +650,49 @@ fn test_query_matches_capturing_error_nodes() {
             &query,
             "function a(b,, c, d :e:) {}",
             &[(0, vec![("the-error", ":e:"), ("the-error-identifier", "e")])],
+        );
+    });
+}
+
+#[test]
+fn test_query_matches_with_extra_children() {
+    allocations::record(|| {
+        let language = get_language("ruby");
+        let query = Query::new(
+            language,
+            "
+            (program(comment) @top_level_comment)
+            (argument_list (heredoc_body) @heredoc_in_args)
+            ",
+        )
+        .unwrap();
+
+        assert_query_matches(
+            language,
+            &query,
+            "
+            # top-level
+            puts(
+                # not-top-level
+                <<-IN_ARGS, bar.baz
+                HELLO
+                IN_ARGS
+            )
+
+            puts <<-NOT_IN_ARGS
+            NO
+            NOT_IN_ARGS
+            ",
+            &[
+                (0, vec![("top_level_comment", "# top-level")]),
+                (
+                    1,
+                    vec![(
+                        "heredoc_in_args",
+                        "\n                HELLO\n                IN_ARGS",
+                    )],
+                ),
+            ],
         );
     });
 }
@@ -1426,6 +1480,7 @@ fn test_query_matches_with_too_many_permutations_to_track() {
             collect_matches(matches, &query, source.as_str())[0],
             (0, vec![("pre", "hello"), ("post", "hello")]),
         );
+        assert_eq!(cursor.did_exceed_match_limit(), true);
     });
 }
 
@@ -1463,6 +1518,7 @@ fn test_query_matches_with_alternatives_and_too_many_permutations_to_track() {
             collect_matches(matches, &query, source.as_str()),
             vec![(1, vec![("method", "b")]); 50],
         );
+        assert_eq!(cursor.did_exceed_match_limit(), true);
     });
 }
 
@@ -1507,7 +1563,7 @@ fn test_query_matches_with_supertypes() {
                 value: (expression) @kw_arg)
 
             (assignment
-              left: (left_hand_side (identifier) @var_def))
+              left: (identifier) @var_def)
 
             (primary_expression/identifier) @var_ref
             "#,
@@ -1851,13 +1907,151 @@ fn test_query_matches_with_repeated_fields() {
             "
             struct S {
                 int a, b, c;
-            }
+            };
             ",
             &[
                 (0, vec![("field", "a")]),
                 (0, vec![("field", "b")]),
                 (0, vec![("field", "c")]),
             ],
+        );
+    });
+}
+
+#[test]
+fn test_query_matches_with_deeply_nested_patterns_with_fields() {
+    allocations::record(|| {
+        let language = get_language("python");
+        let query = Query::new(
+            language,
+            "
+            (call
+                function: (_) @func
+                arguments: (_) @args)
+            (call
+                function: (attribute
+                    object: (_) @receiver
+                    attribute: (identifier) @method)
+                arguments: (argument_list))
+
+            ; These don't match anything, but they require additional
+            ; states to keep track of their captures.
+            (call
+                function: (_) @fn
+                arguments: (argument_list
+                    (keyword_argument
+                        name: (identifier) @name
+                        value: (_) @val) @arg) @args) @call
+            (call
+                function: (identifier) @fn
+                (#eq? @fn \"super\")) @super_call
+            ",
+        )
+        .unwrap();
+
+        assert_query_matches(
+            language,
+            &query,
+            "
+            a(1).b(2).c(3).d(4).e(5).f(6).g(7).h(8)
+            ",
+            &[
+                (0, vec![("func", "a"), ("args", "(1)")]),
+                (0, vec![("func", "a(1).b"), ("args", "(2)")]),
+                (1, vec![("receiver", "a(1)"), ("method", "b")]),
+                (0, vec![("func", "a(1).b(2).c"), ("args", "(3)")]),
+                (1, vec![("receiver", "a(1).b(2)"), ("method", "c")]),
+                (0, vec![("func", "a(1).b(2).c(3).d"), ("args", "(4)")]),
+                (1, vec![("receiver", "a(1).b(2).c(3)"), ("method", "d")]),
+                (0, vec![("func", "a(1).b(2).c(3).d(4).e"), ("args", "(5)")]),
+                (
+                    1,
+                    vec![("receiver", "a(1).b(2).c(3).d(4)"), ("method", "e")],
+                ),
+                (
+                    0,
+                    vec![("func", "a(1).b(2).c(3).d(4).e(5).f"), ("args", "(6)")],
+                ),
+                (
+                    1,
+                    vec![("receiver", "a(1).b(2).c(3).d(4).e(5)"), ("method", "f")],
+                ),
+                (
+                    0,
+                    vec![("func", "a(1).b(2).c(3).d(4).e(5).f(6).g"), ("args", "(7)")],
+                ),
+                (
+                    1,
+                    vec![
+                        ("receiver", "a(1).b(2).c(3).d(4).e(5).f(6)"),
+                        ("method", "g"),
+                    ],
+                ),
+                (
+                    0,
+                    vec![
+                        ("func", "a(1).b(2).c(3).d(4).e(5).f(6).g(7).h"),
+                        ("args", "(8)"),
+                    ],
+                ),
+                (
+                    1,
+                    vec![
+                        ("receiver", "a(1).b(2).c(3).d(4).e(5).f(6).g(7)"),
+                        ("method", "h"),
+                    ],
+                ),
+            ],
+        );
+    });
+}
+
+#[test]
+fn test_query_matches_with_indefinite_step_containing_no_captures() {
+    allocations::record(|| {
+        // This pattern depends on the field declarations within the
+        // struct's body, but doesn't capture anything within the body.
+        // It demonstrates that internally, state-splitting needs to occur
+        // for each field declaration within the body, in order to avoid
+        // prematurely failing if the first field does not match.
+        //
+        // https://github.com/tree-sitter/tree-sitter/issues/937
+        let language = get_language("c");
+        let query = Query::new(
+            language,
+            "(struct_specifier
+                name: (type_identifier) @name
+                body: (field_declaration_list
+                    (field_declaration
+                        type: (union_specifier))))",
+        )
+        .unwrap();
+
+        assert_query_matches(
+            language,
+            &query,
+            "
+            struct LacksUnionField {
+                int a;
+                struct {
+                    B c;
+                } d;
+                G *h;
+            };
+
+            struct HasUnionField {
+                int a;
+                struct {
+                    B c;
+                } d;
+                union {
+                    bool e;
+                    float f;
+                } g;
+                G *h;
+            };
+            ",
+            &[(0, vec![("name", "HasUnionField")])],
         );
     });
 }
@@ -2938,6 +3132,20 @@ fn test_query_step_is_definite() {
             "#,
             results_by_substring: &[("name:", true)],
         },
+        Row {
+            description: "top-level non-terminal extra nodes",
+            language: get_language("ruby"),
+            pattern: r#"
+            (heredoc_body
+                (interpolation)
+                (heredoc_end) @end)
+            "#,
+            results_by_substring: &[
+                ("(heredoc_body", false),
+                ("(interpolation)", false),
+                ("(heredoc_end)", true),
+            ],
+        },
     ];
 
     allocations::record(|| {
@@ -2982,6 +3190,7 @@ fn assert_query_matches(
     let mut cursor = QueryCursor::new();
     let matches = cursor.matches(&query, tree.root_node(), to_callback(source));
     assert_eq!(collect_matches(matches, &query, source), expected);
+    assert_eq!(cursor.did_exceed_match_limit(), false);
 }
 
 fn collect_matches<'a>(

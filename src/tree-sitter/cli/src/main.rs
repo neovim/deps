@@ -42,6 +42,7 @@ fn run() -> error::Result<()> {
                 .arg(Arg::with_name("grammar-path").index(1))
                 .arg(Arg::with_name("log").long("log"))
                 .arg(Arg::with_name("prev-abi").long("prev-abi"))
+                .arg(Arg::with_name("no-bindings").long("no-bindings"))
                 .arg(
                     Arg::with_name("report-states-for-rule")
                         .long("report-states-for-rule")
@@ -63,6 +64,7 @@ fn run() -> error::Result<()> {
                 .arg(Arg::with_name("scope").long("scope").takes_value(true))
                 .arg(Arg::with_name("debug").long("debug").short("d"))
                 .arg(Arg::with_name("debug-graph").long("debug-graph").short("D"))
+                .arg(Arg::with_name("debug-xml").long("xml").short("x"))
                 .arg(Arg::with_name("quiet").long("quiet").short("q"))
                 .arg(Arg::with_name("stat").long("stat").short("s"))
                 .arg(Arg::with_name("time").long("time").short("t"))
@@ -94,7 +96,8 @@ fn run() -> error::Result<()> {
                         .takes_value(true),
                 )
                 .arg(Arg::with_name("scope").long("scope").takes_value(true))
-                .arg(Arg::with_name("captures").long("captures").short("c")),
+                .arg(Arg::with_name("captures").long("captures").short("c"))
+                .arg(Arg::with_name("test").long("test")),
         )
         .subcommand(
             SubCommand::with_name("tags")
@@ -118,6 +121,7 @@ fn run() -> error::Result<()> {
                         .short("f")
                         .takes_value(true),
                 )
+                .arg(Arg::with_name("update").long("update").short("u"))
                 .arg(Arg::with_name("debug").long("debug").short("d"))
                 .arg(Arg::with_name("debug-graph").long("debug-graph").short("D")),
         )
@@ -182,16 +186,19 @@ fn run() -> error::Result<()> {
         if matches.is_present("log") {
             logger::init();
         }
-        let prev_abi = matches.is_present("prev-abi");
+        let new_abi = !matches.is_present("prev-abi");
+        let generate_bindings = !matches.is_present("no-bindings");
         generate::generate_parser_in_directory(
             &current_dir,
             grammar_path,
-            !prev_abi,
+            new_abi,
+            generate_bindings,
             report_symbol_name,
         )?;
     } else if let Some(matches) = matches.subcommand_matches("test") {
         let debug = matches.is_present("debug");
         let debug_graph = matches.is_present("debug-graph");
+        let update = matches.is_present("update");
         let filter = matches.value_of("filter");
         let languages = loader.languages_at_path(&current_dir)?;
         let language = languages
@@ -205,7 +212,14 @@ fn run() -> error::Result<()> {
             test_corpus_dir = current_dir.join("corpus");
         }
         if test_corpus_dir.is_dir() {
-            test::run_tests_at_path(*language, &test_corpus_dir, debug, debug_graph, filter)?;
+            test::run_tests_at_path(
+                *language,
+                &test_corpus_dir,
+                debug,
+                debug_graph,
+                filter,
+                update,
+            )?;
         }
 
         // Check that all of the queries are valid.
@@ -219,6 +233,7 @@ fn run() -> error::Result<()> {
     } else if let Some(matches) = matches.subcommand_matches("parse") {
         let debug = matches.is_present("debug");
         let debug_graph = matches.is_present("debug-graph");
+        let debug_xml = matches.is_present("debug-xml");
         let quiet = matches.is_present("quiet");
         let time = matches.is_present("time");
         let edits = matches
@@ -254,6 +269,7 @@ fn run() -> error::Result<()> {
                 timeout,
                 debug,
                 debug_graph,
+                debug_xml,
                 Some(&cancellation_flag),
             )?;
 
@@ -289,7 +305,15 @@ fn run() -> error::Result<()> {
             let r: Vec<&str> = br.split(":").collect();
             (r[0].parse().unwrap(), r[1].parse().unwrap())
         });
-        query::query_files_at_paths(language, paths, query_path, ordered_captures, range)?;
+        let should_test = matches.is_present("test");
+        query::query_files_at_paths(
+            language,
+            paths,
+            query_path,
+            ordered_captures,
+            range,
+            should_test,
+        )?;
     } else if let Some(matches) = matches.subcommand_matches("tags") {
         loader.find_all_languages(&config.parser_directories)?;
         let paths = collect_paths(matches.value_of("paths-file"), matches.values_of("paths"))?;

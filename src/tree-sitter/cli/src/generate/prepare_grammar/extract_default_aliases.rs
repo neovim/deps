@@ -35,7 +35,9 @@ pub(super) fn extract_default_aliases(
                     SymbolType::External => &mut external_status_list[step.symbol.index],
                     SymbolType::NonTerminal => &mut non_terminal_status_list[step.symbol.index],
                     SymbolType::Terminal => &mut terminal_status_list[step.symbol.index],
-                    SymbolType::End => panic!("Unexpected end token"),
+                    SymbolType::End | SymbolType::EndOfNonTerminalExtra => {
+                        panic!("Unexpected end token")
+                    }
                 };
 
                 // Default aliases don't work for inlined variables.
@@ -111,7 +113,9 @@ pub(super) fn extract_default_aliases(
                     SymbolType::External => &mut external_status_list[step.symbol.index],
                     SymbolType::NonTerminal => &mut non_terminal_status_list[step.symbol.index],
                     SymbolType::Terminal => &mut terminal_status_list[step.symbol.index],
-                    SymbolType::End => panic!("Unexpected end token"),
+                    SymbolType::End | SymbolType::EndOfNonTerminalExtra => {
+                        panic!("Unexpected end token")
+                    }
                 };
 
                 // If this step is aliased as the symbol's default alias, then remove that alias.
@@ -193,11 +197,12 @@ mod tests {
                     }],
                 },
             ],
-            extra_symbols: Vec::new(),
-            expected_conflicts: Vec::new(),
-            variables_to_inline: Vec::new(),
-            supertype_symbols: Vec::new(),
-            external_tokens: Vec::new(),
+            extra_symbols: vec![],
+            external_tokens: vec![],
+            supertype_symbols: vec![],
+            expected_conflicts: vec![],
+            variables_to_inline: vec![],
+            precedence_orderings: vec![],
             word_token: None,
         };
 

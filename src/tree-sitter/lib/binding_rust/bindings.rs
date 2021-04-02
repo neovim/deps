@@ -208,8 +208,8 @@ extern "C" {
     #[doc = " following three fields:"]
     #[doc = " 1. `read`: A function to retrieve a chunk of text at a given byte offset"]
     #[doc = "    and (row, column) position. The function should return a pointer to the"]
-    #[doc = "    text and write its length to the the `bytes_read` pointer. The parser"]
-    #[doc = "    does not take ownership of this buffer; it just borrows it until it has"]
+    #[doc = "    text and write its length to the `bytes_read` pointer. The parser does"]
+    #[doc = "    not take ownership of this buffer; it just borrows it until it has"]
     #[doc = "    finished reading it. The function should write a zero value to the"]
     #[doc = "    `bytes_read` pointer to indicate the end of the document."]
     #[doc = " 2. `payload`: An arbitrary pointer that will be passed to each invocation"]
@@ -697,7 +697,7 @@ extern "C" {
     #[doc = " to start running a given query on a given syntax node. Then, there are"]
     #[doc = " two options for consuming the results of the query:"]
     #[doc = " 1. Repeatedly call `ts_query_cursor_next_match` to iterate over all of the"]
-    #[doc = "    the *matches* in the order that they were found. Each match contains the"]
+    #[doc = "    *matches* in the order that they were found. Each match contains the"]
     #[doc = "    index of the pattern that matched, and an array of captures. Because"]
     #[doc = "    multiple patterns can match the same set of nodes, one match may contain"]
     #[doc = "    captures that appear *before* some of the captures from a previous match."]
@@ -719,6 +719,16 @@ extern "C" {
 extern "C" {
     #[doc = " Start running a given query on a given node."]
     pub fn ts_query_cursor_exec(arg1: *mut TSQueryCursor, arg2: *const TSQuery, arg3: TSNode);
+}
+extern "C" {
+    #[doc = " Check if this cursor has exceeded its maximum number of in-progress"]
+    #[doc = " matches."]
+    #[doc = ""]
+    #[doc = " Currently, query cursors have a fixed capacity for storing lists"]
+    #[doc = " of in-progress captures. If this capacity is exceeded, then the"]
+    #[doc = " earliest-starting match will silently be dropped to make room for"]
+    #[doc = " further matches."]
+    pub fn ts_query_cursor_did_exceed_match_limit(arg1: *const TSQueryCursor) -> bool;
 }
 extern "C" {
     #[doc = " Set the range of bytes or (row, column) positions in which the query"]
@@ -804,5 +814,5 @@ extern "C" {
     pub fn ts_language_version(arg1: *const TSLanguage) -> u32;
 }
 
-pub const TREE_SITTER_LANGUAGE_VERSION: usize = 12;
-pub const TREE_SITTER_MIN_COMPATIBLE_LANGUAGE_VERSION: usize = 9;
+pub const TREE_SITTER_LANGUAGE_VERSION: usize = 13;
+pub const TREE_SITTER_MIN_COMPATIBLE_LANGUAGE_VERSION: usize = 13;

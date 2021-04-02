@@ -1,5 +1,5 @@
 use super::nfa::CharacterSet;
-use super::rules::{Alias, Associativity, Symbol, TokenSet};
+use super::rules::{Alias, Symbol, TokenSet};
 use std::collections::{BTreeMap, HashMap};
 pub(crate) type ProductionInfoId = usize;
 pub(crate) type ParseStateId = usize;
@@ -17,9 +17,7 @@ pub(crate) enum ParseAction {
     Reduce {
         symbol: Symbol,
         child_count: usize,
-        precedence: i32,
         dynamic_precedence: i32,
-        associativity: Option<Associativity>,
         production_id: ProductionInfoId,
     },
 }
@@ -44,7 +42,6 @@ pub(crate) struct ParseState {
     pub lex_state_id: usize,
     pub external_lex_state_id: usize,
     pub core_id: usize,
-    pub is_non_terminal_extra: bool,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -102,6 +99,11 @@ impl Default for LexTable {
 }
 
 impl ParseState {
+    pub fn is_end_of_non_terminal_extra(&self) -> bool {
+        self.terminal_entries
+            .contains_key(&Symbol::end_of_nonterminal_extra())
+    }
+
     pub fn referenced_states<'a>(&'a self) -> impl Iterator<Item = ParseStateId> + 'a {
         self.terminal_entries
             .iter()
@@ -156,16 +158,6 @@ impl ParseState {
                     };
                 }
             }
-        }
-    }
-}
-
-impl ParseAction {
-    pub fn precedence(&self) -> i32 {
-        if let ParseAction::Reduce { precedence, .. } = self {
-            *precedence
-        } else {
-            0
         }
     }
 }

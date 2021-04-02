@@ -115,17 +115,9 @@ extern void tree_sitter_parse_callback(
 );
 
 extern void tree_sitter_log_callback(
-  void *payload,
-  TSLogType log_type,
+  bool is_lex_message,
   const char *message
 );
-
-void ts_parser_new_wasm() {
-  TSParser *parser = ts_parser_new();
-  char *input_buffer = calloc(INPUT_BUFFER_SIZE, sizeof(char));
-  TRANSFER_BUFFER[0] = parser;
-  TRANSFER_BUFFER[1] = input_buffer;
-}
 
 static const char *call_parse_callback(
   void *payload,
@@ -148,8 +140,23 @@ static const char *call_parse_callback(
   return buffer;
 }
 
+static void call_log_callback(
+  void *payload,
+  TSLogType log_type,
+  const char *message
+) {
+  tree_sitter_log_callback(log_type == TSLogTypeLex, message);
+}
+
+void ts_parser_new_wasm() {
+  TSParser *parser = ts_parser_new();
+  char *input_buffer = calloc(INPUT_BUFFER_SIZE, sizeof(char));
+  TRANSFER_BUFFER[0] = parser;
+  TRANSFER_BUFFER[1] = input_buffer;
+}
+
 void ts_parser_enable_logger_wasm(TSParser *self, bool should_log) {
-  TSLogger logger = {self, should_log ? tree_sitter_log_callback : NULL};
+  TSLogger logger = {self, should_log ? call_log_callback : NULL};
   ts_parser_set_logger(self, logger);
 }
 
@@ -175,6 +182,20 @@ TSTree *ts_parser_parse_wasm(
     ts_parser_set_included_ranges(self, NULL, 0);
   }
   return ts_parser_parse(self, old_tree, input);
+}
+
+/**********************/
+/* Section - Language */
+/**********************/
+
+int ts_language_type_is_named_wasm(const TSLanguage *self, TSSymbol typeId) {
+  const TSSymbolType symbolType = ts_language_symbol_type(self, typeId);
+  return symbolType == TSSymbolTypeRegular;
+}
+
+int ts_language_type_is_visible_wasm(const TSLanguage *self, TSSymbol typeId) {
+  const TSSymbolType symbolType = ts_language_symbol_type(self, typeId);
+  return symbolType <= TSSymbolTypeAnonymous;
 }
 
 /******************/

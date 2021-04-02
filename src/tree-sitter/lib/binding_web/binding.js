@@ -7,7 +7,6 @@ const SIZE_OF_RANGE = 2 * SIZE_OF_INT + 2 * SIZE_OF_POINT;
 const ZERO_POINT = {row: 0, column: 0};
 const QUERY_WORD_REGEX = /[\w-.]*/g;
 
-const PREDICATE_STEP_TYPE_DONE = 0;
 const PREDICATE_STEP_TYPE_CAPTURE = 1;
 const PREDICATE_STEP_TYPE_STRING = 2;
 
@@ -258,11 +257,7 @@ class Node {
   }
 
   equals(other) {
-    if (this === other) return true;
-    for (let i = 0; i < 5; i++) {
-      if (this[i] !== other[i]) return false;
-    }
-    return true;
+    return this.id === other.id;
   }
 
   child(index) {
@@ -651,6 +646,32 @@ class Language {
     return this.fields[fieldId] || null;
   }
 
+  idForNodeType(type, named) {
+    const typeLength = lengthBytesUTF8(type);
+    const typeAddress = C._malloc(typeLength + 1);
+    stringToUTF8(type, typeAddress, typeLength + 1);
+    const result = C._ts_language_symbol_for_name(this[0], typeAddress, typeLength, named);
+    C._free(typeAddress);
+    return result || null;
+  }
+
+  get nodeTypeCount() {
+    return C._ts_language_symbol_count(this[0]);
+  }
+
+  nodeTypeForId(typeId) {
+    const name = C._ts_language_symbol_name(this[0], typeId);
+    return name ? UTF8ToString(name) : null;
+  }
+
+  nodeTypeIsNamed(typeId) {
+    return C._ts_language_type_is_named_wasm(this[0], typeId) ? true : false;
+  }
+
+  nodeTypeIsVisible(typeId) {
+    return C._ts_language_type_is_visible_wasm(this[0], typeId) ? true : false;
+  }
+
   query(source) {
     const sourceLength = lengthBytesUTF8(source);
     const sourceAddress = C._malloc(sourceLength + 1);
@@ -861,30 +882,41 @@ class Language {
     );
   }
 
-  static load(url) {
+  static load(input) {
     let bytes;
-    if (
-      typeof process !== 'undefined' &&
-      process.versions &&
-      process.versions.node
-    ) {
-      const fs = require('fs');
-      bytes = Promise.resolve(fs.readFileSync(url));
+    if (input instanceof Uint8Array) {
+      bytes = Promise.resolve(input);
     } else {
-      bytes = fetch(url)
-        .then(response => response.arrayBuffer()
-          .then(buffer => {
-            if (response.ok) {
-              return new Uint8Array(buffer);
-            } else {
-              const body = new TextDecoder('utf-8').decode(buffer);
-              throw new Error(`Language.load failed with status ${response.status}.\n\n${body}`)
-            }
-          }));
+      const url = input;
+      if (
+        typeof process !== 'undefined' &&
+        process.versions &&
+        process.versions.node
+      ) {
+        const fs = require('fs');
+        bytes = Promise.resolve(fs.readFileSync(url));
+      } else {
+        bytes = fetch(url)
+          .then(response => response.arrayBuffer()
+            .then(buffer => {
+              if (response.ok) {
+                return new Uint8Array(buffer);
+              } else {
+                const body = new TextDecoder('utf-8').decode(buffer);
+                throw new Error(`Language.load failed with status ${response.status}.\n\n${body}`)
+              }
+            }));
+      }
     }
 
+    // emscripten-core/emscripten#12969
+    const loadModule =
+      typeof loadSideModule === 'function'
+      ? loadSideModule
+      : loadWebAssemblyModule;
+
     return bytes
-      .then(bytes => loadWebAssemblyModule(bytes, {loadAsync: true}))
+      .then(bytes => loadModule(bytes, {loadAsync: true}))
       .then(mod => {
         const symbolNames = Object.keys(mod)
         const functionName = symbolNames.find(key =>
@@ -935,12 +967,13 @@ class Query {
       endPosition.column
     );
 
-    const count = getValue(TRANSFER_BUFFER, 'i32');
+    const rawCount = getValue(TRANSFER_BUFFER, 'i32');
     const startAddress = getValue(TRANSFER_BUFFER + SIZE_OF_INT, 'i32');
-    const result = new Array(count);
+    const result = new Array(rawCount);
 
+    let filteredCount = 0;
     let address = startAddress;
-    for (let i = 0; i < count; i++) {
+    for (let i = 0; i < rawCount; i++) {
       const pattern = getValue(address, 'i32');
       address += SIZE_OF_INT;
       const captureCount = getValue(address, 'i32');
@@ -949,7 +982,7 @@ class Query {
       const captures = new Array(captureCount);
       address = unmarshalCaptures(this, node.tree, address, captures);
       if (this.textPredicates[pattern].every(p => p(captures))) {
-        result[i] = {pattern, captures};
+        result[filteredCount++] = {pattern, captures};
         const setProperties = this.setProperties[pattern];
         if (setProperties) result[i].setProperties = setProperties;
         const assertedProperties = this.assertedProperties[pattern];
@@ -958,6 +991,7 @@ class Query {
         if (refutedProperties) result[i].refutedProperties = refutedProperties;
       }
     }
+    result.length = filteredCount;
 
     C._free(startAddress);
     return result;
@@ -1144,7 +1178,4 @@ function marshalEdit(edit) {
 }
 
 Parser.Language = Language;
-
-return Parser;
-
-}));
+Parser.Parser = Parser;

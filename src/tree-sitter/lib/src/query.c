@@ -217,7 +217,6 @@ struct TSQuery {
   Array(char) string_buffer;
   const TSLanguage *language;
   uint16_t wildcard_root_pattern_count;
-  TSSymbol *symbol_map;
 };
 
 /*
@@ -237,6 +236,7 @@ struct TSQueryCursor {
   TSPoint end_point;
   bool ascending;
   bool halted;
+  bool did_exceed_match_limit;
 };
 
 static const TSQueryError PARENT_DONE = -1;
@@ -755,7 +755,7 @@ static bool ts_query__analyze_patterns(TSQuery *self, unsigned *error_offset) {
             const TSSymbol *aliases, *aliases_end;
             ts_language_aliases_for_symbol(
               self->language,
-              action->params.reduce.symbol,
+              action->reduce.symbol,
               &aliases,
               &aliases_end
             );
@@ -772,20 +772,22 @@ static bool ts_query__analyze_patterns(TSQuery *self, unsigned *error_offset) {
                 if (subgraph->nodes.size == 0 || array_back(&subgraph->nodes)->state != state) {
                   array_push(&subgraph->nodes, ((AnalysisSubgraphNode) {
                     .state = state,
-                    .production_id = action->params.reduce.production_id,
-                    .child_index = action->params.reduce.child_count,
+                    .production_id = action->reduce.production_id,
+                    .child_index = action->reduce.child_count,
                     .done = true,
                   }));
                 }
               }
             }
-          } else if (action->type == TSParseActionTypeShift && !action->params.shift.extra) {
-            TSStateId next_state = action->params.shift.state;
+          } else if (action->type == TSParseActionTypeShift && !action->shift.extra) {
+            TSStateId next_state = action->shift.state;
             state_predecessor_map_add(&predecessor_map, next_state, state);
           }
         }
-      } else if (lookahead_iterator.next_state != 0 && lookahead_iterator.next_state != state) {
-        state_predecessor_map_add(&predecessor_map, lookahead_iterator.next_state, state);
+      } else if (lookahead_iterator.next_state != 0) {
+        if (lookahead_iterator.next_state != state) {
+          state_predecessor_map_add(&predecessor_map, lookahead_iterator.next_state, state);
+        }
         const TSSymbol *aliases, *aliases_end;
         ts_language_aliases_for_symbol(
           self->language,
@@ -959,6 +961,10 @@ static bool ts_query__analyze_patterns(TSQuery *self, unsigned *error_offset) {
         }
       #endif
 
+      // If no further progress can be made within the current recursion depth limit, then
+      // bump the depth limit by one, and continue to process the states the exceeded the
+      // limit. But only allow this if progress has been made since the last time the depth
+      // limit was increased.
       if (states.size == 0) {
         if (deeper_states.size > 0 && final_step_indices.size > prev_final_step_count) {
           #ifdef DEBUG_ANALYZE_QUERY
@@ -1019,12 +1025,12 @@ static bool ts_query__analyze_patterns(TSQuery *self, unsigned *error_offset) {
           TSStateId next_parse_state;
           if (lookahead_iterator.action_count) {
             const TSParseAction *action = &lookahead_iterator.actions[lookahead_iterator.action_count - 1];
-            if (action->type == TSParseActionTypeShift && !action->params.shift.extra) {
-              next_parse_state = action->params.shift.state;
+            if (action->type == TSParseActionTypeShift) {
+              next_parse_state = action->shift.extra ? parse_state : action->shift.state;
             } else {
               continue;
             }
-          } else if (lookahead_iterator.next_state != 0 && lookahead_iterator.next_state != parse_state) {
+          } else if (lookahead_iterator.next_state != 0) {
             next_parse_state = lookahead_iterator.next_state;
           } else {
             continue;
@@ -1127,6 +1133,8 @@ static bool ts_query__analyze_patterns(TSQuery *self, unsigned *error_offset) {
                   next_step->depth <= parent_depth + 1
                 ) break;
               }
+            } else if (next_parse_state == parse_state) {
+              continue;
             }
 
             for (;;) {
@@ -1535,6 +1543,7 @@ static TSQueryError ts_query__parse_pattern(
         stream_advance(stream);
         break;
       } else if (e) {
+        if (e == PARENT_DONE) e = TSQueryErrorSyntax;
         array_delete(&branch_step_indices);
         return e;
       }
@@ -1896,33 +1905,6 @@ TSQuery *ts_query_new(
   uint32_t *error_offset,
   TSQueryError *error_type
 ) {
-  TSSymbol *symbol_map;
-  if (ts_language_version(language) >= TREE_SITTER_LANGUAGE_VERSION_WITH_SYMBOL_DEDUPING) {
-    symbol_map = NULL;
-  } else {
-    // Work around the fact that multiple symbols can currently be
-    // associated with the same name, due to "simple aliases".
-    // In the next language ABI version, this map will be contained
-    // in the language's `public_symbol_map` field.
-    uint32_t symbol_count = ts_language_symbol_count(language);
-    symbol_map = ts_malloc(sizeof(TSSymbol) * symbol_count);
-    for (unsigned i = 0; i < symbol_count; i++) {
-      const char *name = ts_language_symbol_name(language, i);
-      const TSSymbolType symbol_type = ts_language_symbol_type(language, i);
-
-      symbol_map[i] = i;
-
-      for (unsigned j = 0; j < i; j++) {
-        if (ts_language_symbol_type(language, j) == symbol_type) {
-          if (!strcmp(name, ts_language_symbol_name(language, j))) {
-            symbol_map[i] = j;
-            break;
-          }
-        }
-      }
-    }
-  }
-
   TSQuery *self = ts_malloc(sizeof(TSQuery));
   *self = (TSQuery) {
     .steps = array_new(),
@@ -1933,7 +1915,6 @@ TSQuery *ts_query_new(
     .patterns = array_new(),
     .step_offsets = array_new(),
     .string_buffer = array_new(),
-    .symbol_map = symbol_map,
     .wildcard_root_pattern_count = 0,
     .language = language,
   };
@@ -2003,12 +1984,10 @@ TSQuery *ts_query_new(
     }
   }
 
-  if (self->language->version >= TREE_SITTER_LANGUAGE_VERSION_WITH_STATE_COUNT) {
-    if (!ts_query__analyze_patterns(self, error_offset)) {
-      *error_type = TSQueryErrorStructure;
-      ts_query_delete(self);
-      return NULL;
-    }
+  if (!ts_query__analyze_patterns(self, error_offset)) {
+    *error_type = TSQueryErrorStructure;
+    ts_query_delete(self);
+    return NULL;
   }
 
   ts_query__finalize_steps(self);
@@ -2026,7 +2005,6 @@ void ts_query_delete(TSQuery *self) {
     array_delete(&self->string_buffer);
     symbol_table_delete(&self->captures);
     symbol_table_delete(&self->predicate_values);
-    ts_free(self->symbol_map);
     ts_free(self);
   }
 }
@@ -2135,6 +2113,7 @@ void ts_query_disable_pattern(
 TSQueryCursor *ts_query_cursor_new(void) {
   TSQueryCursor *self = ts_malloc(sizeof(TSQueryCursor));
   *self = (TSQueryCursor) {
+    .did_exceed_match_limit = false,
     .ascending = false,
     .halted = false,
     .states = array_new(),
@@ -2158,6 +2137,10 @@ void ts_query_cursor_delete(TSQueryCursor *self) {
   ts_free(self);
 }
 
+bool ts_query_cursor_did_exceed_match_limit(const TSQueryCursor *self) {
+  return self->did_exceed_match_limit;
+}
+
 void ts_query_cursor_exec(
   TSQueryCursor *self,
   const TSQuery *query,
@@ -2172,6 +2155,7 @@ void ts_query_cursor_exec(
   self->ascending = false;
   self->halted = false;
   self->query = query;
+  self->did_exceed_match_limit = false;
 }
 
 void ts_query_cursor_set_byte_range(
@@ -2391,6 +2375,7 @@ static CaptureList *ts_query_cursor__prepare_to_capture(
     // state has captured the earliest node in the document, and steal its
     // capture list.
     if (state->capture_list_id == NONE) {
+      self->did_exceed_match_limit = true;
       uint32_t state_index, byte_offset, pattern_index;
       if (
         ts_query_cursor__first_in_progress_capture(
@@ -2585,9 +2570,6 @@ static inline bool ts_query_cursor__advance(
       // Get the properties of the current node.
       TSSymbol symbol = ts_node_symbol(node);
       bool is_named = ts_node_is_named(node);
-      if (symbol != ts_builtin_sym_error && self->query->symbol_map) {
-        symbol = self->query->symbol_map[symbol];
-      }
       bool has_later_siblings;
       bool has_later_named_siblings;
       bool can_have_later_siblings_with_this_field;
@@ -2711,7 +2693,7 @@ static inline bool ts_query_cursor__advance(
         // parent, then this query state cannot simply be updated in place. It must be
         // split into two states: one that matches this node, and one which skips over
         // this node, to preserve the possibility of matching later siblings.
-        if (later_sibling_can_match && step->contains_captures) {
+        if (later_sibling_can_match && (step->contains_captures || !step->is_definite)) {
           if (ts_query_cursor__copy_state(self, &state)) {
             LOG(
               "  split state for capture. pattern:%u, step:%u\n",

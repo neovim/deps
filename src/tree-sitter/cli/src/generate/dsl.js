@@ -225,7 +225,8 @@ function grammar(baseGrammar, options) {
       conflicts: [],
       externals: [],
       inline: [],
-      supertypes: []
+      supertypes: [],
+      precedences: [],
     };
   }
 
@@ -362,11 +363,28 @@ function grammar(baseGrammar, options) {
     supertypes = supertypeRules.map(symbol => symbol.name);
   }
 
+  let precedences = baseGrammar.precedences;
+  if (options.precedences) {
+    if (typeof options.precedences !== "function") {
+      throw new Error("Grammar's 'precedences' property must be a function");
+    }
+    precedences = options.precedences.call(ruleBuilder, ruleBuilder, baseGrammar.precedences);
+    if (!Array.isArray(precedences)) {
+      throw new Error("Grammar's precedences must be an array of arrays of rules.");
+    }
+    precedences = precedences.map(list => {
+      if (!Array.isArray(list)) {
+        throw new Error("Grammar's precedences must be an array of arrays of rules.");
+      }
+      return list.map(normalize);
+    });
+  }
+
   if (Object.keys(rules).length == 0) {
     throw new Error("Grammar must have at least one rule.");
   }
 
-  return {name, word, rules, extras, conflicts, externals, inline, supertypes};
+  return {name, word, rules, extras, conflicts, precedences, externals, inline, supertypes};
 }
 
 function checkArguments(ruleCount, caller, callerName, suffix = '') {

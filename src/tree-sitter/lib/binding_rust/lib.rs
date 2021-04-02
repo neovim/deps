@@ -1,6 +1,9 @@
 mod ffi;
 mod util;
 
+#[cfg(feature = "allocation-tracking")]
+pub mod allocations;
+
 #[cfg(unix)]
 use std::os::unix::io::AsRawFd;
 
@@ -1147,6 +1150,12 @@ impl<'a> TreeCursor<'a> {
     }
 }
 
+impl<'a> Clone for TreeCursor<'a> {
+    fn clone(&self) -> Self {
+        TreeCursor(unsafe { ffi::ts_tree_cursor_copy(&self.0) }, PhantomData)
+    }
+}
+
 impl<'a> Drop for TreeCursor<'a> {
     fn drop(&mut self) {
         unsafe { ffi::ts_tree_cursor_delete(&mut self.0) }
@@ -1584,6 +1593,12 @@ impl QueryCursor {
     /// The cursor stores the state that is needed to iteratively search for matches.
     pub fn new() -> Self {
         QueryCursor(unsafe { NonNull::new_unchecked(ffi::ts_query_cursor_new()) })
+    }
+
+    /// Check if, on its last execution, this cursor exceeded its maximum number of
+    /// in-progress matches.
+    pub fn did_exceed_match_limit(&self) -> bool {
+        unsafe { ffi::ts_query_cursor_did_exceed_match_limit(self.0.as_ptr()) }
     }
 
     /// Iterate over all of the matches in the order that they were found.

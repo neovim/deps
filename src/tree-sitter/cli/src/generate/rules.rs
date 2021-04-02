@@ -1,12 +1,13 @@
 use super::grammars::VariableType;
 use smallbitvec::SmallBitVec;
-use std::collections::HashMap;
 use std::iter::FromIterator;
+use std::{collections::HashMap, fmt};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub(crate) enum SymbolType {
     External,
     End,
+    EndOfNonTerminalExtra,
     Terminal,
     NonTerminal,
 }
@@ -23,11 +24,18 @@ pub(crate) struct Alias {
     pub is_named: bool,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum Precedence {
+    None,
+    Integer(i32),
+    Name(String),
+}
+
 pub(crate) type AliasMap = HashMap<Symbol, Alias>;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub(crate) struct MetadataParams {
-    pub precedence: Option<i32>,
+    pub precedence: Precedence,
     pub dynamic_precedence: i32,
     pub associativity: Option<Associativity>,
     pub is_token: bool,
@@ -69,6 +77,7 @@ pub(crate) struct TokenSet {
     terminal_bits: SmallBitVec,
     external_bits: SmallBitVec,
     eof: bool,
+    end_of_nonterminal_extra: bool,
 }
 
 impl Rule {
@@ -97,23 +106,23 @@ impl Rule {
         })
     }
 
-    pub fn prec(value: i32, content: Rule) -> Self {
+    pub fn prec(value: Precedence, content: Rule) -> Self {
         add_metadata(content, |params| {
-            params.precedence = Some(value);
+            params.precedence = value;
         })
     }
 
-    pub fn prec_left(value: i32, content: Rule) -> Self {
+    pub fn prec_left(value: Precedence, content: Rule) -> Self {
         add_metadata(content, |params| {
             params.associativity = Some(Associativity::Left);
-            params.precedence = Some(value);
+            params.precedence = value;
         })
     }
 
-    pub fn prec_right(value: i32, content: Rule) -> Self {
+    pub fn prec_right(value: Precedence, content: Rule) -> Self {
         add_metadata(content, |params| {
             params.associativity = Some(Associativity::Right);
-            params.precedence = Some(value);
+            params.precedence = value;
         })
     }
 
@@ -147,6 +156,12 @@ impl Alias {
         } else {
             VariableType::Anonymous
         }
+    }
+}
+
+impl Precedence {
+    pub fn is_none(&self) -> bool {
+        matches!(self, Precedence::None)
     }
 }
 
@@ -221,6 +236,13 @@ impl Symbol {
             index: 0,
         }
     }
+
+    pub fn end_of_nonterminal_extra() -> Self {
+        Symbol {
+            kind: SymbolType::EndOfNonTerminalExtra,
+            index: 0,
+        }
+    }
 }
 
 impl From<Symbol> for Rule {
@@ -235,6 +257,7 @@ impl TokenSet {
             terminal_bits: SmallBitVec::new(),
             external_bits: SmallBitVec::new(),
             eof: false,
+            end_of_nonterminal_extra: false,
         }
     }
 
@@ -262,6 +285,11 @@ impl TokenSet {
                     }),
             )
             .chain(if self.eof { Some(Symbol::end()) } else { None })
+            .chain(if self.end_of_nonterminal_extra {
+                Some(Symbol::end_of_nonterminal_extra())
+            } else {
+                None
+            })
     }
 
     pub fn terminals<'a>(&'a self) -> impl Iterator<Item = Symbol> + 'a {
@@ -283,6 +311,7 @@ impl TokenSet {
             SymbolType::Terminal => self.terminal_bits.get(symbol.index).unwrap_or(false),
             SymbolType::External => self.external_bits.get(symbol.index).unwrap_or(false),
             SymbolType::End => self.eof,
+            SymbolType::EndOfNonTerminalExtra => self.end_of_nonterminal_extra,
         }
     }
 
@@ -299,6 +328,10 @@ impl TokenSet {
                 self.eof = true;
                 return;
             }
+            SymbolType::EndOfNonTerminalExtra => {
+                self.end_of_nonterminal_extra = true;
+                return;
+            }
         };
         if other.index >= vec.len() {
             vec.resize(other.index + 1, false);
@@ -306,23 +339,42 @@ impl TokenSet {
         vec.set(other.index, true);
     }
 
-    pub fn remove(&mut self, other: &Symbol) {
+    pub fn remove(&mut self, other: &Symbol) -> bool {
         let vec = match other.kind {
             SymbolType::NonTerminal => panic!("Cannot store non-terminals in a TokenSet"),
             SymbolType::Terminal => &mut self.terminal_bits,
             SymbolType::External => &mut self.external_bits,
             SymbolType::End => {
-                self.eof = false;
-                return;
+                return if self.eof {
+                    self.eof = false;
+                    true
+                } else {
+                    false
+                }
+            }
+            SymbolType::EndOfNonTerminalExtra => {
+                return if self.end_of_nonterminal_extra {
+                    self.end_of_nonterminal_extra = false;
+                    true
+                } else {
+                    false
+                };
             }
         };
         if other.index < vec.len() {
-            vec.set(other.index, false);
+            if vec[other.index] {
+                vec.set(other.index, false);
+                return true;
+            }
         }
+        false
     }
 
     pub fn is_empty(&self) -> bool {
-        !self.eof && !self.terminal_bits.iter().any(|a| a) && !self.external_bits.iter().any(|a| a)
+        !self.eof
+            && !self.end_of_nonterminal_extra
+            && !self.terminal_bits.iter().any(|a| a)
+            && !self.external_bits.iter().any(|a| a)
     }
 
     pub fn insert_all_terminals(&mut self, other: &TokenSet) -> bool {
@@ -358,6 +410,10 @@ impl TokenSet {
         if other.eof {
             result |= !self.eof;
             self.eof = true;
+        }
+        if other.end_of_nonterminal_extra {
+            result |= !self.end_of_nonterminal_extra;
+            self.end_of_nonterminal_extra = true;
         }
         result |= self.insert_all_terminals(other);
         result |= self.insert_all_externals(other);
@@ -404,5 +460,21 @@ fn choice_helper(result: &mut Vec<Rule>, rule: Rule) {
                 result.push(rule);
             }
         }
+    }
+}
+
+impl fmt::Display for Precedence {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Precedence::Integer(i) => write!(f, "{}", i),
+            Precedence::Name(s) => write!(f, "'{}'", s),
+            Precedence::None => write!(f, "none"),
+        }
+    }
+}
+
+impl Default for Precedence {
+    fn default() -> Self {
+        Precedence::None
     }
 }

@@ -204,6 +204,7 @@ impl<'a> ParseItemSetBuilder<'a> {
                         variable_index,
                         production,
                         step_index: 0,
+                        has_preceding_inherited_fields: false,
                     };
 
                     if let Some(inlined_productions) =
@@ -213,11 +214,7 @@ impl<'a> ParseItemSetBuilder<'a> {
                             find_or_push(
                                 additions_for_non_terminal,
                                 TransitiveClosureAddition {
-                                    item: ParseItem {
-                                        variable_index,
-                                        production,
-                                        step_index: item.step_index,
-                                    },
+                                    item: item.substitute_production(production),
                                     info: follow_set_info.clone(),
                                 },
                             );
@@ -248,11 +245,7 @@ impl<'a> ParseItemSetBuilder<'a> {
                 for production in productions {
                     self.add_item(
                         &mut result,
-                        ParseItem {
-                            variable_index: item.variable_index,
-                            production,
-                            step_index: item.step_index,
-                        },
+                        item.substitute_production(production),
                         lookaheads,
                     );
                 }
@@ -306,7 +299,7 @@ impl<'a> fmt::Debug for ParseItemSetBuilder<'a> {
                 SymbolType::NonTerminal => &self.syntax_grammar.variables[symbol.index].name,
                 SymbolType::External => &self.syntax_grammar.external_tokens[symbol.index].name,
                 SymbolType::Terminal => &self.lexical_grammar.variables[symbol.index].name,
-                SymbolType::End => "END",
+                SymbolType::End | SymbolType::EndOfNonTerminalExtra => "END",
             };
             write!(
                 f,
@@ -323,7 +316,7 @@ impl<'a> fmt::Debug for ParseItemSetBuilder<'a> {
                 SymbolType::NonTerminal => &self.syntax_grammar.variables[symbol.index].name,
                 SymbolType::External => &self.syntax_grammar.external_tokens[symbol.index].name,
                 SymbolType::Terminal => &self.lexical_grammar.variables[symbol.index].name,
-                SymbolType::End => "END",
+                SymbolType::End | SymbolType::EndOfNonTerminalExtra => "END",
             };
             write!(
                 f,
