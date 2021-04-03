@@ -47,9 +47,12 @@ Parsers for these languages are fairly complete:
 * [Ruby](https://github.com/tree-sitter/tree-sitter-ruby)
 * [Rust](https://github.com/tree-sitter/tree-sitter-rust)
 * [R](https://github.com/r-lib/tree-sitter-r)
+* [S-expressions](https://github.com/AbstractMachinesLab/tree-sitter-sexp)
+* [SPARQL](https://github.com/BonaBeavis/tree-sitter-sparql)
 * [SystemRDL](https://github.com/SystemRDL/tree-sitter-systemrdl)
 * [Svelte](https://github.com/Himujjal/tree-sitter-svelte)
 * [TOML](https://github.com/ikatyang/tree-sitter-toml)
+* [Turtle](https://github.com/BonaBeavis/tree-sitter-turtle)
 * [TypeScript](https://github.com/tree-sitter/tree-sitter-typescript)
 * [Verilog](https://github.com/tree-sitter/tree-sitter-verilog)
 * [VHDL](https://github.com/alemuller/tree-sitter-vhdl)
@@ -60,12 +63,14 @@ Parsers for these languages are fairly complete:
 Parsers for these languages are in development:
 
 * [Agda](https://github.com/tree-sitter/tree-sitter-agda)
+* [Erlang](https://github.com/AbstractMachinesLab/tree-sitter-erlang/)
 * [Haskell](https://github.com/tree-sitter/tree-sitter-haskell)
 * [Julia](https://github.com/tree-sitter/tree-sitter-julia)
 * [Nix](https://github.com/cstrahan/tree-sitter-nix)
 * [Scala](https://github.com/tree-sitter/tree-sitter-scala)
-* [SPARQL](https://github.com/BonaBeavis/tree-sitter-sparql)
+* [Sourcepawn](https://github.com/nilshelmig/tree-sitter-sourcepawn)
 * [Swift](https://github.com/tree-sitter/tree-sitter-swift)
+
 
 ### Talks on Tree-sitter
 

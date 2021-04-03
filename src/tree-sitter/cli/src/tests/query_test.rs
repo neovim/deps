@@ -3,7 +3,7 @@ use lazy_static::lazy_static;
 use std::env;
 use std::fmt::Write;
 use tree_sitter::{
-    allocations, Language, Node, Parser, Query, QueryCapture, QueryCursor, QueryError,
+    allocations, Language, Node, Parser, Point, Query, QueryCapture, QueryCursor, QueryError,
     QueryErrorKind, QueryMatch, QueryPredicate, QueryPredicateArg, QueryProperty,
 };
 
@@ -119,6 +119,31 @@ fn test_query_errors_on_invalid_syntax() {
             .join("\n")
         );
 
+        // Need at least one child node for a child anchor
+        assert_eq!(
+            Query::new(language, r#"(statement_block .)"#)
+                .unwrap_err()
+                .message,
+            [
+                //
+                r#"(statement_block .)"#,
+                r#"                  ^"#
+            ]
+            .join("\n")
+        );
+
+        // Need a field name after a negated field operator
+        assert_eq!(
+            Query::new(language, r#"(statement_block ! (if_statement))"#)
+                .unwrap_err()
+                .message,
+            [
+                r#"(statement_block ! (if_statement))"#,
+                r#"                   ^"#
+            ]
+            .join("\n")
+        );
+
         // tree-sitter/tree-sitter/issues/968
         assert_eq!(
             Query::new(get_language("c"), r#"(parameter_list [ ")" @foo)"#)
@@ -186,6 +211,26 @@ fn test_query_errors_on_invalid_symbols() {
                 column: 14,
                 kind: QueryErrorKind::Field,
                 message: "conditioning".to_string()
+            }
+        );
+        assert_eq!(
+            Query::new(language, "(if_statement !alternativ)").unwrap_err(),
+            QueryError {
+                row: 0,
+                offset: 15,
+                column: 15,
+                kind: QueryErrorKind::Field,
+                message: "alternativ".to_string()
+            }
+        );
+        assert_eq!(
+            Query::new(language, "(if_statement !alternatives)").unwrap_err(),
+            QueryError {
+                row: 0,
+                offset: 15,
+                column: 15,
+                kind: QueryErrorKind::Field,
+                message: "alternatives".to_string()
             }
         );
     });
@@ -856,6 +901,97 @@ fn test_query_matches_with_immediate_siblings() {
 }
 
 #[test]
+fn test_query_matches_with_last_named_child() {
+    allocations::record(|| {
+        let language = get_language("c");
+        let query = Query::new(
+            language,
+            "(compound_statement
+                (_)
+                (_)
+                (expression_statement
+                    (identifier) @last_id) .)",
+        )
+        .unwrap();
+        assert_query_matches(
+            language,
+            &query,
+            "
+            void one() { a; b; c; }
+            void two() { d; e; }
+            void three() { f; g; h; i; }
+            ",
+            &[(0, vec![("last_id", "c")]), (0, vec![("last_id", "i")])],
+        );
+    });
+}
+
+#[test]
+fn test_query_matches_with_negated_fields() {
+    allocations::record(|| {
+        let language = get_language("javascript");
+        let query = Query::new(
+            language,
+            "
+            (import_specifier
+                !alias
+                name: (identifier) @import_name)
+
+            (export_specifier
+                !alias
+                name: (identifier) @export_name)
+
+            (export_statement
+                !decorator
+                !source
+                (_) @exported)
+
+            ; This negated field list is an extension of a previous
+            ; negated field list. The order of the children and negated
+            ; fields doesn't matter.
+            (export_statement
+                !decorator
+                !source
+                (_) @exported_expr
+                !declaration)
+
+            ; This negated field list is a prefix of a previous
+            ; negated field list.
+            (export_statement
+                !decorator
+                (_) @export_child .)
+            ",
+        )
+        .unwrap();
+        assert_query_matches(
+            language,
+            &query,
+            "
+            import {a as b, c} from 'p1';
+            export {g, h as i} from 'p2';
+
+            @foo
+            export default 1;
+
+            export var j = 1;
+
+            export default k;
+            ",
+            &[
+                (0, vec![("import_name", "c")]),
+                (1, vec![("export_name", "g")]),
+                (4, vec![("export_child", "'p2'")]),
+                (2, vec![("exported", "var j = 1;")]),
+                (4, vec![("export_child", "var j = 1;")]),
+                (2, vec![("exported", "k")]),
+                (3, vec![("exported_expr", "k")]),
+                (4, vec![("export_child", "k")]),
+            ],
+        );
+    });
+}
+
+#[test]
 fn test_query_matches_with_repeated_leaf_nodes() {
     allocations::record(|| {
         let language = get_language("javascript");
@@ -974,15 +1110,7 @@ fn test_query_matches_with_top_level_repetitions() {
 fn test_query_matches_with_non_terminal_repetitions_within_root() {
     allocations::record(|| {
         let language = get_language("javascript");
-        let query = Query::new(
-            language,
-            r#"
-            (_
-                (expression_statement
-                  (identifier) @id)+)
-            "#,
-        )
-        .unwrap();
+        let query = Query::new(language, "(_ (expression_statement (identifier) @id)+)").unwrap();
 
         assert_query_matches(
             language,
@@ -1076,6 +1204,34 @@ fn test_query_matches_with_multiple_repetition_patterns_that_intersect_other_pat
                     vec![("ref.method", source.as_str()), ("name", "theMethod")],
                 )])
                 .collect::<Vec<_>>(),
+        );
+    });
+}
+
+#[test]
+fn test_query_matches_with_trailing_repetitions_of_last_child() {
+    allocations::record(|| {
+        let language = get_language("javascript");
+
+        let query = Query::new(
+            language,
+            "
+            (unary_expression (primary_expression)+ @operand)
+            ",
+        )
+        .unwrap();
+
+        assert_query_matches(
+            language,
+            &query,
+            "
+            a = typeof (!b && ~c);
+            ",
+            &[
+                (0, vec![("operand", "b")]),
+                (0, vec![("operand", "c")]),
+                (0, vec![("operand", "(!b && ~c)")]),
+            ],
         );
     });
 }
@@ -1605,6 +1761,21 @@ fn test_query_matches_within_byte_range() {
         let tree = parser.parse(&source, None).unwrap();
 
         let mut cursor = QueryCursor::new();
+
+        let matches =
+            cursor
+                .set_byte_range(0, 8)
+                .matches(&query, tree.root_node(), to_callback(source));
+
+        assert_eq!(
+            collect_matches(matches, &query, source),
+            &[
+                (0, vec![("element", "a")]),
+                (0, vec![("element", "b")]),
+                (0, vec![("element", "c")]),
+            ]
+        );
+
         let matches =
             cursor
                 .set_byte_range(5, 15)
@@ -1616,6 +1787,75 @@ fn test_query_matches_within_byte_range() {
                 (0, vec![("element", "c")]),
                 (0, vec![("element", "d")]),
                 (0, vec![("element", "e")]),
+            ]
+        );
+
+        let matches =
+            cursor
+                .set_byte_range(12, 0)
+                .matches(&query, tree.root_node(), to_callback(source));
+
+        assert_eq!(
+            collect_matches(matches, &query, source),
+            &[
+                (0, vec![("element", "e")]),
+                (0, vec![("element", "f")]),
+                (0, vec![("element", "g")]),
+            ]
+        );
+    });
+}
+
+#[test]
+fn test_query_matches_within_point_range() {
+    allocations::record(|| {
+        let language = get_language("javascript");
+        let query = Query::new(language, "(identifier) @element").unwrap();
+
+        let source = "[a, b,\n c, d,\n e, f,\n g]";
+
+        let mut parser = Parser::new();
+        parser.set_language(language).unwrap();
+        let tree = parser.parse(&source, None).unwrap();
+
+        let mut cursor = QueryCursor::new();
+
+        let matches = cursor
+            .set_point_range(Point::new(0, 0), Point::new(1, 3))
+            .matches(&query, tree.root_node(), to_callback(source));
+
+        assert_eq!(
+            collect_matches(matches, &query, source),
+            &[
+                (0, vec![("element", "a")]),
+                (0, vec![("element", "b")]),
+                (0, vec![("element", "c")]),
+            ]
+        );
+
+        let matches = cursor
+            .set_point_range(Point::new(1, 0), Point::new(2, 3))
+            .matches(&query, tree.root_node(), to_callback(source));
+
+        assert_eq!(
+            collect_matches(matches, &query, source),
+            &[
+                (0, vec![("element", "c")]),
+                (0, vec![("element", "d")]),
+                (0, vec![("element", "e")]),
+            ]
+        );
+
+        let matches = cursor
+            .set_point_range(Point::new(2, 1), Point::new(0, 0))
+            .matches(&query, tree.root_node(), to_callback(source));
+
+        assert_eq!(
+            collect_matches(matches, &query, source),
+            &[
+                (0, vec![("element", "e")]),
+                (0, vec![("element", "f")]),
+                (0, vec![("element", "g")]),
             ]
         );
     });
