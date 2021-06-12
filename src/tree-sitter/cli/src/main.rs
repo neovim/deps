@@ -1,29 +1,31 @@
+use anyhow::{anyhow, Context, Result};
 use clap::{App, AppSettings, Arg, SubCommand};
-use error::Error;
 use glob::glob;
 use std::path::Path;
-use std::process::exit;
 use std::{env, fs, u64};
-use tree_sitter::Language;
 use tree_sitter_cli::{
-    config, error, generate, highlight, loader, logger, parse, query, tags, test, test_highlight,
-    util, wasm, web_ui,
+    generate, highlight, logger, parse, query, tags, test, test_highlight, util, wasm, web_ui,
 };
+use tree_sitter_config::Config;
+use tree_sitter_loader as loader;
 
 const BUILD_VERSION: &'static str = env!("CARGO_PKG_VERSION");
 const BUILD_SHA: Option<&'static str> = option_env!("BUILD_SHA");
 
-fn main() {
-    if let Err(e) = run() {
-        if !e.message().is_empty() {
-            println!("");
-            eprintln!("{}", e.message());
+fn main() -> Result<()> {
+    let result = run();
+    // Ignore BrokenPipe errors
+    if let Err(err) = &result {
+        if let Some(error) = err.downcast_ref::<std::io::Error>() {
+            if error.kind() == std::io::ErrorKind::BrokenPipe {
+                return Ok(());
+            }
         }
-        exit(1);
     }
+    result
 }
 
-fn run() -> error::Result<()> {
+fn run() -> Result<()> {
     let version = if let Some(build_sha) = BUILD_SHA {
         format!("{} ({})", BUILD_VERSION, build_sha)
     } else {
@@ -122,7 +124,12 @@ fn run() -> error::Result<()> {
                         .takes_value(true)
                         .help("Only run corpus test cases whose name includes the given string"),
                 )
-                .arg(Arg::with_name("update").long("update").short("u").help("Update all syntax trees in corpus files with current parser output"))
+                .arg(
+                    Arg::with_name("update")
+                        .long("update")
+                        .short("u")
+                        .help("Update all syntax trees in corpus files with current parser output"),
+                )
                 .arg(Arg::with_name("debug").long("debug").short("d"))
                 .arg(Arg::with_name("debug-graph").long("debug-graph").short("D")),
         )
@@ -167,14 +174,19 @@ fn run() -> error::Result<()> {
         )
         .get_matches();
 
-    let home_dir = dirs::home_dir().expect("Failed to read home directory");
     let current_dir = env::current_dir().unwrap();
-    let config = config::Config::load(&home_dir);
-    let mut loader = loader::Loader::new(config.binary_directory.clone());
+    let config = Config::load()?;
+    let mut loader = loader::Loader::new()?;
 
     if matches.subcommand_matches("init-config").is_some() {
-        let config = config::Config::new(&home_dir);
-        config.save(&home_dir)?;
+        let mut config = Config::initial()?;
+        config.add(tree_sitter_loader::Config::initial())?;
+        config.add(tree_sitter_cli::highlight::ThemeConfig::default())?;
+        config.save()?;
+        println!(
+            "Saved initial configuration to {}",
+            config.location.display()
+        );
     } else if let Some(matches) = matches.subcommand_matches("generate") {
         let grammar_path = matches.value_of("grammar-path");
         let report_symbol_name = matches.value_of("report-states-for-rule").or_else(|| {
@@ -204,7 +216,7 @@ fn run() -> error::Result<()> {
         let languages = loader.languages_at_path(&current_dir)?;
         let language = languages
             .first()
-            .ok_or_else(|| "No language found".to_string())?;
+            .ok_or_else(|| anyhow!("No language found"))?;
         let test_dir = current_dir.join("test");
 
         // Run the corpus tests. Look for them at two paths: `test/corpus` and `corpus`.
@@ -250,15 +262,15 @@ fn run() -> error::Result<()> {
 
         let max_path_length = paths.iter().map(|p| p.chars().count()).max().unwrap();
         let mut has_error = false;
-        loader.find_all_languages(&config.parser_directories)?;
+        let loader_config = config.get()?;
+        loader.find_all_languages(&loader_config)?;
 
         let should_track_stats = matches.is_present("stat");
         let mut stats = parse::Stats::default();
 
         for path in paths {
             let path = Path::new(&path);
-            let language =
-                select_language(&mut loader, path, &current_dir, matches.value_of("scope"))?;
+            let language = loader.select_language(path, &current_dir, matches.value_of("scope"))?;
 
             let this_file_errored = parse::parse_file_at_path(
                 language,
@@ -289,14 +301,14 @@ fn run() -> error::Result<()> {
         }
 
         if has_error {
-            return Error::err(String::new());
+            return Err(anyhow!(""));
         }
     } else if let Some(matches) = matches.subcommand_matches("query") {
         let ordered_captures = matches.values_of("captures").is_some();
         let paths = collect_paths(matches.value_of("paths-file"), matches.values_of("paths"))?;
-        loader.find_all_languages(&config.parser_directories)?;
-        let language = select_language(
-            &mut loader,
+        let loader_config = config.get()?;
+        loader.find_all_languages(&loader_config)?;
+        let language = loader.select_language(
             Path::new(&paths[0]),
             &current_dir,
             matches.value_of("scope"),
@@ -304,7 +316,7 @@ fn run() -> error::Result<()> {
         let query_path = Path::new(matches.value_of("query-path").unwrap());
         let range = matches.value_of("byte-range").map(|br| {
             let r: Vec<&str> = br.split(":").collect();
-            (r[0].parse().unwrap(), r[1].parse().unwrap())
+            r[0].parse().unwrap()..r[1].parse().unwrap()
         });
         let should_test = matches.is_present("test");
         query::query_files_at_paths(
@@ -316,7 +328,8 @@ fn run() -> error::Result<()> {
             should_test,
         )?;
     } else if let Some(matches) = matches.subcommand_matches("tags") {
-        loader.find_all_languages(&config.parser_directories)?;
+        let loader_config = config.get()?;
+        loader.find_all_languages(&loader_config)?;
         let paths = collect_paths(matches.value_of("paths-file"), matches.values_of("paths"))?;
         tags::generate_tags(
             &loader,
@@ -326,8 +339,10 @@ fn run() -> error::Result<()> {
             matches.is_present("time"),
         )?;
     } else if let Some(matches) = matches.subcommand_matches("highlight") {
-        loader.configure_highlights(&config.theme.highlight_names);
-        loader.find_all_languages(&config.parser_directories)?;
+        let theme_config: tree_sitter_cli::highlight::ThemeConfig = config.get()?;
+        loader.configure_highlights(&theme_config.theme.highlight_names);
+        let loader_config = config.get()?;
+        loader.find_all_languages(&loader_config)?;
 
         let time = matches.is_present("time");
         let quiet = matches.is_present("quiet");
@@ -344,7 +359,7 @@ fn run() -> error::Result<()> {
         if let Some(scope) = matches.value_of("scope") {
             lang = loader.language_configuration_for_scope(scope)?;
             if lang.is_none() {
-                return Error::err(format!("Unknown scope '{}'", scope));
+                return Err(anyhow!("Unknown scope '{}'", scope));
             }
         }
 
@@ -363,10 +378,11 @@ fn run() -> error::Result<()> {
 
             if let Some(highlight_config) = language_config.highlight_config(language)? {
                 let source = fs::read(path)?;
+                let theme_config = config.get()?;
                 if html_mode {
                     highlight::html(
                         &loader,
-                        &config.theme,
+                        &theme_config,
                         &source,
                         highlight_config,
                         quiet,
@@ -375,7 +391,7 @@ fn run() -> error::Result<()> {
                 } else {
                     highlight::ansi(
                         &loader,
-                        &config.theme,
+                        &theme_config,
                         &source,
                         highlight_config,
                         time,
@@ -397,7 +413,8 @@ fn run() -> error::Result<()> {
         let open_in_browser = !matches.is_present("quiet");
         web_ui::serve(&current_dir, open_in_browser);
     } else if matches.subcommand_matches("dump-languages").is_some() {
-        loader.find_all_languages(&config.parser_directories)?;
+        let loader_config = config.get()?;
+        loader.find_all_languages(&loader_config)?;
         for (configuration, language_path) in loader.get_all_language_configurations() {
             println!(
                 concat!(
@@ -424,12 +441,10 @@ fn run() -> error::Result<()> {
 fn collect_paths<'a>(
     paths_file: Option<&str>,
     paths: Option<impl Iterator<Item = &'a str>>,
-) -> error::Result<Vec<String>> {
+) -> Result<Vec<String>> {
     if let Some(paths_file) = paths_file {
         return Ok(fs::read_to_string(paths_file)
-            .map_err(Error::wrap(|| {
-                format!("Failed to read paths file {}", paths_file)
-            }))?
+            .with_context(|| format!("Failed to read paths file {}", paths_file))?
             .trim()
             .split_ascii_whitespace()
             .map(String::from)
@@ -459,8 +474,8 @@ fn collect_paths<'a>(
             if Path::new(path).exists() {
                 incorporate_path(path, positive);
             } else {
-                let paths = glob(path)
-                    .map_err(Error::wrap(|| format!("Invalid glob pattern {:?}", path)))?;
+                let paths =
+                    glob(path).with_context(|| format!("Invalid glob pattern {:?}", path))?;
                 for path in paths {
                     if let Some(path) = path?.to_str() {
                         incorporate_path(path, positive);
@@ -470,57 +485,13 @@ fn collect_paths<'a>(
         }
 
         if result.is_empty() {
-            Error::err(
-                "No files were found at or matched by the provided pathname/glob".to_string(),
-            )?;
+            return Err(anyhow!(
+                "No files were found at or matched by the provided pathname/glob"
+            ));
         }
 
         return Ok(result);
     }
 
-    Err(Error::new("Must provide one or more paths".to_string()))
-}
-
-fn select_language(
-    loader: &mut loader::Loader,
-    path: &Path,
-    current_dir: &Path,
-    scope: Option<&str>,
-) -> Result<Language, Error> {
-    if let Some(scope) = scope {
-        if let Some(config) =
-            loader
-                .language_configuration_for_scope(scope)
-                .map_err(Error::wrap(|| {
-                    format!("Failed to load language for scope '{}'", scope)
-                }))?
-        {
-            Ok(config.0)
-        } else {
-            return Error::err(format!("Unknown scope '{}'", scope));
-        }
-    } else if let Some((lang, _)) =
-        loader
-            .language_configuration_for_file_name(path)
-            .map_err(Error::wrap(|| {
-                format!(
-                    "Failed to load language for file name {:?}",
-                    path.file_name().unwrap()
-                )
-            }))?
-    {
-        Ok(lang)
-    } else if let Some(lang) = loader
-        .languages_at_path(&current_dir)
-        .map_err(Error::wrap(|| {
-            "Failed to load language in current directory"
-        }))?
-        .first()
-        .cloned()
-    {
-        Ok(lang)
-    } else {
-        eprintln!("No language found");
-        Error::err("No language found".to_string())
-    }
+    Err(anyhow!("Must provide one or more paths"))
 }

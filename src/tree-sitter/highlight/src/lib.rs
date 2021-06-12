@@ -4,6 +4,7 @@ pub use c_lib as c;
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::{iter, mem, ops, str, usize};
+use thiserror::Error;
 use tree_sitter::{
     Language, LossyUtf8, Node, Parser, Point, Query, QueryCaptures, QueryCursor, QueryError,
     QueryMatch, Range, Tree,
@@ -18,10 +19,13 @@ const BUFFER_LINES_RESERVE_CAPACITY: usize = 1000;
 pub struct Highlight(pub usize);
 
 /// Represents the reason why syntax highlighting failed.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Error, PartialEq, Eq)]
 pub enum Error {
+    #[error("Cancelled")]
     Cancelled,
+    #[error("Invalid language")]
     InvalidLanguage,
+    #[error("Unknown error")]
     Unknown,
 }
 
@@ -101,7 +105,7 @@ where
 struct HighlightIterLayer<'a> {
     _tree: Tree,
     cursor: QueryCursor,
-    captures: iter::Peekable<QueryCaptures<'a, &'a [u8]>>,
+    captures: iter::Peekable<QueryCaptures<'a, 'a, &'a [u8]>>,
     config: &'a HighlightConfiguration,
     highlight_end_stack: Vec<usize>,
     scope_stack: Vec<LocalScope<'a>>,
@@ -356,9 +360,7 @@ impl<'a> HighlightIterLayer<'a> {
                     let mut injections_by_pattern_index =
                         vec![(None, Vec::new(), false); combined_injections_query.pattern_count()];
                     let matches =
-                        cursor.matches(combined_injections_query, tree.root_node(), |n: Node| {
-                            &source[n.byte_range()]
-                        });
+                        cursor.matches(combined_injections_query, tree.root_node(), source);
                     for mat in matches {
                         let entry = &mut injections_by_pattern_index[mat.pattern_index];
                         let (language_name, content_node, include_children) =
@@ -395,9 +397,7 @@ impl<'a> HighlightIterLayer<'a> {
                 let cursor_ref =
                     unsafe { mem::transmute::<_, &'static mut QueryCursor>(&mut cursor) };
                 let captures = cursor_ref
-                    .captures(&config.query, tree_ref.root_node(), move |n: Node| {
-                        &source[n.byte_range()]
-                    })
+                    .captures(&config.query, tree_ref.root_node(), source)
                     .peekable();
 
                 result.push(HighlightIterLayer {
@@ -1025,7 +1025,7 @@ impl HtmlRenderer {
 fn injection_for_match<'a>(
     config: &HighlightConfiguration,
     query: &'a Query,
-    query_match: &QueryMatch<'a>,
+    query_match: &QueryMatch<'a, 'a>,
     source: &'a [u8],
 ) -> (Option<&'a str>, Option<Node<'a>>, bool) {
     let content_capture_index = config.injection_content_capture_index;

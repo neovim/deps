@@ -26,7 +26,6 @@
   "_memcpy",
   "_strlen",
   "_towupper",
-  "abort",
 
   "_ts_init",
   "_ts_language_field_count",
@@ -69,6 +68,7 @@
   "_ts_parser_enable_logger_wasm",
   "_ts_parser_new_wasm",
   "_ts_parser_parse_wasm",
+  "_ts_parser_reset",
   "_ts_parser_set_language",
   "_ts_parser_set_timeout_micros",
   "_ts_parser_timeout_micros",

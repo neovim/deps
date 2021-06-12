@@ -1,8 +1,8 @@
-use super::error::{Error, Result};
+use anyhow::{anyhow, Context, Error, Result};
 use libloading::{Library, Symbol};
 use once_cell::unsync::OnceCell;
 use regex::{Regex, RegexBuilder};
-use serde_derive::Deserialize;
+use serde_derive::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::io::BufReader;
 use std::ops::Range;
@@ -14,6 +14,26 @@ use std::{fs, mem};
 use tree_sitter::{Language, QueryError};
 use tree_sitter_highlight::HighlightConfiguration;
 use tree_sitter_tags::{Error as TagsError, TagsConfiguration};
+
+#[derive(Default, Deserialize, Serialize)]
+pub struct Config {
+    #[serde(default)]
+    #[serde(rename = "parser-directories")]
+    pub parser_directories: Vec<PathBuf>,
+}
+
+impl Config {
+    pub fn initial() -> Config {
+        let home_dir = dirs::home_dir().expect("Cannot determine home directory");
+        Config {
+            parser_directories: vec![
+                home_dir.join("github"),
+                home_dir.join("src"),
+                home_dir.join("source"),
+            ],
+        }
+    }
+}
 
 #[cfg(unix)]
 const DYLIB_EXTENSION: &'static str = "so";
@@ -54,7 +74,14 @@ unsafe impl Send for Loader {}
 unsafe impl Sync for Loader {}
 
 impl Loader {
-    pub fn new(parser_lib_path: PathBuf) -> Self {
+    pub fn new() -> Result<Self> {
+        let parser_lib_path = dirs::cache_dir()
+            .ok_or(anyhow!("Cannot determine cache directory"))?
+            .join("tree-sitter/lib");
+        Ok(Self::with_parser_lib_path(parser_lib_path))
+    }
+
+    pub fn with_parser_lib_path(parser_lib_path: PathBuf) -> Self {
         Loader {
             parser_lib_path,
             languages_by_id: Vec::new(),
@@ -76,8 +103,15 @@ impl Loader {
         self.highlight_names.lock().unwrap().clone()
     }
 
-    pub fn find_all_languages(&mut self, parser_src_paths: &Vec<PathBuf>) -> Result<()> {
-        for parser_container_dir in parser_src_paths.iter() {
+    pub fn find_all_languages(&mut self, config: &Config) -> Result<()> {
+        if config.parser_directories.is_empty() {
+            eprintln!("Warning: You have not configured any parser directories!");
+            eprintln!("Please run `tree-sitter init-config` and edit the resulting");
+            eprintln!("configuration file to indicate where we should look for");
+            eprintln!("language grammars.");
+            eprintln!("");
+        }
+        for parser_container_dir in &config.parser_directories {
             if let Ok(entries) = fs::read_dir(parser_container_dir) {
                 for entry in entries {
                     let entry = entry?;
@@ -162,7 +196,7 @@ impl Loader {
                 // one to use by applying the configurations' content regexes.
                 else {
                     let file_contents = fs::read(path)
-                        .map_err(Error::wrap(|| format!("Failed to read path {:?}", path)))?;
+                        .with_context(|| format!("Failed to read path {:?}", path))?;
                     let file_contents = String::from_utf8_lossy(&file_contents);
                     let mut best_score = -2isize;
                     let mut best_configuration_id = None;
@@ -250,9 +284,9 @@ impl Loader {
             name: String,
         }
         let mut grammar_file =
-            fs::File::open(grammar_path).map_err(Error::wrap(|| "Failed to read grammar.json"))?;
+            fs::File::open(grammar_path).with_context(|| "Failed to read grammar.json")?;
         let grammar_json: GrammarJSON = serde_json::from_reader(BufReader::new(&mut grammar_file))
-            .map_err(Error::wrap(|| "Failed to parse grammar.json"))?;
+            .with_context(|| "Failed to parse grammar.json")?;
 
         let scanner_path = if scanner_path.exists() {
             Some(scanner_path)
@@ -283,11 +317,11 @@ impl Loader {
         let mut library_path = self.parser_lib_path.join(name);
         library_path.set_extension(DYLIB_EXTENSION);
 
-        let recompile = needs_recompile(&library_path, &parser_path, &scanner_path).map_err(
-            Error::wrap(|| "Failed to compare source and binary timestamps"),
-        )?;
+        let recompile = needs_recompile(&library_path, &parser_path, &scanner_path)
+            .with_context(|| "Failed to compare source and binary timestamps")?;
 
         if recompile {
+            fs::create_dir_all(&self.parser_lib_path)?;
             let mut config = cc::Build::new();
             config
                 .cpp(true)
@@ -336,26 +370,23 @@ impl Loader {
 
             let output = command
                 .output()
-                .map_err(Error::wrap(|| "Failed to execute C compiler"))?;
+                .with_context(|| "Failed to execute C compiler")?;
             if !output.status.success() {
-                return Err(Error::new(format!(
+                return Err(anyhow!(
                     "Parser compilation failed.\nStdout: {}\nStderr: {}",
                     String::from_utf8_lossy(&output.stdout),
                     String::from_utf8_lossy(&output.stderr)
-                )));
+                ));
             }
         }
 
-        let library = unsafe { Library::new(&library_path) }.map_err(Error::wrap(|| {
-            format!("Error opening dynamic library {:?}", &library_path)
-        }))?;
+        let library = unsafe { Library::new(&library_path) }
+            .with_context(|| format!("Error opening dynamic library {:?}", &library_path))?;
         let language_fn_name = format!("tree_sitter_{}", replace_dashes_with_underscores(name));
         let language = unsafe {
             let language_fn: Symbol<unsafe extern "C" fn() -> Language> = library
                 .get(language_fn_name.as_bytes())
-                .map_err(Error::wrap(|| {
-                    format!("Failed to load symbol {}", language_fn_name)
-                }))?;
+                .with_context(|| format!("Failed to load symbol {}", language_fn_name))?;
             language_fn()
         };
         mem::forget(library);
@@ -370,8 +401,7 @@ impl Loader {
             Err(e) => {
                 eprintln!(
                     "Failed to load language for injection string '{}': {}",
-                    string,
-                    e.message()
+                    string, e
                 );
                 None
             }
@@ -380,8 +410,7 @@ impl Loader {
                 Err(e) => {
                     eprintln!(
                         "Failed to load property sheet for injection string '{}': {}",
-                        string,
-                        e.message()
+                        string, e
                     );
                     None
                 }
@@ -540,6 +569,43 @@ impl Loader {
     fn regex(pattern: Option<String>) -> Option<Regex> {
         pattern.and_then(|r| RegexBuilder::new(&r).multi_line(true).build().ok())
     }
+
+    pub fn select_language(
+        &mut self,
+        path: &Path,
+        current_dir: &Path,
+        scope: Option<&str>,
+    ) -> Result<Language> {
+        if let Some(scope) = scope {
+            if let Some(config) = self
+                .language_configuration_for_scope(scope)
+                .with_context(|| format!("Failed to load language for scope '{}'", scope))?
+            {
+                Ok(config.0)
+            } else {
+                return Err(anyhow!("Unknown scope '{}'", scope));
+            }
+        } else if let Some((lang, _)) = self
+            .language_configuration_for_file_name(path)
+            .with_context(|| {
+                format!(
+                    "Failed to load language for file name {}",
+                    &path.file_name().unwrap().to_string_lossy()
+                )
+            })?
+        {
+            Ok(lang)
+        } else if let Some(lang) = self
+            .languages_at_path(&current_dir)
+            .with_context(|| "Failed to load language in current directory")?
+            .first()
+            .cloned()
+        {
+            Ok(lang)
+        } else {
+            Err(anyhow!("No language found"))
+        }
+    }
 }
 
 impl<'a> LanguageConfiguration<'a> {
@@ -646,7 +712,7 @@ impl<'a> LanguageConfiguration<'a> {
         ranges: &'b Vec<(String, Range<usize>)>,
         source: &str,
         start_offset: usize,
-    ) -> (&'b str, QueryError) {
+    ) -> Error {
         let offset_within_section = error.offset - start_offset;
         let (path, range) = ranges
             .iter()
@@ -657,7 +723,7 @@ impl<'a> LanguageConfiguration<'a> {
             .chars()
             .filter(|c| *c == '\n')
             .count();
-        (path.as_ref(), error)
+        Error::from(error).context(format!("Error in query file {:?}", path))
     }
 
     fn read_queries(
@@ -671,18 +737,16 @@ impl<'a> LanguageConfiguration<'a> {
             for path in paths {
                 let abs_path = self.root_path.join(path);
                 let prev_query_len = query.len();
-                query += &fs::read_to_string(&abs_path).map_err(Error::wrap(|| {
-                    format!("Failed to read query file {:?}", path)
-                }))?;
+                query += &fs::read_to_string(&abs_path)
+                    .with_context(|| format!("Failed to read query file {:?}", path))?;
                 path_ranges.push((path.clone(), prev_query_len..query.len()));
             }
         } else {
             let queries_path = self.root_path.join("queries");
             let path = queries_path.join(default_path);
             if path.exists() {
-                query = fs::read_to_string(&path).map_err(Error::wrap(|| {
-                    format!("Failed to read query file {:?}", path)
-                }))?;
+                query = fs::read_to_string(&path)
+                    .with_context(|| format!("Failed to read query file {:?}", path))?;
                 path_ranges.push((default_path.to_string(), 0..query.len()));
             }
         }

@@ -100,8 +100,10 @@ The most important command you'll use is `tree-sitter generate`. This command re
 The first time you run `tree-sitter generate`, it will also generate a few other files:
 
 * `binding.gyp` - This file tells Node.js how to compile your language.
-* `index.js` - This is the file that Node.js initially loads when using your language.
-* `src/binding.cc` - This file wraps your language in a JavaScript object when used in Node.js
+* `bindings/node/index.js` - This is the file that Node.js initially loads when using your language.
+* `bindings/node/binding.cc` - This file wraps your language in a JavaScript object when used in Node.js.
+* `bindings/rust/lib.rs` - This file wraps your language in a Rust crate when used in Rust.
+* `bindings/rust/build.rs` - This file wraps the building process for the Rust crate.
 * `src/tree_sitter/parser.h` - This file provides some basic C definitions that are used in your generated `parser.c` file.
 
 If there is an ambiguity or *local ambiguity* in your grammar, Tree-sitter will detect it during parser generation, and it will exit with a `Unresolved conflict` error message. See below for more information on these errors.
@@ -238,7 +240,7 @@ It's unlikely that you'll be able to satisfy these two properties just by transl
 
 It's usually a good idea to find a formal specification for the language you're trying to parse. This specification will most likely contain a context-free grammar. As you read through the rules of this CFG, you will probably discover a complex and cyclic graph of relationships. It might be unclear how you should navigate this graph as you define your grammar.
 
-Although languages have very different constructs, their constructs can often be categorized in to similar groups like *Declarations*, *Definitions*, *Statements*, *Expressions*, *Types*, and *Patterns*. In writing your grammar, a good first step is to create just enough structure to include all of these basic *groups* of symbols. For a lanugage like Go, you might start with something like this:
+Although languages have very different constructs, their constructs can often be categorized in to similar groups like *Declarations*, *Definitions*, *Statements*, *Expressions*, *Types*, and *Patterns*. In writing your grammar, a good first step is to create just enough structure to include all of these basic *groups* of symbols. For a language like Go, you might start with something like this:
 
 ```js
 {
@@ -702,7 +704,7 @@ if (valid_symbols[INDENT] || valid_symbol[DEDENT]) {
 [cst]: https://en.wikipedia.org/wiki/Parse_tree
 [dfa]: https://en.wikipedia.org/wiki/Deterministic_finite_automaton
 [ebnf]: https://en.wikipedia.org/wiki/Extended_Backus%E2%80%93Naur_form
-[ecmascript-spec]: https://www.ecma-international.org/ecma-262/6.0
+[ecmascript-spec]: https://262.ecma-international.org/6.0/
 [ejs]: https://ejs.co
 [enum]: https://en.wikipedia.org/wiki/Enumerated_type#C
 [glr-parsing]: https://en.wikipedia.org/wiki/GLR_parser

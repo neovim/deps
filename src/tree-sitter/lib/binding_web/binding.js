@@ -123,7 +123,7 @@ class Parser {
   }
 
   reset() {
-    C._ts_parser_parse_wasm(this[0]);
+    C._ts_parser_reset(this[0]);
   }
 
   setTimeoutMicros(timeout) {
@@ -945,6 +945,7 @@ class Query {
     this.setProperties = setProperties;
     this.assertedProperties = assertedProperties;
     this.refutedProperties = refutedProperties;
+    this.exceededMatchLimit = false;
   }
 
   delete() {
@@ -952,9 +953,17 @@ class Query {
     this[0] = 0;
   }
 
-  matches(node, startPosition, endPosition) {
+  matches(node, startPosition, endPosition, options) {
     if (!startPosition) startPosition = ZERO_POINT;
     if (!endPosition) endPosition = ZERO_POINT;
+    if (!options) options = {};
+
+    let matchLimit = options.matchLimit;
+    if (typeof matchLimit === 'undefined') {
+      matchLimit = 0;
+    } else if (typeof matchLimit !== 'number') {
+      throw new Error('Arguments must be numbers');
+    }
 
     marshalNode(node);
 
@@ -964,12 +973,15 @@ class Query {
       startPosition.row,
       startPosition.column,
       endPosition.row,
-      endPosition.column
+      endPosition.column,
+      matchLimit
     );
 
     const rawCount = getValue(TRANSFER_BUFFER, 'i32');
     const startAddress = getValue(TRANSFER_BUFFER + SIZE_OF_INT, 'i32');
+    const didExceedMatchLimit = getValue(TRANSFER_BUFFER + 2 * SIZE_OF_INT, 'i32');
     const result = new Array(rawCount);
+    this.exceededMatchLimit = !!didExceedMatchLimit;
 
     let filteredCount = 0;
     let address = startAddress;
@@ -997,9 +1009,17 @@ class Query {
     return result;
   }
 
-  captures(node, startPosition, endPosition) {
+  captures(node, startPosition, endPosition, options) {
     if (!startPosition) startPosition = ZERO_POINT;
     if (!endPosition) endPosition = ZERO_POINT;
+    if (!options) options = {};
+
+    let matchLimit = options.matchLimit;
+    if (typeof matchLimit === 'undefined') {
+      matchLimit = 0;
+    } else if (typeof matchLimit !== 'number') {
+      throw new Error('Arguments must be numbers');
+    }
 
     marshalNode(node);
 
@@ -1009,12 +1029,15 @@ class Query {
       startPosition.row,
       startPosition.column,
       endPosition.row,
-      endPosition.column
+      endPosition.column,
+      matchLimit
     );
 
     const count = getValue(TRANSFER_BUFFER, 'i32');
     const startAddress = getValue(TRANSFER_BUFFER + SIZE_OF_INT, 'i32');
+    const didExceedMatchLimit = getValue(TRANSFER_BUFFER + 2 * SIZE_OF_INT, 'i32');
     const result = [];
+    this.exceededMatchLimit = !!didExceedMatchLimit;
 
     const captures = [];
     let address = startAddress;
@@ -1047,6 +1070,10 @@ class Query {
 
   predicatesForPattern(patternIndex) {
     return this.predicates[patternIndex]
+  }
+
+  didExceedMatchLimit() {
+    return this.exceededMatchLimit;
   }
 }
 

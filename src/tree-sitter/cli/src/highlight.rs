@@ -1,10 +1,10 @@
 use super::util;
-use crate::error::Result;
-use crate::loader::Loader;
 use ansi_term::Color;
+use anyhow::Result;
 use lazy_static::lazy_static;
 use serde::ser::SerializeMap;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde_derive::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::fmt::Write;
@@ -12,6 +12,7 @@ use std::sync::atomic::AtomicUsize;
 use std::time::Instant;
 use std::{fs, io, path, str, usize};
 use tree_sitter_highlight::{HighlightConfiguration, HighlightEvent, Highlighter, HtmlRenderer};
+use tree_sitter_loader::Loader;
 
 pub const HTML_HEADER: &'static str = "
 <!doctype HTML>
@@ -54,6 +55,12 @@ pub struct Style {
 pub struct Theme {
     pub styles: Vec<Style>,
     pub highlight_names: Vec<String>,
+}
+
+#[derive(Default, Deserialize, Serialize)]
+pub struct ThemeConfig {
+    #[serde(default)]
+    pub theme: Theme,
 }
 
 impl Theme {

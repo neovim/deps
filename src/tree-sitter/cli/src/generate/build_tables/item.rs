@@ -75,7 +75,6 @@ pub(crate) struct TokenSetDisplay<'a>(
     pub &'a LexicalGrammar,
 );
 
-#[allow(dead_code)]
 pub(crate) struct ParseItemSetDisplay<'a>(
     pub &'a ParseItemSet<'a>,
     pub &'a SyntaxGrammar,
@@ -181,7 +180,6 @@ impl<'a> Default for ParseItemSet<'a> {
     }
 }
 
-#[allow(dead_code)]
 impl<'a> fmt::Display for ParseItemDisplay<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         if self.0.is_augmented() {
@@ -290,6 +288,7 @@ impl<'a> Hash for ParseItem<'a> {
         hasher.write_u32(self.step_index);
         hasher.write_i32(self.production.dynamic_precedence);
         hasher.write_usize(self.production.steps.len());
+        hasher.write_i32(self.has_preceding_inherited_fields as i32);
         self.precedence().hash(hasher);
         self.associativity().hash(hasher);
 
