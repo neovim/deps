@@ -659,8 +659,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cda74da7e1a664f795bb1f8a87ec406fb89a02522cf6e50620d016add6dbbf5c"
 
 [[package]]
+name = "toml"
+version = "0.5.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a31142970826733df8241ef35dc040ef98c679ab14d7c3e54d827099b3acecaa"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "tree-sitter"
-version = "0.19.5"
+version = "0.20.0"
 dependencies = [
  "cc",
  "lazy_static",
@@ -670,7 +679,7 @@ dependencies = [
 
 [[package]]
 name = "tree-sitter-cli"
-version = "0.19.5"
+version = "0.20.0"
 dependencies = [
  "ansi_term 0.12.1",
  "anyhow",
@@ -691,6 +700,7 @@ dependencies = [
  "smallbitvec",
  "tempfile",
  "tiny_http",
+ "toml",
  "tree-sitter",
  "tree-sitter-config",
  "tree-sitter-highlight",
@@ -713,7 +723,7 @@ dependencies = [
 
 [[package]]
 name = "tree-sitter-highlight"
-version = "0.19.2"
+version = "0.20.0"
 dependencies = [
  "regex",
  "thiserror",
@@ -740,7 +750,7 @@ dependencies = [
 
 [[package]]
 name = "tree-sitter-tags"
-version = "0.19.2"
+version = "0.20.0"
 dependencies = [
  "memchr",
  "regex",
