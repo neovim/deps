@@ -7,7 +7,7 @@ endif()
 project (luv C ASM)
 
 set(LUV_VERSION_MAJOR 1)
-set(LUV_VERSION_MINOR 30)
+set(LUV_VERSION_MINOR 34)
 set(LUV_VERSION_PATCH 1)
 set(LUV_VERSION ${LUV_VERSION_MAJOR}.${LUV_VERSION_MINOR}.${LUV_VERSION_PATCH})
 
@@ -155,7 +155,7 @@ endif()
 if(DEFINED ENV{LUA_COMPAT53_DIR})
   set(LUA_COMPAT53_DIR $ENV{LUA_COMPAT53_DIR})
 endif()
-include_directories(${LUA_COMPAT53_DIR})
+include_directories(${LUA_COMPAT53_DIR}/c-api)
 
 if(WIN32)
   add_definitions(-DLUA_BUILD_AS_DLL -DLUA_LIB)

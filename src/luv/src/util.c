@@ -40,10 +40,17 @@ void luv_stack_dump(lua_State* L, const char* name) {
 }
 
 static int luv_error(lua_State* L, int status) {
+  assert(status < 0);
   lua_pushnil(L);
   lua_pushfstring(L, "%s: %s", uv_err_name(status), uv_strerror(status));
   lua_pushstring(L, uv_err_name(status));
   return 3;
+}
+
+static int luv_result(lua_State* L, int status) {
+  if (status < 0) return luv_error(L, status);
+  lua_pushinteger(L, status);
+  return 1;
 }
 
 static void luv_status(lua_State* L, int status) {
@@ -93,3 +100,12 @@ static int luv_translate_sys_error(lua_State* L) {
   return 0;
 }
 #endif
+
+static int luv_optboolean(lua_State*L, int idx, int val) {
+  idx = lua_absindex(L, idx);
+  luaL_argcheck(L, lua_isboolean(L, idx) || lua_isnoneornil(L, idx), idx, "Expected boolean or nil");
+
+  if (lua_isboolean(L, idx))
+    val = lua_toboolean(L, idx);
+  return val;
+}

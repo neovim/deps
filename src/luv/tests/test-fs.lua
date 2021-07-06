@@ -38,6 +38,30 @@ return require('lib/tap')(function (test)
     uv.fs_unlink(path)
   end)
 
+  -- collect garbage after uv.fs_write but before the write callback
+  -- is called in order to potentially garbage collect the strings that
+  -- are being sent. See https://github.com/luvit/luv/issues/397
+  test("fs.write data refs", function (print, p, expect, uv)
+    local path = "_test_"
+    local fd = assert(uv.fs_open(path, "w+", tonumber("0666", 8)))
+    do
+      -- the number here gets coerced into a string
+      local t = {"with", 600, "lines"}
+      uv.fs_write(fd, t, -1, function()
+        local expectedContents = table.concat(t)
+        local stat = assert(uv.fs_fstat(fd))
+        assert(stat.size == #expectedContents)
+        local chunk = assert(uv.fs_read(fd, stat.size, 0))
+        assert(chunk == expectedContents)
+        assert(uv.fs_close(fd))
+        assert(uv.fs_unlink(path))
+      end)
+    end
+    local count = collectgarbage("count")
+    collectgarbage("collect")
+    assert(count - collectgarbage("count") > 0)
+  end)
+
   test("fs.stat sync", function (print, p, expect, uv)
     local stat = assert(uv.fs_stat("README.md"))
     assert(stat.size)
@@ -98,6 +122,45 @@ return require('lib/tap')(function (test)
     assert(uv.fs_unlink(path2))
   end)
 
+  test("fs.{open,read,close}dir object sync #1", function(print, p, expect, uv)
+    local version = 0x10000 + 28*0x100 + 0
+    if uv.version() >= version then
+      local dir = assert(uv.fs_opendir('.'))
+      repeat
+        local dirent = dir:readdir()
+        if dirent then
+          assert(#dirent==1)
+          p(dirent)
+        end
+      until not dirent
+      assert(dir:closedir()==true)
+    else
+      print("skipped")
+    end
+  end)
+
+  test("fs.{open,read,close}dir object sync #2", function(print, p, expect, uv)
+    local version = 0x10000 + 28*0x100 + 0
+    if uv.version() >= version then
+      local dir = assert(uv.fs_opendir('.'))
+      repeat
+        local dirent = dir:readdir()
+        if dirent then
+          assert(#dirent==1)
+          p(dirent)
+        end
+      until not dirent
+      dir:closedir(function(err, state)
+        assert(err==nil)
+        assert(state==true)
+        assert(tostring(dir):match("^uv_dir_t"))
+        print(dir, 'closed')
+      end)
+    else
+      print("skipped")
+    end
+  end)
+
   test("fs.{open,read,close}dir sync one entry", function(print, p, expect, uv)
     local version = 0x10000 + 28*0x100 + 0
     if uv.version() >= version then
@@ -152,5 +215,125 @@ return require('lib/tap')(function (test)
     else
       print("skipped")
     end
+  end)
+
+  test("fs.statfs sync", function (print, p, expect, uv)
+    local stat = assert(uv.fs_statfs("."))
+    p(stat)
+    assert(stat.bavail>0)
+  end)
+
+  test("fs.statfs async", function (print, p, expect, uv)
+    assert(uv.fs_statfs(".", expect(function (err, stat)
+      assert(not err, err)
+      p(stat)
+      assert(stat.bavail>0)
+    end)))
+  end)
+
+  test("fs.statfs sync error", function (print, p, expect, uv)
+    local stat, err, code = uv.fs_statfs("BAD_FILE!")
+    p{err=err,code=code,stat=stat}
+    assert(not stat)
+    assert(err)
+    assert(code == "ENOENT")
+  end)
+
+  test("fs.statfs async error", function (print, p, expect, uv)
+    assert(uv.fs_statfs("BAD_FILE@", expect(function (err, stat)
+      p{err=err,stat=stat}
+      assert(err)
+      assert(not stat)
+    end)))
+  end)
+
+  test("fs.mkdtemp async", function(print, p, expect, uv)
+    local tp = "luvXXXXXX"
+    uv.fs_mkdtemp(tp, function(err, path)
+      assert(not err)
+      assert(path:match("^luv......"))
+      assert(uv.fs_rmdir(path))
+    end)
+  end)
+
+  test("fs.mkdtemp sync", function(print, p, expect, uv)
+    local tp = "luvXXXXXX"
+    local path, err, code = uv.fs_mkdtemp(tp)
+    assert(path:match("^luv......"))
+    assert(uv.fs_rmdir(path))
+  end)
+
+  test("fs.mkdtemp async error", function(print, p, expect, uv)
+    local tp = "luvXXXXXZ"
+    uv.fs_mkdtemp(tp, function(err, path)
+      -- Will success on MacOS
+      if not err then
+        assert(path:match("^luv......"))
+        assert(uv.fs_rmdir(path))
+      else
+        assert(err:match("^EINVAL:"))
+        assert(path==nil)
+      end
+    end)
+  end)
+
+  test("fs.mkdtemp sync error", function(print, p, expect, uv)
+    local tp = "luvXXXXXZ"
+    local path, err, code = uv.fs_mkdtemp(tp)
+    -- Will success on MacOS
+    if not err then
+      assert(path:match("^luv......"))
+      assert(uv.fs_rmdir(path))
+    else
+      assert(path==nil)
+      assert(err:match("^EINVAL:"))
+      assert(code=='EINVAL')
+    end
+  end)
+
+  test("fs.mkstemp async", function(print, p, expect, uv)
+    local tp = "luvXXXXXX"
+    uv.fs_mkstemp(tp, function(err, fd, path)
+      assert(not err)
+      assert(type(fd)=='number')
+      assert(path:match("^luv......"))
+      assert(uv.fs_close(fd))
+      assert(uv.fs_unlink(path))
+    end)
+  end)
+
+  test("fs.mkstemp sync", function(print, p, expect, uv)
+    local tp = "luvXXXXXX"
+    local content = "hello world!"
+    local fd, path = uv.fs_mkstemp(tp)
+    assert(type(fd)=='number')
+    assert(path:match("^luv......"))
+    uv.fs_write(fd, content, -1)
+    assert(uv.fs_close(fd))
+
+    fd = assert(uv.fs_open(path, "r", 438))
+    local stat = assert(uv.fs_fstat(fd))
+    local chunk = assert(uv.fs_read(fd, stat.size, 0))
+    assert(#chunk == stat.size)
+    assert(chunk==content)
+    assert(uv.fs_close(fd))
+    assert(uv.fs_unlink(path))
+  end)
+
+  test("fs.mkstemp async error", function(print, p, expect, uv)
+    local tp = "luvXXXXXZ"
+    uv.fs_mkstemp(tp, function(err, path, fd)
+      assert(err:match("^EINVAL:"))
+      assert(path==nil)
+      assert(fd==nil)
+    end)
+  end)
+
+  test("fs.mkstemp sync error", function(print, p, expect, uv)
+    local tp = "luvXXXXXZ"
+    local path, err, code = uv.fs_mkstemp(tp)
+    assert(path==nil)
+    assert(err:match("^EINVAL:"))
+    assert(code=='EINVAL')
   end)
 end)
