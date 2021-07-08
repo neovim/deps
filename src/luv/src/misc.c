@@ -222,10 +222,14 @@ static int luv_getrusage(lua_State* L) {
 }
 
 static int luv_cpu_info(lua_State* L) {
-  uv_cpu_info_t* cpu_infos;
-  int count, i;
+  uv_cpu_info_t* cpu_infos = NULL;
+  int count = 0, i;
   int ret = uv_cpu_info(&cpu_infos, &count);
-  if (ret < 0) return luv_error(L, ret);
+  if (ret < 0)
+  {
+    uv_free_cpu_info(cpu_infos, count);
+    return luv_error(L, ret);
+  }
   lua_newtable(L);
 
   for (i = 0; i < count; i++) {
@@ -334,6 +338,7 @@ static int luv_chdir(lua_State* L) {
   return luv_result(L, ret);
 }
 
+#if LUV_UV_VERSION_GEQ(1, 9, 0)
 static int luv_os_tmpdir(lua_State* L) {
   size_t size = 2*PATH_MAX;
   char tmpdir[2*PATH_MAX];
@@ -380,6 +385,7 @@ static int luv_os_get_passwd(lua_State* L) {
   uv_os_free_passwd(&pwd);
   return 1;
 }
+#endif
 
 #if LUV_UV_VERSION_GEQ(1, 29, 0)
 static int luv_get_constrained_memory(lua_State* L) {
@@ -440,6 +446,7 @@ static int luv_setgid(lua_State* L){
   return 0;
 }
 
+#if LUV_UV_VERSION_GEQ(1, 8, 0)
 static int luv_print_all_handles(lua_State* L){
   luv_ctx_t* ctx = luv_context(L);
   uv_print_all_handles(ctx->loop, stderr);
@@ -451,6 +458,7 @@ static int luv_print_active_handles(lua_State* L){
   uv_print_active_handles(ctx->loop, stderr);
   return 0;
 }
+#endif
 #endif
 
 #if LUV_UV_VERSION_GEQ(1, 12, 0)

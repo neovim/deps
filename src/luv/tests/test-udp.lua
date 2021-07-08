@@ -80,12 +80,6 @@ return require('lib/tap')(function (test)
   end)
 
   test("udp send args", function(print, p, expect, uv)
-    local version = 0x10000 + 27*0x100 + 0
-    if uv.version() < version then
-      print("skipped, requires libuv >= 1.27.0")
-      return
-    end
-
     local udp = uv.new_udp()
 
     local _, err = pcall(function() uv.udp_send(udp, "PING", 5, 5) end)
@@ -98,15 +92,9 @@ return require('lib/tap')(function (test)
     print(assert(err))
 
     uv.close(udp)
-  end)
+  end, "1.27.0")
 
   test("udp connect", function(print, p, expect, uv)
-    local version = 0x10000 + 27*0x100 + 0
-    if uv.version() < version then
-      print("skipped, requires libuv >= 1.27.0")
-      return
-    end
-
     local server = uv.new_udp()
     local client = uv.new_udp()
 
@@ -180,5 +168,135 @@ return require('lib/tap')(function (test)
         assert(not err, err)
       end))
     end)))
+  end, "1.27.0")
+
+  -- return a test function reusable for ipv4 and ipv6
+  local function multicast_join_test(bind_addr, multicast_addr, interface_addr)
+    return function(print, p, expect, uv)
+      local uvVersionGEQ = require('lib/utils').uvVersionGEQ
+
+      local server = assert(uv.new_udp())
+      assert(uv.udp_bind(server, bind_addr, TEST_PORT))
+      local _, err, errname = uv.udp_set_membership(server, multicast_addr, interface_addr, "join")
+      if errname == "ENODEV" then
+        print("no ipv6 multicast route, skipping")
+        server:close()
+        return
+      elseif errname == "EADDRNOTAVAIL" and multicast_addr == "ff02::1" then
+        -- OSX, BSDs, and some other platforms need %lo in their multicast/interface addr
+        -- so try that instead
+        multicast_addr = "ff02::1%lo0"
+        interface_addr = "::1%lo0"
+        assert(uv.udp_set_membership(server, multicast_addr, interface_addr, "join"))
+      else
+        assert(not err, err)
+      end
+
+      local client = assert(uv.new_udp())
+
+      local recv_cb_called = 0
+      local function recv_cb(err, data, addr, flags)
+        assert(not err, err)
+        p(data, addr)
+
+        -- empty callback can happen, just return early
+        if data == nil and addr == nil then
+          return
+        end
+
+        assert(addr)
+        assert(data == "PING")
+
+        recv_cb_called = recv_cb_called + 1
+        if recv_cb_called == 2 then
+          -- note: because of this conditional close, the test will fail with an unclosed handle if recv_cb_called
+          -- doesn't hit 2, so we don't need to expect(recv_cb) or assert recv_cb_called == 2
+          server:close()
+        else
+          -- udp_set_source_membership added in 1.32.0
+          if uvVersionGEQ("1.32.0") then
+            local source_addr = addr.ip
+            assert(server:set_membership(multicast_addr, interface_addr, "leave"))
+            _, err, errname = server:set_source_membership(multicast_addr, interface_addr, source_addr, "join")
+            if errname == "ENOSYS" then
+              -- not all systems support set_source_membership, so rejoin the previous group and continue on
+              assert(server:set_membership(multicast_addr, interface_addr, "join"))
+            else
+              assert(not err, err)
+            end
+          end
+          assert(client:send("PING", multicast_addr, TEST_PORT, expect(function(err)
+            assert(not err, err)
+            client:close()
+          end)))
+        end
+      end
+
+      server:recv_start(recv_cb)
+
+      assert(client:send("PING", multicast_addr, TEST_PORT, expect(function(err)
+        assert(not err, err)
+      end)))
+    end
+  end
+
+  test("udp multicast join ipv4", multicast_join_test("0.0.0.0", "239.255.0.1", nil))
+
+  test("udp multicast join ipv6", function(print, p, expect, uv)
+    local function can_ipv6_external()
+      local addresses = assert(uv.interface_addresses())
+      for _, vals in pairs(addresses) do
+        for _, info in ipairs(vals) do
+          if info.family == "inet6" and not info.internal then
+            return true
+          end
+        end
+      end
+      return false
+    end
+
+    if not can_ipv6_external() then
+      print("no ipv6 support, skipping")
+      return
+    end
+
+    local testfn = multicast_join_test("::", "ff02::1", nil)
+    return testfn(print, p, expect, uv)
   end)
+
+  test("udp recvmmsg", function(print, p, expect, uv)
+    local NUM_SENDS = 8
+    local NUM_MSGS_PER_ALLOC = 4
+
+    local recver = uv.new_udp({mmsgs = NUM_MSGS_PER_ALLOC})
+    assert(recver:bind("0.0.0.0", TEST_PORT))
+
+    local sender = uv.new_udp()
+
+    local msgs_recved = 0
+    local recv_cb = function(err, data, addr, flags)
+      assert(not err, err)
+      p(data, addr)
+
+      -- empty callback can happen, just return early
+      if data == nil and addr == nil then
+        return
+      end
+
+      assert(addr)
+      assert(data == "PING")
+
+      msgs_recved = msgs_recved + 1
+      if msgs_recved == NUM_SENDS then
+        sender:close()
+        recver:close()
+      end
+    end
+
+    assert(recver:recv_start(recv_cb))
+
+    for i=1,NUM_SENDS do
+      assert(sender:try_send("PING", "127.0.0.1", TEST_PORT))
+    end
+  end, "1.39.0")
 end)

@@ -14,7 +14,7 @@
  *  limitations under the License.
  *
  */
-#include "luv.h"
+#include "private.h"
 
 static int luv_loop_close(lua_State* L) {
   int ret = uv_loop_close(luv_loop(L));
@@ -31,9 +31,22 @@ static const char *const luv_runmodes[] = {
 
 static int luv_run(lua_State* L) {
   int mode = luaL_checkoption(L, 1, "default", luv_runmodes);
-  int ret = uv_run(luv_loop(L), (uv_run_mode)mode);
+  luv_ctx_t* ctx = luv_context(L);
+  ctx->mode = mode;
+  int ret = uv_run(ctx->loop, (uv_run_mode)mode);
+  ctx->mode = -1;
   if (ret < 0) return luv_error(L, ret);
   lua_pushboolean(L, ret);
+  return 1;
+}
+
+static int luv_loop_mode(lua_State* L) {
+  luv_ctx_t* ctx = luv_context(L);
+  if (ctx->mode == -1) {
+    lua_pushnil(L);
+  } else {
+    lua_pushstring(L, luv_runmodes[ctx->mode]);
+  }
   return 1;
 }
 
@@ -94,3 +107,36 @@ static int luv_walk(lua_State* L) {
   uv_walk(luv_loop(L), luv_walk_cb, L);
   return 0;
 }
+
+#if LUV_UV_VERSION_GEQ(1, 0, 2)
+static const char *const luv_loop_configure_options[] = {
+  "block_signal",
+#if LUV_UV_VERSION_GEQ(1, 39, 0)
+  "metrics_idle_time",
+#endif
+  NULL
+};
+
+static int luv_loop_configure(lua_State* L) {
+  uv_loop_t* loop = luv_loop(L);
+  uv_loop_option option = 0;
+  int ret = 0;
+  switch (luaL_checkoption(L, 1, NULL, luv_loop_configure_options)) {
+  case 0: option = UV_LOOP_BLOCK_SIGNAL; break;
+#if LUV_UV_VERSION_GEQ(1, 39, 0)
+  case 1: option = UV_METRICS_IDLE_TIME; break;
+#endif
+  default: break; /* unreachable */
+  }
+  if (option == UV_LOOP_BLOCK_SIGNAL) {
+    // lua_isstring checks for string or number
+    int signal;
+    luaL_argcheck(L, lua_isstring(L, 2), 2, "block_signal option: expected signal as string or number");
+    signal = luv_parse_signal(L, 2);
+    ret = uv_loop_configure(loop, UV_LOOP_BLOCK_SIGNAL, signal);
+  } else {
+    ret = uv_loop_configure(loop, option);
+  }
+  return luv_result(L, ret);
+}
+#endif

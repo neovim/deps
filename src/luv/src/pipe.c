@@ -14,7 +14,7 @@
  *  limitations under the License.
  *
  */
-#include "luv.h"
+#include "private.h"
 
 static uv_pipe_t* luv_check_pipe(lua_State* L, int index) {
   uv_pipe_t* handle = (uv_pipe_t*)luv_checkudata(L, index, "uv_pipe");
@@ -72,6 +72,7 @@ static int luv_pipe_getsockname(lua_State* L) {
   return 1;
 }
 
+#if LUV_UV_VERSION_GEQ(1, 3, 0)
 static int luv_pipe_getpeername(lua_State* L) {
   uv_pipe_t* handle = luv_check_pipe(L, 1);
   size_t len = 2*PATH_MAX;
@@ -81,6 +82,7 @@ static int luv_pipe_getpeername(lua_State* L) {
   lua_pushlstring(L, buf, len);
   return 1;
 }
+#endif
 
 static int luv_pipe_pending_instances(lua_State* L) {
   uv_pipe_t* handle = luv_check_pipe(L, 1);
@@ -109,3 +111,22 @@ static int luv_pipe_pending_type(lua_State* L) {
   lua_pushstring(L, type_name);
   return 1;
 }
+
+#if LUV_UV_VERSION_GEQ(1,16,0)
+static const char *const luv_pipe_chmod_flags[] = {
+  "r", "w", "rw", "wr", NULL
+};
+
+static int luv_pipe_chmod(lua_State* L) {
+  uv_pipe_t* handle = luv_check_pipe(L, 1);
+  int flags;
+  switch (luaL_checkoption(L, 2, NULL, luv_pipe_chmod_flags)) {
+  case 0: flags = UV_READABLE; break;
+  case 1: flags = UV_WRITABLE; break;
+  case 2: case 3: flags = UV_READABLE | UV_WRITABLE; break;
+  default: flags = 0; /* unreachable */
+  }
+  int ret = uv_pipe_chmod(handle, flags);
+  return luv_result(L, ret);
+}
+#endif

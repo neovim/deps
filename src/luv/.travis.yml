@@ -17,9 +17,9 @@ env:
     - WITH_LUA_ENGINE=Lua LUA=lua5.3
     - WITH_LUA_ENGINE=LuaJIT LUA=luajit2.1
 
-    # LuaRocks 3.1.3
-    - LUAROCKS=3.1.3 WITH_LUA_ENGINE=Lua LUA=lua5.3
-    - LUAROCKS=3.1.3 WITH_LUA_ENGINE=LuaJIT LUA=luajit2.1
+    # LuaRocks 3.4.0
+    - LUAROCKS=3.4.0 WITH_LUA_ENGINE=Lua LUA=lua5.4
+    - LUAROCKS=3.4.0 WITH_LUA_ENGINE=LuaJIT LUA=luajit2.1
 
 os:
   - linux
@@ -60,6 +60,8 @@ jobs:
         - WITH_LUA_ENGINE=Lua
       script:
         - CMAKE_OPTIONS="-DCMAKE_C_FLAGS=-fsanitize=address,undefined" make && make test
+        # Run with extremely aggressive garbage collection to potentially find more problems
+        - ./build/lua -e "collectgarbage('setpause', 0); collectgarbage('setstepmul', 10000000000000)" tests/run.lua
     - name: valgrind
       os: linux
       # Need a more up-to-date Valgrind to dodge https://bugs.kde.org/show_bug.cgi?id=381289
@@ -73,19 +75,30 @@ jobs:
         - WITH_LUA_ENGINE=Lua
       script:
         - make
-        - valgrind --error-exitcode=1 --leak-check=full --child-silent-after-fork=yes ./build/lua tests/run.lua
+        - valgrind --error-exitcode=1 --leak-check=full --child-silent-after-fork=yes ./build/lua -e "collectgarbage('setpause', 0); collectgarbage('setstepmul', 10000000000000)" tests/run.lua
     - name: process cleanup test
       os: linux
       env:
         - WITH_LUA_ENGINE=Lua
       script:
         - ./tests/test-sigchld-after-lua_close.sh
+    - name: minimum supported libuv
+      os: linux
+      env:
+        - WITH_LUA_ENGINE=Lua
+        - WITH_SHARED_LIBUV=On
+      script:
+        - ./.ci/setup_min_libuv.sh
+        - CMAKE_OPTIONS="-DCMAKE_PREFIX_PATH=$HOME/.libuv_min" make && make test
+
 
     - stage: deploy
       if: tag IS present
       env: WITH_LUA_ENGINE=LuaJIT LUA=luajit2.1
       script: skip
       before_deploy:
+        # Setup LuaRocks
+        - source .ci/setenv_lua.sh
         - .ci/make_rockspec.sh $TRAVIS_TAG
       deploy:
         provider: releases

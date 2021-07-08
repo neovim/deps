@@ -14,17 +14,14 @@
  *  limitations under the License.
  *
  */
-#ifndef LUV_UTIL_H
-#define LUV_UTIL_H
 
 #include "luv.h"
+#include "util.h"
 
-#define LUV_UV_VERSION_GEQ(major, minor, patch) \
-  (((major)<<16 | (minor)<<8 | (patch)) <= UV_VERSION_HEX)
-
-#define LUV_UV_VERSION_LEQ(major, minor, patch) \
-  (((major)<<16 | (minor)<<8 | (patch)) >= UV_VERSION_HEX)
-
-void luv_stack_dump(lua_State* L, const char* name);
-
+#if LUV_UV_VERSION_GEQ(1, 39, 0)
+static int luv_metrics_idle_time(lua_State* L) {
+  uint64_t idle_time = uv_metrics_idle_time(luv_loop(L));
+  lua_pushinteger(L, idle_time);
+  return 1;
+}
 #endif

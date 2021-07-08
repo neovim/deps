@@ -14,7 +14,7 @@
  *  limitations under the License.
  *
  */
-#include "luv.h"
+#include "private.h"
 
 static uv_timer_t* luv_check_timer(lua_State* L, int index) {
   uv_timer_t* handle = (uv_timer_t*) luv_checkudata(L, index, "uv_timer");
@@ -77,3 +77,13 @@ static int luv_timer_get_repeat(lua_State* L) {
   lua_pushinteger(L, repeat);
   return 1;
 }
+
+#if LUV_UV_VERSION_GEQ(1, 40, 0)
+static int luv_timer_get_due_in(lua_State* L) {
+  uv_timer_t* handle = luv_check_timer(L, 1);
+  uint64_t val = uv_timer_get_due_in(handle);
+  lua_pushinteger(L, val);
+  return 1;
+}
+#endif
+
