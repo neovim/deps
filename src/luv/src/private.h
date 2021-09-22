@@ -6,11 +6,11 @@
 #include "compat-5.3.h"
 #endif
 
-#include "luv.h"
-#include "util.h"
 #include "lhandle.h"
 #include "lreq.h"
 #include "lthreadpool.h"
+#include "luv.h"
+#include "util.h"
 
 #if defined(__clang__)
 #pragma clang diagnostic push
@@ -82,6 +82,8 @@ static int luv_sock_string_to_num(const char* string);
 static const char* luv_sock_num_to_string(const int num);
 static int luv_sig_string_to_num(const char* string);
 static const char* luv_sig_num_to_string(const int num);
+static int luv_proto_string_to_num(const char* string);
+static const char* luv_proto_num_to_string(int num);
 
 /* From util.c */
 // Push a Libuv error code onto the Lua stack
@@ -119,6 +121,7 @@ static const char* luv_getmtname(lua_State *L, int idx);
 static int luv_thread_arg_set(lua_State* L, luv_thread_arg_t* args, int idx, int top, int flags);
 static int luv_thread_arg_push(lua_State* L, luv_thread_arg_t* args, int flags);
 static void luv_thread_arg_clear(lua_State* L, luv_thread_arg_t* args, int flags);
+static int luv_thread_arg_error(lua_State* L);
 
 static luv_acquire_vm acquire_vm_cb = NULL;
 static luv_release_vm release_vm_cb = NULL;

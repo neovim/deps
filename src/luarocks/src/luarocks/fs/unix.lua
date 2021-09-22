@@ -42,7 +42,12 @@ function unix.absolute_name(pathname, relative_to)
    assert(type(pathname) == "string")
    assert(type(relative_to) == "string" or not relative_to)
 
-   relative_to = relative_to or fs.current_dir()
+   local unquoted = pathname:match("^['\"](.*)['\"]$")
+   if unquoted then
+      pathname = unquoted
+   end
+
+   relative_to = (relative_to or fs.current_dir()):gsub("/*$", "")
    if pathname:sub(1,1) == "/" then
       return pathname
    else
@@ -71,7 +76,7 @@ function unix.wrap_script(script, target, deps_mode, name, version, ...)
    assert(type(deps_mode) == "string")
    assert(type(name) == "string" or not name)
    assert(type(version) == "string" or not version)
-   
+
    local wrapper = io.open(target, "w")
    if not wrapper then
       return nil, "Could not open "..target.." for writing."
@@ -83,12 +88,18 @@ function unix.wrap_script(script, target, deps_mode, name, version, ...)
       "package.path="..util.LQ(lpath..";").."..package.path",
       "package.cpath="..util.LQ(lcpath..";").."..package.cpath",
    }
+
+   local remove_interpreter = false
    if target == "luarocks" or target == "luarocks-admin" then
+      if cfg.is_binary then
+         remove_interpreter = true
+      end
       luainit = {
          "package.path="..util.LQ(package.path),
          "package.cpath="..util.LQ(package.cpath),
       }
    end
+
    if name and version then
       local addctx = "local k,l,_=pcall(require,"..util.LQ("luarocks.loader")..") _=k " ..
                      "and l.add_context("..util.LQ(name)..","..util.LQ(version)..")"
@@ -102,6 +113,11 @@ function unix.wrap_script(script, target, deps_mode, name, version, ...)
       script and fs.Q(script) or [[$([ "$*" ] || echo -i)]],
       ...
    }
+   if remove_interpreter then
+      table.remove(argv, 1)
+      table.remove(argv, 1)
+      table.remove(argv, 1)
+   end
 
    wrapper:write("#!/bin/sh\n\n")
    wrapper:write("LUAROCKS_SYSCONFDIR="..fs.Q(cfg.sysconfdir) .. " ")
@@ -137,7 +153,7 @@ function unix.is_actual_binary(filename)
    return first ~= "#!"
 end
 
-function unix.copy_binary(filename, dest) 
+function unix.copy_binary(filename, dest)
    return fs.copy(filename, dest, "exec")
 end
 
@@ -161,6 +177,10 @@ end
 
 function unix.current_user()
    return os.getenv("USER")
+end
+
+function unix.is_superuser()
+   return os.getenv("USER") == "root"
 end
 
 function unix.export_cmd(var, val)

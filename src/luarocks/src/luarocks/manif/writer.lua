@@ -30,7 +30,7 @@ local function store_package_items(storage, name, version, items)
 
    local package_identifier = name.."/"..version
 
-   for item_name, path in pairs(items) do
+   for item_name, path in pairs(items) do  -- luacheck: ignore 431
       if not storage[item_name] then
          storage[item_name] = {}
       end
@@ -54,18 +54,27 @@ local function remove_package_items(storage, name, version, items)
 
    local package_identifier = name.."/"..version
 
-   for item_name, path in pairs(items) do
-      local all_identifiers = storage[item_name]
-
-      for i, identifier in ipairs(all_identifiers) do
-         if identifier == package_identifier then
-            table.remove(all_identifiers, i)
-            break
-         end
+   for item_name, path in pairs(items) do  -- luacheck: ignore 431
+      local key = item_name
+      local all_identifiers = storage[key]
+      if not all_identifiers then
+         key = key .. ".init"
+         all_identifiers = storage[key]
       end
 
-      if #all_identifiers == 0 then
-         storage[item_name] = nil
+      if all_identifiers then
+         for i, identifier in ipairs(all_identifiers) do
+            if identifier == package_identifier then
+               table.remove(all_identifiers, i)
+               break
+            end
+         end
+
+         if #all_identifiers == 0 then
+            storage[key] = nil
+         end
+      else
+         util.warning("Cannot find entry for " .. item_name .. " in manifest -- corrupted manifest?")
       end
    end
 end
@@ -81,7 +90,7 @@ end
 local function update_dependencies(manifest, deps_mode)
    assert(type(manifest) == "table")
    assert(type(deps_mode) == "string")
-   
+
    for pkg, versions in pairs(manifest.repository) do
       for version, repositories in pairs(versions) do
          for _, repo in ipairs(repositories) do
@@ -151,7 +160,7 @@ local function filter_by_lua_version(manifest, lua_version, repodir, cache)
    assert(type(manifest) == "table")
    assert(type(repodir) == "string")
    assert((not cache) or type(cache) == "table")
-   
+
    cache = cache or {}
    lua_version = vers.parse_version(lua_version)
    for pkg, versions in pairs(manifest.repository) do
@@ -167,7 +176,7 @@ local function filter_by_lua_version(manifest, lua_version, repodir, cache)
                if rockspec then
                   cache[pathname] = rockspec
                   for _, dep in ipairs(rockspec.dependencies) do
-                     if dep.name == "lua" then 
+                     if dep.name == "lua" then
                         if not vers.match_constraints(lua_version, dep.constraints) then
                            table.insert(to_remove, version)
                         end
@@ -338,12 +347,18 @@ function writer.make_manifest(repo, deps_mode, remote)
          local vmanifest = { repository = {}, modules = {}, commands = {} }
          local ok, err = store_results(results, vmanifest)
          filter_by_lua_version(vmanifest, luaver, repo, cache)
-         save_table(repo, "manifest-"..luaver, vmanifest)
+         if not cfg.no_manifest then
+            save_table(repo, "manifest-"..luaver, vmanifest)
+         end
       end
    else
       update_dependencies(manifest, deps_mode)
    end
 
+   if cfg.no_manifest then
+      -- We want to have cache updated; but exit before save_table is called
+      return true
+   end
    return save_table(repo, "manifest", manifest)
 end
 
@@ -381,6 +396,10 @@ function writer.add_to_manifest(name, version, repo, deps_mode)
    if not ok then return nil, err end
 
    update_dependencies(manifest, deps_mode)
+
+   if cfg.no_manifest then
+      return true
+   end
    return save_table(rocks_dir, "manifest", manifest)
 end
 
@@ -412,8 +431,17 @@ function writer.remove_from_manifest(name, version, repo, deps_mode)
    end
 
    local package_entry = manifest.repository[name]
+   if package_entry == nil or package_entry[version] == nil then
+      -- entry is already missing from repository, no need to do anything
+      return true
+   end
 
    local version_entry = package_entry[version][1]
+   if not version_entry then
+      -- manifest looks corrupted, rebuild
+      return writer.make_manifest(rocks_dir, deps_mode)
+   end
+
    remove_package_items(manifest.modules, name, version, version_entry.modules)
    remove_package_items(manifest.commands, name, version, version_entry.commands)
 
@@ -427,6 +455,10 @@ function writer.remove_from_manifest(name, version, repo, deps_mode)
    end
 
    update_dependencies(manifest, deps_mode)
+
+   if cfg.no_manifest then
+      return true
+   end
    return save_table(rocks_dir, "manifest", manifest)
 end
 

@@ -14,13 +14,13 @@ local search = require("luarocks.search")
 local queries = require("luarocks.queries")
 local cfg = require("luarocks.core.cfg")
 local cmd = require("luarocks.cmd")
-local dir = require("luarocks.dir")
 
 function install.add_to_parser(parser)
-   local cmd = parser:command("install", "Install a rock.", util.see_also())
+   local cmd = parser:command("install", "Install a rock.", util.see_also())  -- luacheck: ignore 431
 
    cmd:argument("rock", "The name of a rock to be fetched from a repository "..
       "or a filename of a locally available rock.")
+      :action(util.namespaced_name_action)
    cmd:argument("version", "Version of the rock.")
       :args("?")
 
@@ -31,15 +31,18 @@ function install.add_to_parser(parser)
       "previously installed versions if it would break dependencies.")
    cmd:flag("--force-fast", "Like --force, but performs a forced removal "..
       "without reporting dependency issues.")
-   cmd:flag("--only-deps", "Installs only the dependencies of the rock.")
-   cmd:flag("--no-doc", "Installs the rock without its documentation.")
+   cmd:flag("--only-deps --deps-only", "Install only the dependencies of the rock.")
+   cmd:flag("--no-doc", "Install the rock without its documentation.")
    cmd:flag("--verify", "Verify signature of the rockspec or src.rock being "..
       "built. If the rockspec or src.rock is being downloaded, LuaRocks will "..
       "attempt to download the signature as well. Otherwise, the signature "..
       "file should be already available locally in the same directory.\n"..
       "You need the signer’s public key in your local keyring for this "..
       "option to work properly.")
+   cmd:flag("--check-lua-versions", "If the rock can't be found, check repository "..
+      "and report if it is available for another Lua version.")
    util.deps_mode_option(cmd)
+   cmd:flag("--no-manifest", "Skip creating/updating the manifest")
    -- luarocks build options
    parser:flag("--pack-binary-rock"):hidden(true)
    parser:option("--branch"):hidden(true)
@@ -72,16 +75,16 @@ function install.install_binary_rock(rock_file, opts)
    if not name then
       return nil, "Filename "..rock_file.." does not match format 'name-version-revision.arch.rock'."
    end
-   
+
    if arch ~= "all" and arch ~= cfg.arch then
       return nil, "Incompatible architecture "..arch, "arch"
    end
    if repos.is_installed(name, version) then
       repos.delete_version(name, version, opts.deps_mode)
    end
-   
+
    local install_dir = path.install_dir(name, version)
-   
+
    local rollback = util.schedule_function(function()
       fs.delete(install_dir)
       fs.remove_dir_if_empty(path.versions_dir(name))
@@ -95,9 +98,7 @@ function install.install_binary_rock(rock_file, opts)
       return nil, "Failed loading rockspec for installed package: "..err, errcode
    end
 
-   if opts.deps_mode == "none" then
-      util.warning("skipping dependency checks.")
-   else
+   if opts.deps_mode ~= "none" then
       ok, err, errcode = deps.check_external_deps(rockspec, "install")
       if err then return nil, err, errcode end
    end
@@ -114,7 +115,7 @@ function install.install_binary_rock(rock_file, opts)
    end
 
    if deps_mode ~= "none" then
-      ok, err, errcode = deps.fulfill_dependencies(rockspec, "dependencies", deps_mode, opts.verify)
+      ok, err, errcode = deps.fulfill_dependencies(rockspec, "dependencies", deps_mode, opts.verify, install_dir)
       if err then return nil, err, errcode end
    end
 
@@ -138,7 +139,7 @@ end
 -- @param rock_file string: local or remote filename of a rock.
 -- @param opts table: installation options
 -- @return (string, string) or (nil, string, [string]): Name and version of
--- the rock whose dependencies were installed if succeeded or nil and an error message 
+-- the rock whose dependencies were installed if succeeded or nil and an error message
 -- followed by an error code.
 function install.install_binary_rock_deps(rock_file, opts)
    assert(type(rock_file) == "string")
@@ -148,7 +149,7 @@ function install.install_binary_rock_deps(rock_file, opts)
    if not name then
       return nil, "Filename "..rock_file.." does not match format 'name-version-revision.arch.rock'."
    end
-   
+
    if arch ~= "all" and arch ~= cfg.arch then
       return nil, "Incompatible architecture "..arch, "arch"
    end
@@ -157,13 +158,13 @@ function install.install_binary_rock_deps(rock_file, opts)
 
    local ok, err, errcode = fetch.fetch_and_unpack_rock(rock_file, install_dir, opts.verify)
    if not ok then return nil, err, errcode end
-   
+
    local rockspec, err = fetch.load_rockspec(path.rockspec_file(name, version))
    if err then
       return nil, "Failed loading rockspec for installed package: "..err, errcode
    end
 
-   ok, err, errcode = deps.fulfill_dependencies(rockspec, "dependencies", opts.deps_mode, opts.verify)
+   ok, err, errcode = deps.fulfill_dependencies(rockspec, "dependencies", opts.deps_mode, opts.verify, install_dir)
    if err then return nil, err, errcode end
 
    util.printout()
@@ -190,20 +191,16 @@ local function install_rock_file(filename, opts)
    if not name then return nil, version end
 
    if opts.no_doc then
-      local install_dir = path.install_dir(name, version)
-      for _, f in ipairs(fs.list_dir(install_dir)) do
-         local doc_dirs = { "doc", "docs" }
-         for _, d in ipairs(doc_dirs) do
-            if f == d then
-               fs.delete(dir.path(install_dir, f))
-            end
-         end
-      end
+      util.remove_doc_dir(name, version)
    end
 
    if (not opts.keep) and not cfg.keep_other_versions then
-      local ok, err = remove.remove_other_versions(name, version, opts.force, opts.force_fast)
-      if not ok then util.printerr(err) end
+      local ok, err, warn = remove.remove_other_versions(name, version, opts.force, opts.force_fast)
+      if not ok then
+         return nil, err
+      elseif warn then
+         util.printerr(err)
+      end
    end
 
    writer.check_dependencies(nil, opts.deps_mode)
@@ -219,8 +216,6 @@ end
 -- @return boolean or (nil, string, exitcode): True if installation was
 -- successful, nil and an error message otherwise. exitcode is optionally returned.
 function install.command(args)
-   args.rock = util.adjust_name_and_namespace(args.rock, args)
-
    local ok, err = fs.check_command_permissions(args)
    if not ok then return nil, err, cmd.errorcodes.PERMISSIONDENIED end
 
@@ -244,7 +239,9 @@ function install.command(args)
          return install_rock_file(args.rock, opts)
       end
    else
-      local url, err = search.find_suitable_rock(queries.new(args.rock:lower(), args.version), true)
+      local url, err = search.find_rock_checking_lua_versions(
+                          queries.new(args.rock, args.namespace, args.version),
+                          args.check_lua_versions)
       if not url then
          return nil, err
       end

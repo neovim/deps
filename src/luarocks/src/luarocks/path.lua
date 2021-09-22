@@ -14,6 +14,8 @@ path.versioned_name = core.versioned_name
 path.path_to_module = core.path_to_module
 path.deploy_lua_dir = core.deploy_lua_dir
 path.deploy_lib_dir = core.deploy_lib_dir
+path.map_trees = core.map_trees
+path.rocks_tree_to_string = core.rocks_tree_to_string
 
 --- Infer rockspec filename from a rock filename.
 -- @param rock_name string: Pathname of a rock file.
@@ -47,7 +49,7 @@ function path.manifest_file(tree)
 end
 
 --- Get the directory for all versions of a package in a tree.
--- @param name string: The package name. 
+-- @param name string: The package name.
 -- @return string: The resulting path -- does not guarantee that
 -- @param tree string or nil: If given, specifies the local tree to use.
 -- the package (and by extension, the path) exists.
@@ -57,7 +59,7 @@ function path.versions_dir(name, tree)
 end
 
 --- Get the local installation directory (prefix) for a package.
--- @param name string: The package name. 
+-- @param name string: The package name.
 -- @param version string: The package version.
 -- @param tree string or nil: If given, specifies the local tree to use.
 -- @return string: The resulting path -- does not guarantee that
@@ -69,7 +71,7 @@ function path.install_dir(name, version, tree)
 end
 
 --- Get the local filename of the rockspec of an installed rock.
--- @param name string: The package name. 
+-- @param name string: The package name.
 -- @param version string: The package version.
 -- @param tree string or nil: If given, specifies the local tree to use.
 -- @return string: The resulting path -- does not guarantee that
@@ -81,7 +83,7 @@ function path.rockspec_file(name, version, tree)
 end
 
 --- Get the local filename of the rock_manifest file of an installed rock.
--- @param name string: The package name. 
+-- @param name string: The package name.
 -- @param version string: The package version.
 -- @param tree string or nil: If given, specifies the local tree to use.
 -- @return string: The resulting path -- does not guarantee that
@@ -105,7 +107,7 @@ function path.rock_namespace_file(name, version, tree)
 end
 
 --- Get the local installation directory for C libraries of a package.
--- @param name string: The package name. 
+-- @param name string: The package name.
 -- @param version string: The package version.
 -- @param tree string or nil: If given, specifies the local tree to use.
 -- @return string: The resulting path -- does not guarantee that
@@ -117,7 +119,7 @@ function path.lib_dir(name, version, tree)
 end
 
 --- Get the local installation directory for Lua modules of a package.
--- @param name string: The package name. 
+-- @param name string: The package name.
 -- @param version string: The package version.
 -- @param tree string or nil: If given, specifies the local tree to use.
 -- @return string: The resulting path -- does not guarantee that
@@ -129,7 +131,7 @@ function path.lua_dir(name, version, tree)
 end
 
 --- Get the local installation directory for documentation of a package.
--- @param name string: The package name. 
+-- @param name string: The package name.
 -- @param version string: The package version.
 -- @param tree string or nil: If given, specifies the local tree to use.
 -- @return string: The resulting path -- does not guarantee that
@@ -141,7 +143,7 @@ function path.doc_dir(name, version, tree)
 end
 
 --- Get the local installation directory for configuration files of a package.
--- @param name string: The package name. 
+-- @param name string: The package name.
 -- @param version string: The package version.
 -- @param tree string or nil: If given, specifies the local tree to use.
 -- @return string: The resulting path -- does not guarantee that
@@ -154,7 +156,7 @@ end
 
 --- Get the local installation directory for command-line scripts
 -- of a package.
--- @param name string: The package name. 
+-- @param name string: The package name.
 -- @param version string: The package version.
 -- @param tree string or nil: If given, specifies the local tree to use.
 -- @return string: The resulting path -- does not guarantee that
@@ -224,43 +226,6 @@ function path.use_tree(tree)
    --             .. package.path
    -- package.cpath = dir.path(path.deploy_lib_dir(tree), "?." .. cfg.lib_extension) .. ";"
    --              .. package.cpath
-end
-
-function path.rocks_tree_to_string(tree)
-   if type(tree) == "string" then
-      return tree
-   else
-      assert(type(tree) == "table")
-      return tree.root
-   end
-end
-
---- Apply a given function to the active rocks trees based on chosen dependency mode.
--- @param deps_mode string: Dependency mode: "one" for the current default tree,
--- "all" for all trees, "order" for all trees with priority >= the current default,
--- "none" for no trees (this function becomes a nop).
--- @param fn function: function to be applied, with the tree dir (string) as the first
--- argument and the remaining varargs of map_trees as the following arguments.
--- @return a table with all results of invocations of fn collected.
-function path.map_trees(deps_mode, fn, ...)
-   local result = {}
-   if deps_mode == "one" then
-      table.insert(result, (fn(cfg.root_dir, ...)) or 0)
-   elseif deps_mode == "all" or deps_mode == "order" then
-      local use = false
-      if deps_mode == "all" then
-         use = true
-      end
-      for _, tree in ipairs(cfg.rocks_trees) do
-         if dir.normalize(path.rocks_tree_to_string(tree)) == dir.normalize(path.rocks_tree_to_string(cfg.root_dir)) then
-            use = true
-         end
-         if use then
-            table.insert(result, (fn(tree, ...)) or 0)
-         end
-      end
-   end
-   return result
 end
 
 --- Get the namespace of a locally-installed rock, if any.

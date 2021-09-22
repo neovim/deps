@@ -35,7 +35,13 @@ function pack.pack_source_rock(rockspec_file)
    local name_version = rockspec.name .. "-" .. rockspec.version
    local rock_file = fs.absolute_name(name_version .. ".src.rock")
 
-   local source_file, source_dir = fetch.fetch_sources(rockspec, false)
+   local temp_dir, err = fs.make_temp_dir("pack-"..name_version)
+   if not temp_dir then
+      return nil, "Failed creating temporary directory: "..err
+   end
+   util.schedule_function(fs.delete, temp_dir)
+
+   local source_file, source_dir = fetch.fetch_sources(rockspec, true, temp_dir)
    if not source_file then
       return nil, source_dir
    end
@@ -91,13 +97,13 @@ function pack.pack_installed_rock(query, tree)
    if not fs.exists(prefix) then
       return nil, "'"..name.." "..version.."' does not seem to be an installed rock."
    end
-   
+
    local rock_manifest, err = manif.load_rock_manifest(name, version, root)
    if not rock_manifest then return nil, err end
 
    local name_version = name .. "-" .. version
    local rock_file = fs.absolute_name(name_version .. "."..cfg.arch..".rock")
-   
+
    local temp_dir = fs.make_temp_dir("pack")
    fs.copy_contents(prefix, temp_dir)
 
@@ -111,7 +117,7 @@ function pack.pack_installed_rock(query, tree)
       local ok, err = copy_back_files(name, version, rock_manifest.lua, path.deploy_lua_dir(repo), dir.path(temp_dir, "lua"), "read")
       if not ok then return nil, "Failed copying back files: " .. err end
    end
-   
+
    local ok, err = fs.change_dir(temp_dir)
    if not ok then return nil, err end
    if not is_binary and not repos.has_binaries(name, version) then
@@ -137,7 +143,7 @@ function pack.report_and_sign_local_file(file, err, sign)
    end
    util.printout("Packed: "..file)
    if sigfile then
-      util.printout("Sigature stored in: "..sigfile)
+      util.printout("Signature stored in: "..sigfile)
    end
    if err then
       return nil, err
@@ -145,7 +151,7 @@ function pack.report_and_sign_local_file(file, err, sign)
    return true
 end
 
-function pack.pack_binary_rock(name, version, sign, cmd)
+function pack.pack_binary_rock(name, namespace, version, sign, cmd)
 
    -- The --pack-binary-rock option for "luarocks build" basically performs
    -- "luarocks build" on a temporary tree and then "luarocks pack". The
@@ -169,7 +175,7 @@ function pack.pack_binary_rock(name, version, sign, cmd)
    if not rname then
       rname, rversion = name, version
    end
-   local query = queries.new(rname, rversion)
+   local query = queries.new(rname, namespace, rversion)
    local file, err = pack.pack_installed_rock(query, temp_dir)
    return pack.report_and_sign_local_file(file, err, sign)
 end

@@ -8,18 +8,18 @@ local lfs = require("lfs")
 
 test_env.unload_luarocks()
 
-describe("Luarocks init test #integration", function()
+describe("luarocks init #integration", function()
 
    setup(function()
       test_env.setup_specs()
    end)
 
-   it("LuaRocks init with no arguments", function()
+   it("with no arguments", function()
       test_env.run_in_tmp(function(tmpdir)
          local myproject = tmpdir .. "/myproject"
          lfs.mkdir(myproject)
          lfs.chdir(myproject)
-         
+
          assert(run.luarocks("init"))
          if is_win then
             assert.truthy(lfs.attributes(myproject .. "/lua.bat"))
@@ -41,7 +41,7 @@ describe("Luarocks init test #integration", function()
          local myproject = tmpdir .. "/myproject"
          lfs.mkdir(myproject)
          lfs.chdir(myproject)
-         
+
          assert(run.luarocks("init"))
          if is_win then
             assert.truthy(lfs.attributes(myproject .. "/lua.bat"))
@@ -74,19 +74,19 @@ describe("Luarocks init test #integration", function()
          end
       end, finally)
    end)
-   
-   it("LuaRocks init with given arguments", function()
+
+   it("with given arguments", function()
       test_env.run_in_tmp(function(tmpdir)
          local myproject = tmpdir .. "/myproject"
          lfs.mkdir(myproject)
          lfs.chdir(myproject)
-         
+
          assert(run.luarocks("init customname 1.0"))
          assert.truthy(lfs.attributes(myproject .. "/customname-1.0-1.rockspec"))
       end, finally)
    end)
-   
-   it("LuaRocks init with --lua-versions", function()
+
+   it("with --lua-versions", function()
       test_env.run_in_tmp(function(tmpdir)
          local myproject = tmpdir .. "/myproject"
          lfs.mkdir(myproject)
@@ -102,19 +102,19 @@ describe("Luarocks init test #integration", function()
       end, finally)
    end)
 
-   it("LuaRocks init in a git repo", function()
+   it("in a git repo", function()
       test_env.run_in_tmp(function(tmpdir)
          local myproject = tmpdir .. "/myproject"
          copy_dir(testing_paths.fixtures_dir .. "/git_repo", myproject)
          lfs.chdir(myproject)
-         
+
          assert(run.luarocks("init"))
          local fd = assert(io.open(myproject .. "/myproject-dev-1.rockspec", "r"))
          local content = assert(fd:read("*a"))
          assert.truthy(content:find("summary = \"Test repo\""))
          assert.truthy(content:find("detailed = .+Test repo.+"))
          assert.truthy(content:find("license = \"MIT\""))
-         
+
          fd = assert(io.open(myproject .. "/.gitignore", "r"))
          content = assert(fd:read("*a"))
          assert.truthy(content:find("/foo"))
@@ -123,7 +123,7 @@ describe("Luarocks init test #integration", function()
       end, finally)
    end)
 
-   it("LuaRocks init does not autodetect config or dependencies as modules of the package", function()
+   it("does not autodetect config or dependencies as modules of the package", function()
       test_env.run_in_tmp(function(tmpdir)
          local myproject = tmpdir .. "/myproject"
          lfs.mkdir(myproject)
@@ -155,17 +155,17 @@ describe("Luarocks init test #integration", function()
 
          os.remove(rockspec_filename)
          os.remove("my_dependency-1.0-1.rockspec")
-         
+
          -- re-run init
          assert(run.luarocks("init"))
 
          -- file is recreated
          assert.truthy(lfs.attributes(rockspec_filename))
-         
+
          local fd = assert(io.open(rockspec_filename, "rb"))
          local rockspec = assert(fd:read("*a"))
          fd:close()
-         
+
          assert.no.match("my_dependency", rockspec, 1, true)
          assert.no.match("config", rockspec, 1, true)
 

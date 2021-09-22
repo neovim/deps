@@ -174,13 +174,16 @@ return require('lib/tap')(function (test)
   local function multicast_join_test(bind_addr, multicast_addr, interface_addr)
     return function(print, p, expect, uv)
       local uvVersionGEQ = require('lib/utils').uvVersionGEQ
+      local timeout = uv.new_timer()
+      local TIMEOUT_TIME = 1000
 
       local server = assert(uv.new_udp())
       assert(uv.udp_bind(server, bind_addr, TEST_PORT))
       local _, err, errname = uv.udp_set_membership(server, multicast_addr, interface_addr, "join")
       if errname == "ENODEV" then
-        print("no ipv6 multicast route, skipping")
+        print("no multicast route, skipping")
         server:close()
+        timeout:close()
         return
       elseif errname == "EADDRNOTAVAIL" and multicast_addr == "ff02::1" then
         -- OSX, BSDs, and some other platforms need %lo in their multicast/interface addr
@@ -212,6 +215,7 @@ return require('lib/tap')(function (test)
           -- note: because of this conditional close, the test will fail with an unclosed handle if recv_cb_called
           -- doesn't hit 2, so we don't need to expect(recv_cb) or assert recv_cb_called == 2
           server:close()
+          timeout:close()
         else
           -- udp_set_source_membership added in 1.32.0
           if uvVersionGEQ("1.32.0") then
@@ -235,31 +239,68 @@ return require('lib/tap')(function (test)
       server:recv_start(recv_cb)
 
       assert(client:send("PING", multicast_addr, TEST_PORT, expect(function(err)
+        -- EPERM here likely means that a firewall has denied the send, which
+        -- can happen in some build/CI environments, e.g. the Fedora build system.
+        -- Reproducible on Linux with iptables by doing:
+        --  iptables --policy OUTPUT DROP
+        --  iptables -A OUTPUT -s 127.0.0.1 -j ACCEPT
+        -- and for ipv6:
+        --  ip6tables --policy OUTPUT DROP
+        --  ip6tables -A OUTPUT -s ::1 -j ACCEPT
+        if err == "EPERM" then
+          print("send to multicast ip was likely denied by firewall, skipping")
+          client:close()
+          server:close()
+          timeout:close()
+          return
+        end
         assert(not err, err)
       end)))
+
+      -- some firewalls might reject incoming messages from multicast IPs,
+      -- so we need a timeout to avoid hanging forever in that scenario
+      timeout:start(TIMEOUT_TIME, 0, expect(function()
+        print("timeout (could be caused by firewall settings)")
+        client:close()
+        server:close()
+        timeout:close()
+      end, 0))
     end
   end
 
-  test("udp multicast join ipv4", multicast_join_test("0.0.0.0", "239.255.0.1", nil))
-
-  test("udp multicast join ipv6", function(print, p, expect, uv)
-    local function can_ipv6_external()
-      local addresses = assert(uv.interface_addresses())
-      for _, vals in pairs(addresses) do
-        for _, info in ipairs(vals) do
-          if info.family == "inet6" and not info.internal then
-            return true
-          end
+  -- TODO This might be overkill, but the multicast
+  -- tests seem to rely on external interfaces being
+  -- available on some platforms. So, we use this to skip
+  -- the tests when there are no relevant exernal interfaces
+  -- available. Note: The Libuv multicast join test does use this
+  -- same check for skipping the ipv6 test; we just expanded it to
+  -- the ipv4 test as well.
+  local function has_external_interface(uv, family)
+    local addresses = assert(uv.interface_addresses())
+    for _, vals in pairs(addresses) do
+      for _, info in ipairs(vals) do
+        if (not family or info.family == family) and not info.internal then
+          return true
         end
       end
-      return false
     end
+    return false
+  end
 
-    if not can_ipv6_external() then
-      print("no ipv6 support, skipping")
+  test("udp multicast join ipv4", function(print, p, expect, uv)
+    if not has_external_interface(uv, "inet") then
+      print("no external ipv4 interface, skipping")
       return
     end
+    local testfn = multicast_join_test("0.0.0.0", "239.255.0.1", nil)
+    return testfn(print, p, expect, uv)
+  end)
 
+  test("udp multicast join ipv6", function(print, p, expect, uv)
+    if not has_external_interface(uv, "inet6") then
+      print("no external ipv6 interface, skipping")
+      return
+    end
     local testfn = multicast_join_test("::", "ff02::1", nil)
     return testfn(print, p, expect, uv)
   end)

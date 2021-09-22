@@ -12,7 +12,6 @@ local extra_rocks = {
    "/cprint-0.1-2.src.rock",
    "/cprint-0.1-2.rockspec",
    "/lpeg-0.12-1.src.rock",
-   "/luasec-0.6-1.rockspec",
    "/luassert-1.7.0-1.src.rock",
    "/luasocket-3.0rc1-2.src.rock",
    "/luasocket-3.0rc1-2.rockspec",
@@ -25,6 +24,9 @@ local extra_rocks = {
    "/luafilesystem-1.6.3-1.src.rock",
    "/sailor-0.5-3.src.rock",
    "/sailor-0.5-4.src.rock",
+   "spec/fixtures/a_repo/has_build_dep-1.0-1.all.rock",
+   "spec/fixtures/a_repo/a_build_dep-1.0-1.all.rock",
+   "spec/fixtures/a_repo/a_rock-1.0-1.src.rock",
 }
 
 describe("luarocks install #integration", function()
@@ -44,7 +46,7 @@ describe("luarocks install #integration", function()
 
       it("fails invalid patch", function()
          assert.is_false(run.luarocks_bool("install " .. testing_paths.fixtures_dir .. "/invalid_patch-0.1-1.rockspec"))
-      end)      
+      end)
 
       it("fails invalid rock", function()
          assert.is_false(run.luarocks_bool("install \"invalid.rock\" "))
@@ -52,6 +54,18 @@ describe("luarocks install #integration", function()
 
       it("fails with local flag as root #unix", function()
          assert.is_false(run.luarocks_bool("install --local luasocket ", { USER = "root" } ))
+      end)
+
+      it("fails with no downloader", function()
+         if test_env.TYPE_TEST_ENV ~= "full" then
+            local output = assert(run.luarocks("install https://example.com/rock-1.0.src.rock", { LUAROCKS_CONFIG = testing_paths.testrun_dir .. "/testing_config_no_downloader.lua" } ))
+            assert.match("no downloader tool", output)
+
+            -- can do http but not https
+            assert(run.luarocks("install luasocket"))
+            output = assert(run.luarocks("install https://example.com/rock-1.0.src.rock", { LUAROCKS_CONFIG = testing_paths.testrun_dir .. "/testing_config_no_downloader.lua" } ))
+            assert.match("no downloader tool", output)
+         end
       end)
 
       it("fails not a zip file", function()
@@ -77,17 +91,17 @@ describe("luarocks install #integration", function()
       end)
 
       it("installs a package with a dependency", function()
-         assert.is_true(run.luarocks_bool("install luasec " .. test_env.openssl_dirs))
-         assert.is_true(run.luarocks_bool("show luasocket"))
+         assert.is_true(run.luarocks_bool("install has_build_dep"))
+         assert.is_true(run.luarocks_bool("show a_rock"))
       end)
 
-      it("installs a package without its documentation #only", function()
+      it("installs a package without its documentation", function()
          assert.is_true(run.luarocks_bool("install wsapi 1.6 --no-doc"))
          assert.is_true(run.luarocks_bool("show wsapi 1.6"))
          assert.is.falsy(lfs.attributes(testing_paths.testing_sys_rocks .. "/wsapi/1.6-1/doc"))
       end)
    end)
-   
+
    describe("#namespaces", function()
       it("installs a namespaced package from the command-line", function()
          assert(run.luarocks_bool("install a_user/a_rock --server=" .. testing_paths.fixtures_dir .. "/a_repo" ))
@@ -135,14 +149,11 @@ describe("luarocks install #integration", function()
    end)
 
    describe("more complex tests", function()
-      it('luasec with skipping dependency checks', function()
-         assert.is_true(run.luarocks_bool("install luasec " .. test_env.openssl_dirs .. " --nodeps"))
-         assert.is_true(run.luarocks_bool("show luasec"))
-         if env_variables.TYPE_TEST_ENV == "minimal" then
-            assert.is_false(run.luarocks_bool(test_env.quiet("show luasocket")))
-            assert.is.falsy(lfs.attributes(testing_paths.testing_sys_rocks .. "/luasocket"))
-         end
-         assert.is.truthy(lfs.attributes(testing_paths.testing_sys_rocks .. "/luasec"))
+      it('skipping dependency checks', function()
+         assert.is_true(run.luarocks_bool("install has_build_dep --nodeps"))
+         assert.is_true(run.luarocks_bool("show has_build_dep"))
+         assert.is.falsy(lfs.attributes(testing_paths.testing_sys_rocks .. "/a_rock"))
+         assert.is.truthy(lfs.attributes(testing_paths.testing_sys_rocks .. "/has_build_dep"))
       end)
 
       it('handle relative path in --tree #632', function()
@@ -180,11 +191,11 @@ describe("luarocks install #integration", function()
          assert.is.truthy(lfs.attributes(testing_paths.testing_sys_tree .. "/share/lua/"..env_variables.LUA_VERSION.."/sailor/blank-app/.htaccess"))
          assert.is.falsy(lfs.attributes(testing_paths.testing_sys_tree .. "/share/lua/"..env_variables.LUA_VERSION.."/sailor/blank-app/.htaccess~"))
       end)
-      
+
       it("only-deps of luasocket packed rock", function()
          assert.is_true(run.luarocks_bool("build --pack-binary-rock luasocket 3.0rc1-2"))
          local output = run.luarocks("install --only-deps " .. "luasocket-3.0rc1-2." .. test_env.platform .. ".rock")
-         assert.are.same("Successfully installed dependencies for luasocket 3.0rc1-2", output:gsub("\n", ""))
+         assert.match("Successfully installed dependencies for luasocket 3.0rc1-2", output, 1, true)
          assert.is_true(os.remove("luasocket-3.0rc1-2." .. test_env.platform .. ".rock"))
       end)
 
@@ -195,28 +206,70 @@ describe("luarocks install #integration", function()
          assert.is_true(os.remove("luasocket-3.0rc1-2." .. test_env.platform .. ".rock"))
       end)
 
+      it("installation rolls back on failure", function()
+         assert.is_true(run.luarocks_bool("build --pack-binary-rock luasocket 3.0rc1-2"))
+         local luadir = testing_paths.testing_sys_tree .. "/share/lua/"..env_variables.LUA_VERSION
+         lfs.mkdir(luadir)
+
+         run.luarocks_bool("remove " .. "luasocket")
+
+         -- create a file where a folder should be
+         local fd = io.open(luadir .. "/socket", "w")
+         fd:write("\n")
+         fd:close()
+
+         -- try to install and fail
+         assert.is_false(run.luarocks_bool("install " .. "luasocket-3.0rc1-2." .. test_env.platform .. ".rock"))
+
+         -- file is still there
+         assert.is.truthy(lfs.attributes(luadir .. "/socket"))
+         -- no left overs from failed installation
+         assert.is.falsy(lfs.attributes(luadir .. "/mime.lua"))
+
+         -- remove file
+         assert.is_true(os.remove(luadir .. "/socket"))
+
+         -- try again and succeed
+         assert.is_true(run.luarocks_bool("install " .. "luasocket-3.0rc1-2." .. test_env.platform .. ".rock"))
+
+         -- files installed successfully
+         assert.is.truthy(lfs.attributes(luadir .. "/socket/ftp.lua"))
+         assert.is.truthy(lfs.attributes(luadir .. "/mime.lua"))
+
+         assert.is_true(os.remove("luasocket-3.0rc1-2." .. test_env.platform .. ".rock"))
+      end)
+
       it("binary rock of cprint", function()
          assert.is_true(run.luarocks_bool("build --pack-binary-rock cprint"))
          assert.is_true(run.luarocks_bool("install cprint-0.1-2." .. test_env.platform .. ".rock"))
          assert.is_true(os.remove("cprint-0.1-2." .. test_env.platform .. ".rock"))
-      end)     
+      end)
+
+      it("accepts --no-manifest flag", function()
+         assert.is_true(run.luarocks_bool("install lxsh 0.8.6-2"))
+         assert.is.truthy(lfs.attributes(testing_paths.testing_sys_rocks .. "/manifest"))
+         assert.is.truthy(os.remove(testing_paths.testing_sys_rocks .. "/manifest"))
+
+         assert.is_true(run.luarocks_bool("install --no-manifest lxsh 0.8.6-2"))
+         assert.is.falsy(lfs.attributes(testing_paths.testing_sys_rocks .. "/manifest"))
+      end)
    end)
 
    describe("New install functionality based on pull request 552", function()
-      it("break dependencies warning", function() 
+      it("break dependencies warning", function()
          assert.is_true(run.luarocks_bool("install say 1.2"))
          assert.is_true(run.luarocks_bool("install luassert"))
          assert.is_true(run.luarocks_bool("install say 1.0"))
          assert.is.truthy(lfs.attributes(testing_paths.testing_sys_rocks .. "/say/1.2-1"))
       end)
-      it("break dependencies force", function() 
+      it("break dependencies force", function()
          assert.is_true(run.luarocks_bool("install say 1.2"))
          assert.is_true(run.luarocks_bool("install luassert"))
          local output = run.luarocks("install --force say 1.0")
          assert.is.truthy(output:find("Checking stability of dependencies"))
          assert.is.falsy(lfs.attributes(testing_paths.testing_sys_rocks .. "/say/1.2-1"))
       end)
-      it("break dependencies force fast", function() 
+      it("break dependencies force fast", function()
          assert.is_true(run.luarocks_bool("install say 1.2"))
          assert.is_true(run.luarocks_bool("install luassert"))
          assert.is.truthy(lfs.attributes(testing_paths.testing_sys_rocks .. "/say/1.2-1"))
@@ -234,13 +287,57 @@ describe("luarocks install #integration", function()
       end)
    end)
 
+   it("respects luarocks.lock in package #pinning", function()
+      test_env.run_in_tmp(function(tmpdir)
+         write_file("test-1.0-1.rockspec", [[
+            package = "test"
+            version = "1.0-1"
+            source = {
+               url = "file://]] .. tmpdir:gsub("\\", "/") .. [[/test.lua"
+            }
+            dependencies = {
+               "a_rock >= 0.8"
+            }
+            build = {
+               type = "builtin",
+               modules = {
+                  test = "test.lua"
+               }
+            }
+         ]], finally)
+         write_file("test.lua", "return {}", finally)
+         write_file("luarocks.lock", [[
+            return {
+               dependencies = {
+                  ["a_rock"] = "1.0-1",
+               }
+            }
+         ]], finally)
+
+         assert.is_true(run.luarocks_bool("make --pack-binary-rock --server=" .. testing_paths.fixtures_dir .. "/a_repo test-1.0-1.rockspec"))
+         assert.is_true(os.remove("luarocks.lock"))
+
+         assert.is.truthy(lfs.attributes("./test-1.0-1.all.rock"))
+
+         assert.is.falsy(lfs.attributes("./lua_modules/lib/luarocks/rocks-" .. test_env.lua_version .. "/test/1.0-1/test-1.0-1.rockspec"))
+         assert.is.falsy(lfs.attributes("./lua_modules/lib/luarocks/rocks-" .. test_env.lua_version .. "/a_rock/1.0-1/a_rock-1.0-1.rockspec"))
+
+         print(run.luarocks("install ./test-1.0-1.all.rock --tree=lua_modules --server=" .. testing_paths.fixtures_dir .. "/a_repo"))
+
+         assert.is.truthy(lfs.attributes("./lua_modules/lib/luarocks/rocks-" .. test_env.lua_version .. "/test/1.0-1/test-1.0-1.rockspec"))
+         assert.is.truthy(lfs.attributes("./lua_modules/lib/luarocks/rocks-" .. test_env.lua_version .. "/test/1.0-1/luarocks.lock"))
+         assert.is.truthy(lfs.attributes("./lua_modules/lib/luarocks/rocks-" .. test_env.lua_version .. "/a_rock/1.0-1/a_rock-1.0-1.rockspec"))
+         assert.is.falsy(lfs.attributes("./lua_modules/lib/luarocks/rocks-" .. test_env.lua_version .. "/a_rock/2.0-1"))
+      end)
+   end)
+
    describe("#unix install runs build from #git", function()
       local git
 
       setup(function()
          git = git_repo.start()
       end)
-      
+
       teardown(function()
          if git then
             git:stop()

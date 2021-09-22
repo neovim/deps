@@ -17,36 +17,45 @@ smoke_script: &smoke_script
   - export BRANCH=$(if [ "$TRAVIS_PULL_REQUEST" == "false" ]; then echo $TRAVIS_BRANCH; else echo $TRAVIS_PULL_REQUEST_BRANCH; fi)
   - ./makedist $BRANCH
   - ./smoke_test.sh luarocks-$BRANCH.tar.gz
-  
+
+lint_script: &lint_script
+  - luacheck .
+
 unit_script: &unit_script
-  - busted -o gtest --exclude-tags=git,integration --verbose -Xhelper "lua_dir=$PWD/lua_install,travis"
-  - busted -o gtest --exclude-tags=git,integration --verbose -Xhelper "lua_dir=$PWD/lua_install,travis,env=full"
-  
+  - busted -o htest --exclude-tags=git,integration --verbose -Xhelper "lua_dir=$PWD/lua_install,travis"
+  - busted -o htest --exclude-tags=git,integration --verbose -Xhelper "lua_dir=$PWD/lua_install,travis,env=full"
+
 integration_script: &integration_script
   - lua -v
   - if [ "$TRAVIS_OS_NAME" = "linux" ]; then shellcheck ./configure; fi
   - ./configure --with-lua=lua_install
   - ./makedist dev
   - ./smoke_test.sh luarocks-dev.tar.gz
-  - busted -o gtest --exclude-tags=gpg,git,unit --verbose -Xhelper "lua_dir=$PWD/lua_install,travis"
-  - busted -o gtest --exclude-tags=gpg,git,unit --verbose -Xhelper "lua_dir=$PWD/lua_install,travis,env=full"
-          
+  - busted -o htest --exclude-tags=gpg,git,unit --verbose -Xhelper "lua_dir=$PWD/lua_install,travis"
+  - busted -o htest --exclude-tags=gpg,git,unit --verbose -Xhelper "lua_dir=$PWD/lua_install,travis,env=full"
+
 jobs:
   include:
     # Smoke tests for release branches
     - stage: smoke
-      if: branch =~ [0-9].*
+      if: branch =~ ^[0-9].*
       script: *smoke_script
       os: linux
       env:
         - LUA="lua=5.3"
     - stage: smoke
-      if: branch =~ [0-9].*
+      if: branch =~ ^[0-9].*
       script: *smoke_script
       os: osx
       language: generic
       env:
         - LUA="luajit=2.1"
+    # Lint with Luacheck
+    - stage: Lint with Luacheck
+      script: *lint_script
+      os: linux
+      env:
+        - LUA="lua=5.3"
     # Unit tests for linux
     - stage: Unit on Linux
       script: *unit_script
@@ -139,7 +148,7 @@ jobs:
       env:
         - LUA="luajit=2.1"
       language: generic
-              
+
 before_install:
   - if [ ! -f lua_install/bin/luarocks ]; then pip install hererocks; fi
   - if [ ! -f lua_install/bin/luarocks ]; then hererocks lua_install -r^ --$LUA; fi
@@ -148,6 +157,8 @@ before_install:
 install:
   - if [ ! -f lua_install/bin/busted ]; then luarocks install busted; fi
   - if [ ! -f lua_install/bin/luacov ]; then luarocks install cluacov; fi
+  - if [ ! -f lua_install/bin/luacheck ]; then luarocks install luacheck; fi
+  - luarocks install busted-htest
 
 after_success:
   - luacov -c $TRAVIS_BUILD_DIR/testrun/luacov.config

@@ -5,19 +5,19 @@ test_env.unload_luarocks()
 test_env.setup_specs()
 local dir = require("luarocks.dir")
 
-describe("Luarocks dir test #unit", function()
+describe("luarocks.dir #unit", function()
    local runner
-   
+
    setup(function()
       runner = require("luacov.runner")
       runner.init(testing_paths.testrun_dir .. "/luacov.config")
       runner.tick = true
    end)
-   
+
    teardown(function()
       runner.shutdown()
    end)
-   
+
    describe("dir.is_basic_protocol", function()
       it("checks whether the arguments represent a valid protocol and returns the result of the check", function()
          assert.truthy(dir.is_basic_protocol("http"))
@@ -46,7 +46,17 @@ describe("Luarocks dir test #unit", function()
    describe("dir.normalize", function()
       it("converts backslashes and removes trailing slashes", function()
          assert.are.same("/foo/ovo", dir.normalize("\\foo\\ovo\\"))
+         assert.are.same("c:/some/dir", dir.normalize("c:\\..\\some\\foo\\..\\dir"))
          assert.are.same("http://example.com/foo/ovo", dir.normalize("http://example.com/foo\\ovo\\"))
+      end)
+      it("strips unneeded /../ and /./", function()
+         assert.are.same("/some/dir/file.txt", dir.normalize("/../../../some/./foo/bar/.././../dir/bla/../file.txt"))
+         assert.are.same("/some/dir/file.txt", dir.normalize("/../../../some/./foo/bar/.././../dir/bla/../file.txt"))
+      end)
+      it("respects relative paths", function()
+         assert.are.same("boo", dir.normalize("./boo"))
+         assert.are.same("/boo", dir.normalize("/./boo"))
+         assert.are.same("../../../../boo", dir.normalize("../../../hello/world/../../../boo"))
       end)
    end)
 

@@ -1,4 +1,13 @@
 return require('lib/tap')(function (test)
+
+  test("test threadpool with return none", function(print,p,expect,_uv)
+    local work_fn = function() end
+    local after_work_fn = function() end
+    local work_ctx = _uv.new_work(work_fn, after_work_fn)
+
+    work_ctx:queue()
+  end)
+
   test("test threadpool", function(print,p,expect,_uv)
     p('Please be patient, the test cost a lots of time')
     local count = 1000 --for memleaks dected
@@ -102,5 +111,24 @@ return require('lib/tap')(function (test)
     end)
     print(2)
     coroutine.resume(co)
+  end)
+
+  test("test threadpool with invalid argument", function(print,p,expect,_uv)
+    local work_fn = function() end
+    local after_work_fn = function() end
+    local work_ctx = _uv.new_work(work_fn, after_work_fn)
+
+   local ok,msg = pcall(work_ctx.queue, work_ctx, {})
+   assert(ok==false)
+   assert(msg=="Error: thread arg not support type 'table' at 1")
+  end)
+
+  test("test threadpool with invalid return value", function(print,p,expect,_uv)
+    local work_fn = function() return {} end
+    local after_work_fn = function() end
+    local work_ctx = _uv.new_work(work_fn, after_work_fn)
+
+    assert(work_ctx:queue())
+    assert(not _uv.run())
   end)
 end)

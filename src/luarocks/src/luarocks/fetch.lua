@@ -10,6 +10,93 @@ local persist = require("luarocks.persist")
 local util = require("luarocks.util")
 local cfg = require("luarocks.core.cfg")
 
+
+--- Fetch a local or remote file, using a local cache directory.
+-- Make a remote or local URL/pathname local, fetching the file if necessary.
+-- Other "fetch" and "load" functions use this function to obtain files.
+-- If a local pathname is given, it is returned as a result.
+-- @param url string: a local pathname or a remote URL.
+-- @param mirroring string: mirroring mode.
+-- If set to "no_mirror", then rocks_servers mirror configuration is not used.
+-- @return (string, nil, nil, boolean) or (nil, string, [string]):
+-- in case of success:
+-- * the absolute local pathname for the fetched file
+-- * nil
+-- * nil
+-- * `true` if the file was fetched from cache
+-- in case of failure:
+-- * nil
+-- * an error message
+-- * an optional error code.
+function fetch.fetch_caching(url, mirroring)
+   local repo_url, filename = url:match("^(.*)/([^/]+)$")
+   local name = repo_url:gsub("[/:]","_")
+   local cache_dir = dir.path(cfg.local_cache, name)
+   local ok = fs.make_dir(cache_dir)
+   if not ok then
+      cfg.local_cache = fs.make_temp_dir("local_cache")
+      cache_dir = dir.path(cfg.local_cache, name)
+      ok = fs.make_dir(cache_dir)
+      if not ok then
+         return nil, "Failed creating temporary cache directory "..cache_dir
+      end
+   end
+
+   local cachefile = dir.path(cache_dir, filename)
+   if cfg.aggressive_cache and (not name:match("^manifest")) and fs.exists(cachefile) then
+      return cachefile, nil, nil, true
+   end
+
+   local file, err, errcode, from_cache = fetch.fetch_url(url, cachefile, true, mirroring)
+   if not file then
+      return nil, err or "Failed downloading "..url, errcode
+   end
+   return file, nil, nil, from_cache
+end
+
+local function ensure_trailing_slash(url)
+   return (url:gsub("/*$", "/"))
+end
+
+local function is_url_relative_to_rocks_servers(url, servers)
+   for _, item in ipairs(servers) do
+      if type(item) == "table" then
+         for i, s in ipairs(item) do
+            local base = ensure_trailing_slash(s)
+            if string.find(url, base, 1, true) == 1 then
+               return i, url:sub(#base + 1), item
+            end
+         end
+      end
+   end
+end
+
+local function download_with_mirrors(url, filename, cache, servers)
+   local idx, rest, mirrors = is_url_relative_to_rocks_servers(url, servers)
+
+   if not idx then
+      -- URL is not from a rock server
+      return fs.download(url, filename, cache)
+   end
+
+   -- URL is from a rock server: try to download it falling back to mirrors.
+   local err = "\n"
+   for i = idx, #mirrors do
+      local try_url = ensure_trailing_slash(mirrors[i]) .. rest
+      if i > idx then
+         util.warning("Failed downloading. Attempting mirror at " .. try_url)
+      end
+      local ok, name, from_cache = fs.download(try_url, filename, cache)
+      if ok then
+         return ok, name, from_cache
+      else
+         err = err .. name .. "\n"
+      end
+   end
+
+   return nil, err
+end
+
 --- Fetch a local or remote file.
 -- Make a remote or local URL/pathname local, fetching the file if necessary.
 -- Other "fetch" and "load" functions use this function to obtain files.
@@ -21,6 +108,8 @@ local cfg = require("luarocks.core.cfg")
 -- filename can be given explicitly as this second argument.
 -- @param cache boolean: compare remote timestamps via HTTP HEAD prior to
 -- re-downloading the file.
+-- @param mirroring string: mirroring mode.
+-- If set to "no_mirror", then rocks_servers mirror configuration is not used.
 -- @return (string, nil, nil, boolean) or (nil, string, [string]):
 -- in case of success:
 -- * the absolute local pathname for the fetched file
@@ -31,17 +120,41 @@ local cfg = require("luarocks.core.cfg")
 -- * nil
 -- * an error message
 -- * an optional error code.
-function fetch.fetch_url(url, filename, cache)
+function fetch.fetch_url(url, filename, cache, mirroring)
    assert(type(url) == "string")
    assert(type(filename) == "string" or not filename)
 
    local protocol, pathname = dir.split_url(url)
    if protocol == "file" then
-      return fs.absolute_name(pathname)
+      local fullname = dir.normalize(fs.absolute_name(pathname))
+      if not fs.exists(fullname) then
+         local hint = (not pathname:match("^/"))
+                      and (" - note that given path in rockspec is not absolute: " .. url)
+                      or  ""
+         return nil, "Local file not found: " .. fullname .. hint
+      end
+      filename = filename or dir.base_name(pathname)
+      local dstname = dir.normalize(fs.absolute_name(dir.path(".", filename)))
+      local ok, err
+      if fullname == dstname then
+         ok = true
+      else
+         ok, err = fs.copy(fullname, dstname)
+      end
+      if ok then
+         return dstname
+      else
+         return nil, "Failed copying local file " .. fullname .. " to " .. dstname .. ": " .. err
+      end
    elseif dir.is_basic_protocol(protocol) then
-      local ok, name, from_cache = fs.download(url, filename, cache)
+      local ok, name, from_cache
+      if mirroring ~= "no_mirror" then
+         ok, name, from_cache = download_with_mirrors(url, filename, cache, cfg.rocks_servers)
+      else
+         ok, name, from_cache = fs.download(url, filename, cache)
+      end
       if not ok then
-         return nil, "Failed downloading "..url..(filename and " - "..filename or ""), "network"
+         return nil, "Failed downloading "..url..(name and " - "..name or ""), "network"
       end
       return name, nil, nil, from_cache
    else
@@ -60,7 +173,7 @@ end
 -- @return (string, string) or (nil, string, [string]): absolute local pathname of
 -- the fetched file and temporary directory name; or nil and an error message
 -- followed by an optional error code
-function fetch.fetch_url_at_temp_dir(url, tmpname, filename)
+function fetch.fetch_url_at_temp_dir(url, tmpname, filename, cache)
    assert(type(url) == "string")
    assert(type(tmpname) == "string")
    assert(type(filename) == "string" or not filename)
@@ -81,11 +194,26 @@ function fetch.fetch_url_at_temp_dir(url, tmpname, filename)
       util.schedule_function(fs.delete, temp_dir)
       local ok, err = fs.change_dir(temp_dir)
       if not ok then return nil, err end
-      local file, err, errcode = fetch.fetch_url(url, filename)
+
+      local file, err, errcode
+
+      if cache then
+         local cachefile
+         cachefile, err, errcode = fetch.fetch_caching(url)
+
+         if cachefile then
+            file = dir.path(temp_dir, filename)
+            fs.copy(cachefile, file)
+         end
+      else
+         file, err, errcode = fetch.fetch_url(url, filename, cache)
+      end
+
       fs.pop_dir()
       if not file then
          return nil, "Error fetching file: "..err, errcode
       end
+
       return file, temp_dir
    end
 end
@@ -134,7 +262,7 @@ local function fetch_and_verify_signature_for(url, filename, tmpdir)
    if not sig_file then
       return nil, "Could not fetch signature file for verification: " .. err, errcode
    end
-   
+
    local ok, err = signing.verify_signature(filename, sig_file)
    if not ok then
       return nil, "Failed signature verification: " .. err
@@ -159,7 +287,7 @@ function fetch.fetch_and_unpack_rock(url, dest, verify)
    local name = dir.base_name(url):match("(.*)%.[^.]*%.rock")
    local tmpname = "luarocks-rock-" .. name
 
-   local rock_file, err, errcode = fetch.fetch_url_at_temp_dir(url, tmpname)
+   local rock_file, err, errcode = fetch.fetch_url_at_temp_dir(url, tmpname, nil, true)
    if not rock_file then
       return nil, "Could not fetch rock file: " .. err, errcode
    end
@@ -228,7 +356,7 @@ function fetch.load_local_rockspec(rel_filename, quick)
    if not tbl then
       return nil, "Could not load rockspec file "..abs_filename.." ("..err..")"
    end
-   
+
    local rockspec, err = rockspecs.from_persisted_table(abs_filename, tbl, err, quick)
    if not rockspec then
       return nil, abs_filename .. ": " .. err
@@ -238,12 +366,12 @@ function fetch.load_local_rockspec(rel_filename, quick)
    if basename ~= "rockspec" and basename ~= name_version .. ".rockspec" then
       return nil, "Inconsistency between rockspec filename ("..basename..") and its contents ("..name_version..".rockspec)."
    end
-   
+
    return rockspec
 end
 
 --- Load a local or remote rockspec into a table.
--- This is the entry point for the LuaRocks tools. 
+-- This is the entry point for the LuaRocks tools.
 -- Only the LuaRocks runtime loader should use
 -- load_local_rockspec directly.
 -- @param filename string: Local or remote filename of a rockspec.
@@ -274,7 +402,7 @@ function fetch.load_rockspec(url, location, verify)
       filename, err = fetch.fetch_url(url)
       fs.pop_dir()
    else
-      filename, err, errcode = fetch.fetch_url_at_temp_dir(url, tmpname)
+      filename, err, errcode = fetch.fetch_url_at_temp_dir(url, tmpname, nil, true)
    end
    if not filename then
       return nil, err, errcode
@@ -384,7 +512,7 @@ function fetch.fetch_sources(rockspec, extract, dest_dir)
          return nil, "Unknown protocol "..protocol
       end
    end
-   
+
    if cfg.only_sources_from
    and rockspec.source.pathname
    and #rockspec.source.pathname > 0 then

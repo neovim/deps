@@ -2,7 +2,7 @@
 --- Functions for command-line scripts.
 local cmd = {}
 
-local loader = require("luarocks.loader")
+local manif = require("luarocks.manif")
 local util = require("luarocks.util")
 local path = require("luarocks.path")
 local cfg = require("luarocks.core.cfg")
@@ -12,6 +12,7 @@ local fs = require("luarocks.fs")
 local argparse = require("luarocks.argparse")
 
 local unpack = table.unpack or unpack
+local pack = table.pack or function(...) return { n = select("#", ...), ... } end
 
 local hc_ok, hardcoded = pcall(require, "luarocks.core.hardcoded")
 if not hc_ok then
@@ -62,7 +63,7 @@ do
    end
 
    process_tree_args = function(args, project_dir)
-   
+
       if args.global then
          cfg.local_by_default = false
       end
@@ -84,7 +85,7 @@ do
             replace_tree(args, root_dir)
          end
       elseif args["local"] then
-         if not cfg.home_tree then
+         if fs.is_superuser() then
             return nil, "The --local flag is meant for operating in a user's home directory.\n"..
                "You are running as a superuser, which is intended for system-wide operation.\n"..
                "To force using the superuser's home, use --tree explicitly."
@@ -94,7 +95,7 @@ do
       elseif args.project_tree then
          local tree = args.project_tree
          table.insert(cfg.rocks_trees, 1, { name = "project", root = tree } )
-         loader.load_rocks_trees()
+         manif.load_rocks_tree_manifests()
          path.use_tree(tree)
       elseif cfg.local_by_default then
          if cfg.home_tree then
@@ -103,7 +104,7 @@ do
       elseif project_dir then
          local project_tree = project_dir .. "/lua_modules"
          table.insert(cfg.rocks_trees, 1, { name = "project", root = project_tree } )
-         loader.load_rocks_trees()
+         manif.load_rocks_tree_manifests()
          path.use_tree(project_tree)
       else
          local trees = cfg.rocks_trees
@@ -151,6 +152,9 @@ local function error_handler(err)
          mode = mode .. " (fs_use_modules = true)"
       end
    end
+   if cfg and cfg.is_binary then
+      mode = mode .. " (binary)"
+   end
    return debug.traceback("LuaRocks "..cfg.program_version..
       " bug (please report at https://github.com/luarocks/luarocks/issues).\n"..
       mode.."\n"..err, 2)
@@ -161,6 +165,7 @@ end
 -- @param exitcode number: the exitcode to use
 local function die(message, exitcode)
    assert(type(message) == "string", "bad error, expected string, got: " .. type(message))
+   assert(exitcode == nil or type(exitcode) == "number", "bad error, expected number, got: " .. type(exitcode) .. " - " .. tostring(exitcode))
    util.printerr("\nError: "..message)
 
    local ok, err = xpcall(util.run_scheduled_functions, error_handler)
@@ -170,6 +175,31 @@ local function die(message, exitcode)
    end
 
    os.exit(exitcode or cmd.errorcodes.UNSPECIFIED)
+end
+
+local function search_lua_in_path(lua_version, verbose)
+   local path_sep = (package.config:sub(1, 1) == "\\" and ";" or ":")
+   local all_tried = {}
+   for bindir in (os.getenv("PATH") or ""):gmatch("[^"..path_sep.."]+") do
+      local parentdir = dir.path((bindir:gsub("[\\/][^\\/]+[\\/]?$", "")))
+      local detected, tried = util.find_lua(parentdir, lua_version)
+      if detected then
+         return detected
+      else
+         table.insert(all_tried, tried)
+      end
+      bindir = dir.path(bindir)
+      detected = util.find_lua(bindir, lua_version)
+      if detected then
+         return detected
+      else
+         table.insert(all_tried, tried)
+      end
+   end
+   return nil, "Could not find " ..
+               (lua_version and "Lua " .. lua_version or "Lua") ..
+               " in PATH." ..
+               (verbose and " Tried:\n" .. table.concat(all_tried, "\n") or "")
 end
 
 local init_config
@@ -192,7 +222,7 @@ do
          end
          return nil
       end
-   
+
       local function find_default_lua_version(args, project_dir)
          if hardcoded.FORCE_CONFIG then
             return nil
@@ -202,8 +232,8 @@ do
          if project_dir then
             table.insert(dirs, dir.path(project_dir, ".luarocks"))
          end
-         if cfg.home_tree then
-            table.insert(dirs, dir.path(cfg.home_tree, ".luarocks"))
+         if cfg.homeconfdir then
+            table.insert(dirs, cfg.homeconfdir)
          end
          table.insert(dirs, cfg.sysconfdir)
          for _, d in ipairs(dirs) do
@@ -221,7 +251,7 @@ do
          end
          return nil
       end
-   
+
       local function find_version_from_config(dirname)
          return fun.find(util.lua_versions("descending"), function(v)
             if util.exists(dir.path(dirname, ".luarocks", "config-"..v..".lua")) then
@@ -229,41 +259,36 @@ do
             end
          end)
       end
-   
+
       local function detect_lua_via_args(args, project_dir)
          local lua_version = args.lua_version
                              or find_default_lua_version(args, project_dir)
                              or (project_dir and find_version_from_config(project_dir))
-      
+
          if args.lua_dir then
             local detected, err = util.find_lua(args.lua_dir, lua_version)
             if not detected then
-               die(err)
+               local suggestion = (not args.lua_version)
+                  and "\nYou may want to specify a different Lua version with --lua-version\n"
+                  or  ""
+               die(err .. suggestion)
             end
             return detected
          end
-      
+
          if lua_version then
-            local path_sep = (package.config:sub(1, 1) == "\\" and ";" or ":")
-            for bindir in os.getenv("PATH"):gmatch("[^"..path_sep.."]+") do
-               local parentdir = bindir:gsub("[\\/][^\\/]+[\\/]?$", "")
-               local detected = util.find_lua(dir.path(parentdir), lua_version)
-               if detected then
-                  return detected
-               end
-               detected = util.find_lua(bindir, lua_version)
-               if detected then
-                  return detected
-               end
+            local detected = search_lua_in_path(lua_version)
+            if detected then
+               return detected
             end
             return {
                lua_version = lua_version,
             }
          end
-         
+
          return {}
       end
-      
+
       detect_config_via_args = function(args)
          local project_dir, given = find_project_dir(args.project_tree)
          local detected = detect_lua_via_args(args, project_dir)
@@ -280,15 +305,15 @@ do
          return detected
       end
    end
-   
+
    init_config = function(args)
       local detected = detect_config_via_args(args)
-   
+
       local ok, err = cfg.init(detected, util.warning)
       if not ok then
          return nil, err
       end
-      
+
       return (detected.lua_dir ~= nil)
    end
 end
@@ -304,11 +329,45 @@ local function get_status(status)
    return status and "ok" or "not found"
 end
 
-local function get_config_text(cfg)
-   local buf = "Configuration:\n   Lua version: "..cfg.lua_version.."\n"
+local function use_to_fix_location(key)
+   local buf =  "                   ****************************************\n"
+   buf = buf .. "                   Use the command\n\n"
+   buf = buf .. "                      luarocks config " .. key .. " <dir>\n\n"
+   buf = buf .. "                   to fix the location\n"
+   buf = buf .. "                   ****************************************\n"
+   return buf
+end
+
+local function get_config_text(cfg)  -- luacheck: ignore 431
+   local deps = require("luarocks.deps")
+
+   local libdir_ok = deps.check_lua_libdir(cfg.variables)
+   local incdir_ok = deps.check_lua_incdir(cfg.variables)
+   local bindir_ok = fs.exists(cfg.variables.LUA_BINDIR)
+   local luadir_ok = fs.exists(cfg.variables.LUA_DIR)
+   local lua_ok = fs.exists(cfg.variables.LUA)
+
+   local buf = "Configuration:\n"
+   buf = buf.."   Lua:\n"
+   buf = buf.."      Version    : "..cfg.lua_version.."\n"
    if cfg.luajit_version then
-      buf = buf.."   LuaJIT version: "..cfg.luajit_version.."\n"
+      buf = buf.."      LuaJIT     : "..cfg.luajit_version.."\n"
    end
+   buf = buf.."      Interpreter: "..(cfg.variables.LUA or "").." ("..get_status(lua_ok)..")\n"
+   buf = buf.."      LUA_DIR    : "..(cfg.variables.LUA_DIR or "").." ("..get_status(luadir_ok)..")\n"
+   if not lua_ok then
+      buf = buf .. use_to_fix_location("lua_dir")
+   end
+   buf = buf.."      LUA_BINDIR : "..(cfg.variables.LUA_BINDIR or "").." ("..get_status(bindir_ok)..")\n"
+   buf = buf.."      LUA_INCDIR : "..(cfg.variables.LUA_INCDIR or "").." ("..get_status(incdir_ok)..")\n"
+   if lua_ok and not incdir_ok then
+      buf = buf .. use_to_fix_location("variables.LUA_INCDIR")
+   end
+   buf = buf.."      LUA_LIBDIR : "..(cfg.variables.LUA_LIBDIR or "").." ("..get_status(libdir_ok)..")\n"
+   if lua_ok and not libdir_ok then
+      buf = buf .. use_to_fix_location("variables.LUA_LIBDIR")
+   end
+
    buf = buf.."\n   Configuration files:\n"
    local conf = cfg.config_files
    buf = buf.."      System  : "..fs.absolute_name(conf.system.file).." ("..get_status(conf.system.found)..")\n"
@@ -387,17 +446,22 @@ Enabling completion for Fish:
       "rockspecs of in-development versions.")
    parser:option("--server", "Fetch rocks/rockspecs from this server "..
       "(takes priority over config file).")
+      :hidden_name("--from")
    parser:option("--only-server", "Fetch rocks/rockspecs from this server only "..
       "(overrides any entries in the config file).")
       :argname("<server>")
+      :hidden_name("--only-from")
    parser:option("--only-sources", "Restrict downloads to paths matching the given URL.")
       :argname("<url>")
+      :hidden_name("--only-sources-from")
    parser:option("--namespace", "Specify the rocks server namespace to use.")
+      :convert(string.lower)
    parser:option("--lua-dir", "Which Lua installation to use.")
       :argname("<prefix>")
    parser:option("--lua-version", "Which Lua version to use.")
       :argname("<ver>")
    parser:option("--tree", "Which tree to operate on.")
+      :hidden_name("--to")
    parser:flag("--local", "Use the tree in the user's home directory.\n"..
       "To enable it, see '"..program.." help path'.")
    parser:flag("--global", "Use the system tree when `local_by_default` is `true`.")
@@ -410,11 +474,6 @@ Enabling completion for Fish:
 
    -- Used internally to force the use of a particular project tree
    parser:option("--project-tree"):hidden(true)
-   -- Compatibility for old names of some options
-   parser:option("--to"):target("tree"):hidden(true)
-   parser:option("--from"):target("server"):hidden(true)
-   parser:option("--only-from"):target("only_server"):hidden(true)
-   parser:option("--only-sources-from"):target("only_sources"):hidden(true)
 
    for _, module in util.sortedpairs(cmd_modules) do
       module.add_to_parser(parser)
@@ -475,10 +534,10 @@ function cmd.run_command(description, commands, external_namespace, ...)
    end
 
    local function process_cmdline_vars(...)
-      local args = {...}
+      local args = pack(...)
       local cmdline_vars = {}
-      local last = #args
-      for i = 1, #args do
+      local last = args.n
+      for i = 1, args.n do
          if args[i] == "--" then
             last = i - 1
             break
@@ -534,17 +593,21 @@ function cmd.run_command(description, commands, external_namespace, ...)
 
    -- if the Lua interpreter wasn't explicitly found before cfg.init,
    -- try again now.
+   local tried
    if not lua_found then
       if cfg.variables.LUA_DIR then
-         lua_found = util.find_lua(cfg.variables.LUA_DIR, cfg.lua_version)
+         lua_found, tried = util.find_lua(cfg.variables.LUA_DIR, cfg.lua_version, args.verbose)
+      else
+         lua_found, tried = search_lua_in_path(cfg.lua_version, args.verbose)
       end
    end
 
-   if not lua_found then
-      util.warning("Could not find a Lua " .. cfg.lua_version .. " interpreter in your PATH. " ..
-                   "Modules may not install with the correct configurations. " ..
-                   "You may want to specify the path prefix to your build " ..
-                   "of Lua " .. cfg.lua_version .. " using --lua-dir")
+   if not lua_found and args.command ~= "config" and args.command ~= "help" then
+      util.warning(tried ..
+                   "\nModules may not install with the correct configurations. " ..
+                   "You may want to configure the path prefix to your build " ..
+                   "of Lua " .. cfg.lua_version .. " using\n\n" ..
+                   "   luarocks config --local lua_dir <your-lua-prefix>\n")
    end
    cfg.lua_found = lua_found
 
@@ -580,8 +643,12 @@ function cmd.run_command(description, commands, external_namespace, ...)
    end
 
    -- if running as superuser, use system cache dir
-   if not cfg.home_tree then
+   if fs.is_superuser() then
       cfg.local_cache = dir.path(fs.system_cache_dir(), "luarocks")
+   end
+
+   if args.no_manifest then
+      cfg.no_manifest = true
    end
 
    if not args.command then

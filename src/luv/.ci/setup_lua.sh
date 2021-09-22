@@ -13,9 +13,9 @@ LUAJIT_BASE="LuaJIT-$LUAJIT_VERSION"
 
 source .ci/platform.sh
 
-LUA_HOME_DIR=$TRAVIS_BUILD_DIR/install/lua
+LUA_HOME_DIR=$GITHUB_WORKSPACE/install/lua
 
-LR_HOME_DIR=$TRAVIS_BUILD_DIR/install/luarocks
+LR_HOME_DIR=$GITHUB_WORKSPACE/install/luarocks
 
 mkdir "$HOME/.lua"
 
@@ -70,8 +70,8 @@ else
     curl --silent https://www.lua.org/ftp/lua-5.3.2.tar.gz | tar xz
     cd lua-5.3.2;
   elif [ "$LUA" == "lua5.4" ]; then
-    curl --silent https://www.lua.org/ftp/lua-5.4.1.tar.gz | tar xz
-    cd lua-5.4.1;
+    curl --silent https://www.lua.org/ftp/lua-5.4.3.tar.gz | tar xz
+    cd lua-5.4.3;
   fi
 
   # Build Lua without backwards compatibility for testing
@@ -84,7 +84,7 @@ else
 
 fi
 
-cd "$TRAVIS_BUILD_DIR"
+cd "$GITHUB_WORKSPACE"
 
 lua -v
 
@@ -118,7 +118,7 @@ make build && make install
 
 ln -s "$LR_HOME_DIR/bin/luarocks" "$HOME/.lua/luarocks"
 
-cd "$TRAVIS_BUILD_DIR"
+cd "$GITHUB_WORKSPACE"
 
 luarocks --version
 
@@ -133,5 +133,5 @@ elif [ "$LUA" == "lua5.2" ]; then
 elif [ "$LUA" == "lua5.3" ]; then
   rm -rf lua-5.3.2;
 elif [ "$LUA" == "lua5.4" ]; then
-  rm -rf lua-5.4.1;
+  rm -rf lua-5.4.3;
 fi

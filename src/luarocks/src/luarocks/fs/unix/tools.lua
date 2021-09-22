@@ -51,7 +51,7 @@ end
 --- Copy a file.
 -- @param src string: Pathname of source
 -- @param dest string: Pathname of destination
--- @param perm string ("read" or "exec") or nil: Permissions for destination 
+-- @param perm string ("read" or "exec") or nil: Permissions for destination
 -- file or nil to use the source permissions
 -- @return boolean or (boolean, string): true on success, false on failure,
 -- plus an error message.
@@ -141,7 +141,7 @@ end
 -- @return boolean: true on success, nil and error message on failure.
 function tools.unzip(zipfile)
    assert(zipfile)
-   local ok, err = fs.is_tool_available(vars.UNZIP, "unzip", "-h")
+   local ok, err = fs.is_tool_available(vars.UNZIP, "unzip", "--help")
    if not ok then
       return nil, err
    end

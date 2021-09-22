@@ -149,7 +149,7 @@ end
 -- @param rockspec table: the loaded rockspec.
 -- @return boolean or (nil, string): true if no errors occurred,
 -- nil and an error message otherwise.
-function builtin.run(rockspec)
+function builtin.run(rockspec, no_install)
    assert(rockspec:type() == "rockspec")
    local compile_object, compile_library, compile_static_library
 
@@ -252,7 +252,7 @@ function builtin.run(rockspec)
          end
          return execute(variables.LD.." "..variables.LIBFLAG, "-o", library, unpack(extras))
       end
-      compile_static_library = function(library, objects, libraries, libdirs, name)
+      compile_static_library = function(library, objects, libraries, libdirs, name)  -- luacheck: ignore 211
          local ok = execute(variables.AR, "rc", library, unpack(objects))
          if ok then
             ok = execute(variables.RANLIB, library)
@@ -266,7 +266,7 @@ function builtin.run(rockspec)
    local lib_modules = {}
    local luadir = path.lua_dir(rockspec.name, rockspec.version)
    local libdir = path.lib_dir(rockspec.name, rockspec.version)
-   
+
    if not build.modules then
       if rockspec:format_is_at_least("3.0") then
          local libs, incdirs, libdirs = autoextract_libs(rockspec.external_dependencies, rockspec.variables)
@@ -344,19 +344,21 @@ function builtin.run(rockspec)
          ]]
       end
    end
-   for _, mods in ipairs({{ tbl = lua_modules, perms = "read" }, { tbl = lib_modules, perms = "exec" }}) do
-      for name, dest in pairs(mods.tbl) do
-         fs.make_dir(dir.dir_name(dest))
-         ok, err = fs.copy(name, dest, mods.perms)
-         if not ok then
-            return nil, "Failed installing "..name.." in "..dest..": "..err
+   if not no_install then
+      for _, mods in ipairs({{ tbl = lua_modules, perms = "read" }, { tbl = lib_modules, perms = "exec" }}) do
+         for name, dest in pairs(mods.tbl) do
+            fs.make_dir(dir.dir_name(dest))
+            ok, err = fs.copy(name, dest, mods.perms)
+            if not ok then
+               return nil, "Failed installing "..name.." in "..dest..": "..err
+            end
          end
       end
-   end
-   if fs.is_dir("lua") then
-      ok, err = fs.copy_contents("lua", luadir)
-      if not ok then
-         return nil, "Failed copying contents of 'lua' directory: "..err
+      if fs.is_dir("lua") then
+         ok, err = fs.copy_contents("lua", luadir)
+         if not ok then
+            return nil, "Failed copying contents of 'lua' directory: "..err
+         end
       end
    end
    return true

@@ -6,6 +6,7 @@ local search = require("luarocks.search")
 local queries = require("luarocks.queries")
 local fs = require("luarocks.fs")
 local dir = require("luarocks.dir")
+local util = require("luarocks.util")
 
 local function get_file(filename)
    local protocol, pathname = dir.split_url(filename)
@@ -17,13 +18,15 @@ local function get_file(filename)
          return nil, err
       end
    else
-      return fetch.fetch_url(filename)
+      -- discard third result
+      local ok, err = fetch.fetch_url(filename)
+      return ok, err
    end
 end
 
-function download.download(arch, name, version, all)
+function download.download(arch, name, namespace, version, all, check_lua_versions)
    local substring = (all and name == "")
-   local query = queries.new(name, version, substring, arch)
+   local query = queries.new(name, namespace, version, substring, arch)
    local search_err
 
    if all then
@@ -31,8 +34,8 @@ function download.download(arch, name, version, all)
       local has_result = false
       local all_ok = true
       local any_err = ""
-      for name, result in pairs(results) do
-         for version, items in pairs(result) do
+      for name, result in pairs(results) do  -- luacheck: ignore 422
+         for version, items in pairs(result) do  -- luacheck: ignore 422
             for _, item in ipairs(items) do
                -- Ignore provided rocks.
                if item.arch ~= "installed" then
@@ -53,13 +56,13 @@ function download.download(arch, name, version, all)
       end
    else
       local url
-      url, search_err = search.find_suitable_rock(query, true)
+      url, search_err = search.find_rock_checking_lua_versions(query, check_lua_versions)
       if url then
          return get_file(url)
       end
    end
-   return nil, "Could not find a result named "..name..(version and " "..version or "")..
-      (search_err and ": "..search_err or ".")
+   local rock = util.format_rock_name(name, namespace, version)
+   return nil, "Could not find a result named "..rock..(search_err and ": "..search_err or ".")
 end
 
 return download

@@ -103,11 +103,10 @@ static int luv_thread_arg_set(lua_State* L, luv_thread_arg_t* args, int idx, int
       }
       break;
     default:
-      fprintf(stderr, "Error: thread arg not support type '%s' at %d",
-        lua_typename(L, arg->type), i);
-      arg->val.str.base = NULL;
-      arg->val.str.len = 0;
-      break;
+      args->argc = i - idx;
+      lua_pushinteger(L, arg->type);
+      lua_pushinteger(L, i - idx + 1);
+      return -1;
     }
     i++;
   }
@@ -207,9 +206,31 @@ static int luv_thread_arg_push(lua_State* L, luv_thread_arg_t* args, int flags) 
   return i;
 }
 
-int thread_dump(lua_State* L, const void* p, size_t sz, void* B) {
-  (void)L;
-  luaL_addlstring((luaL_Buffer*) B, (const char*) p, sz);
+static int luv_thread_arg_error(lua_State *L) {
+  int type = lua_tointeger(L, -2);
+  int pos = lua_tointeger(L, -1);
+  lua_pop(L, 2);
+  return luaL_error(L, "Error: thread arg not support type '%s' at %d",
+    lua_typename(L, type), pos);
+}
+
+// Copied from lstrlib.c in Lua 5.4.3
+//
+// luaL_buffinit might push stuff onto the stack (this is undocumented as of now),
+// so it must be called after lua_dump to ensure that the function to dump
+// is still on the top of the stack
+struct luv_thread_Writer {
+  int init;
+  luaL_Buffer B;
+};
+
+static int thread_dump (lua_State *L, const void *b, size_t size, void *ud) {
+  struct luv_thread_Writer *state = (struct luv_thread_Writer *)ud;
+  if (!state->init) {
+    state->init = 1;
+    luaL_buffinit(L, &state->B);
+  }
+  luaL_addlstring(&state->B, (const char *)b, size);
   return 0;
 }
 
@@ -218,14 +239,14 @@ static int luv_thread_dumped(lua_State* L, int idx) {
     lua_pushvalue(L, idx);
   } else {
     int ret;
-    luaL_Buffer b;
+    struct luv_thread_Writer state;
+    state.init = 0;
     luaL_checktype(L, idx, LUA_TFUNCTION);
     lua_pushvalue(L, idx);
-    luaL_buffinit(L, &b);
-    ret = lua_dump(L, thread_dump, &b, 1);
+    ret = lua_dump(L, thread_dump, &state, 1);
     lua_pop(L, 1);
     if (ret==0) {
-      luaL_pushresult(&b);
+      luaL_pushresult(&state.B);
     } else
       luaL_error(L, "Error: unable to dump given function");
   }
@@ -257,13 +278,14 @@ static void luv_thread_cb(void* varg) {
   //acquire vm and get top
   luv_thread_t* thd = (luv_thread_t*)varg;
   lua_State* L = acquire_vm_cb();
+  luv_ctx_t *ctx = luv_context(L);
 
   //push lua function, thread entry
   if (luaL_loadbuffer(L, thd->code, thd->len, "=thread") == 0) {
     //push parameter for real thread function
     int i = luv_thread_arg_push(L, &thd->args, LUVF_THREAD_SIDE_CHILD);
 
-    luv_cfpcall(L, i, 0, 0);
+    ctx->thrd_pcall(L, i, 0, 0);
     luv_thread_arg_clear(L, &thd->args, LUVF_THREAD_SIDE_CHILD);
   } else {
     fprintf(stderr, "Uncaught Error in thread: %s\n", lua_tostring(L, -1));
@@ -317,6 +339,9 @@ static int luv_new_thread(lua_State* L) {
   lua_remove(L, -2);
   //clear in luv_thread_gc or in child threads
   thread->argc = luv_thread_arg_set(L, &thread->args, cbidx+1, lua_gettop(L) - 1, LUVF_THREAD_SIDE_MAIN);
+  if (thread->argc < 0) {
+    return luv_thread_arg_error(L);
+  }
   thread->len = len;
 
 #if LUV_UV_VERSION_GEQ(1, 26, 0)

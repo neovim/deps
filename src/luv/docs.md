@@ -1383,6 +1383,21 @@ Will return number of bytes written (can be less than the supplied buffer size).
 
 **Returns:** `integer` or `fail`
 
+### `uv.try_write2(stream, data, send_handle)`
+
+> method form `stream:try_write2(data, send_handle)`
+
+**Parameters:**
+- `stream`: `userdata` for sub-type of `uv_stream_t`
+- `data`: `buffer`
+- `send_handle`: `userdata` for sub-type of `uv_stream_t`
+
+Like `uv.write2()`, but with the properties of `uv.try_write()`. Not supported on Windows, where it returns `UV_EAGAIN`.
+
+Will return number of bytes written (can be less than the supplied buffer size).
+
+**Returns:** `integer` or `fail`
+
 ### `uv.is_readable(stream)`
 
 > method form `stream:is_readable()`
@@ -1609,6 +1624,48 @@ and `uv.tcp_close_reset()` calls is not allowed.
 
 **Returns:** `0` or `fail`
 
+### `uv.socketpair([socktype], [protocol], [flags1], [flags2])`
+
+**Parameters:**
+- `socktype`: `string`, `integer` or `nil` (default: `stream`)
+- `protocol`: `string`, `integer` or `nil` (default: 0)
+- `flags1`: `table` or `nil`
+  - `nonblock`: `boolean` (default: `false`)
+- `flags2`: `table` or `nil`
+  - `nonblock`: `boolean` (default: `false`)
+
+Create a pair of connected sockets with the specified properties. The resulting handles can be passed to `uv.tcp_open`, used with `uv.spawn`, or for any other purpose.
+
+When specified as a string, `socktype` must be one of `"stream"`, `"dgram"`, `"raw"`,
+`"rdm"`, or `"seqpacket"`.
+
+When `protocol` is set to 0 or nil, it will be automatically chosen based on the socket's domain and type. When `protocol` is specified as a string, it will be looked up using the `getprotobyname(3)` function (examples: `"ip"`, `"icmp"`, `"tcp"`, `"udp"`, etc).
+
+Flags:
+ - `nonblock`: Opens the specified socket handle for `OVERLAPPED` or `FIONBIO`/`O_NONBLOCK` I/O usage. This is recommended for handles that will be used by libuv, and not usually recommended otherwise.
+
+Equivalent to `socketpair(2)` with a domain of `AF_UNIX`.
+
+**Returns:** `table` or `fail`
+- `[1, 2]` : `integer` (file descriptor)
+
+```lua
+-- Simple read/write with tcp
+local fds = uv.socketpair(nil, nil, {nonblock=true}, {nonblock=true})
+
+local sock1 = uv.new_tcp()
+sock1:open(fds[1])
+
+local sock2 = uv.new_tcp()
+sock2:open(fds[2])
+
+sock1:write("hello")
+sock2:read_start(function(err, chunk)
+  assert(not err, err)
+  print(chunk)
+end)
+```
+
 ## `uv_pipe_t` — Pipe handle
 
 [`uv_pipe_t`]: #uv_pipe_t--pipe-handle
@@ -1765,6 +1822,42 @@ where `r` is `READABLE` and `w` is `WRITABLE`. This function is blocking.
 
 **Returns:** `0` or `fail`
 
+### `uv.pipe(read_flags, write_flags)`
+
+**Parameters:**
+- `read_flags`: `table` or `nil`
+  - `nonblock`: `boolean` (default: `false`)
+- `write_flags`: `table` or `nil`
+  - `nonblock`: `boolean` (default: `false`)
+
+Create a pair of connected pipe handles. Data may be written to the `write` fd and read from the `read` fd. The resulting handles can be passed to `pipe_open`, used with `spawn`, or for any other purpose.
+
+Flags:
+ - `nonblock`: Opens the specified socket handle for `OVERLAPPED` or `FIONBIO`/`O_NONBLOCK` I/O usage. This is recommended for handles that will be used by libuv, and not usually recommended otherwise.
+
+Equivalent to `pipe(2)` with the `O_CLOEXEC` flag set.
+
+**Returns:** `table` or `fail`
+- `read` : `integer` (file descriptor)
+- `write` : `integer` (file descriptor)
+
+```lua
+-- Simple read/write with pipe_open
+local fds = uv.pipe({nonblock=true}, {nonblock=true})
+
+local read_pipe = uv.new_pipe()
+read_pipe:open(fds.read)
+
+local write_pipe = uv.new_pipe()
+write_pipe:open(fds.write)
+
+write_pipe:write("hello")
+read_pipe:read_start(function(err, chunk)
+  assert(not err, err)
+  print(chunk)
+end)
+```
+
 ## `uv_tty_t` — TTY handle
 
 [`uv_tty_t`]: #uv_tty_t--tty-handle
@@ -1861,7 +1954,7 @@ Gets the current Window width and height.
 Controls whether console virtual terminal sequences are processed by libuv or
 console. Useful in particular for enabling ConEmu support of ANSI X3.64 and
 Xterm 256 colors. Otherwise Windows10 consoles are usually detected
-automatically. State may be a family string: `"supported"` or `"unsupported"`.
+automatically. State should be one of: `"supported"` or `"unsupported"`.
 
 This function is only meaningful on Windows systems. On Unix it is silently
 ignored.
@@ -1921,7 +2014,7 @@ Returns the handle's send queue size.
 
 ### `uv.udp_get_send_queue_count()`
 
-> method form `udp:get_send_count_size()`
+> method form `udp:get_send_queue_count()`
 
 Returns the handle's send queue count.
 
@@ -1959,6 +2052,7 @@ it's required that it represents a valid datagram socket.
 - `port`: `number`
 - `flags`: `table` or `nil`
   - `ipv6only`: `boolean`
+  - `reuseaddr`: `boolean`
 
 Bind the UDP handle to an IP address and port. Any `flags` are set with a table
 with fields `reuseaddr` or `ipv6only` equal to `true` or `false`.
@@ -2894,6 +2988,8 @@ that should be returned by each call to `uv.fs_readdir()`.
 
 ### `uv.fs_readdir(dir, [callback])`
 
+> method form `dir:readdir([callback])`
+
 **Parameters:**
 - `dir`: `uv_dir_t userdata`
 - `callback`: `callable` (async version) or `nil` (sync version)
@@ -2913,6 +3009,8 @@ the associated `uv.fs_opendir()` call.
 **Returns (async version):** `uv_fs_t userdata`
 
 ### `uv.fs_closedir(dir, [callback])`
+
+> method form `dir:closedir([callback])`
 
 **Parameters:**
 - `dir`: `uv_dir_t userdata`
@@ -3007,9 +3105,9 @@ called in the main loop thread.
 - `host`: `string` or `nil`
 - `service`: `string` or `nil`
 - `hints`: `table` or `nil`
-  - `family`: `integer` or `string` or `nil`
-  - `socktype`: `integer` or `string` or `nil`
-  - `protocol`: `integer` or `string` or `nil`
+  - `family`: `string` or `integer` or `nil`
+  - `socktype`: `string` or `integer` or `nil`
+  - `protocol`: `string` or `integer` or `nil`
   - `addrconfig`: `boolean` or `nil`
   - `v4mapped`: `boolean` or `nil`
   - `all`: `boolean` or `nil`
@@ -3023,6 +3121,13 @@ called in the main loop thread.
 
 Equivalent to `getaddrinfo(3)`. Either `node` or `service` may be `nil` but not
 both.
+
+Valid hint strings for the keys that take a string:
+- `family`: `"unix"`, `"inet"`, `"inet6"`, `"ipx"`,
+`"netlink"`, `"x25"`, `"ax25"`, `"atmpvc"`, `"appletalk"`, or `"packet"`
+- `socktype`: `"stream"`, `"dgram"`, `"raw"`,
+`"rdm"`, or `"seqpacket"`
+- `protocol`: will be looked up using the `getprotobyname(3)` function (examples: `"ip"`, `"icmp"`, `"tcp"`, `"udp"`, etc)
 
 **Returns (sync version):** `table` or `fail`
 - `[1, 2, 3, ..., n]` : `table`
@@ -3048,6 +3153,9 @@ both.
   - `service`: `string` or `nil`
 
 Equivalent to `getnameinfo(3)`.
+
+When specified, `family` must be one of `"unix"`, `"inet"`, `"inet6"`, `"ipx"`,
+`"netlink"`, `"x25"`, `"ax25"`, `"atmpvc"`, `"appletalk"`, or `"packet"`.
 
 **Returns (sync version):** `string, string` or `fail`
 
@@ -3502,6 +3610,15 @@ low on entropy.
 **Returns (sync version):** `string` or `fail`
 
 **Returns (async version):** `0` or `fail`
+
+### `uv.translate_sys_error(errcode)`
+
+**Parameters:**
+- `errcode`: `integer`
+
+Returns the libuv error message and error name (both in string form, see [`err` and `name` in Error Handling](#error-handling)) equivalent to the given platform dependent error code: POSIX error codes on Unix (the ones stored in errno), and Win32 error codes on Windows (those returned by GetLastError() or WSAGetLastError()).
+
+**Returns:** `string, string` or `nil`
 
 ## Metrics operations
 

@@ -12,13 +12,15 @@ local dir_stack = {}
 
 do
    local tool_cache = {}
-   
+
    local tool_options = {
       downloader = {
-         { var = "CURL", name = "curl" },
+         desc = "downloader",
          { var = "WGET", name = "wget" },
+         { var = "CURL", name = "curl" },
       },
       md5checker = {
+         desc = "MD5 checker",
          { var = "MD5SUM", name = "md5sum" },
          { var = "OPENSSL", name = "openssl", cmdarg = "md5", checkarg = "version" },
          { var = "MD5", name = "md5", checkarg = "-shello" },
@@ -27,8 +29,10 @@ do
 
    function tools.which_tool(tooltype)
       local tool = tool_cache[tooltype]
+      local names = {}
       if not tool then
          for _, opt in ipairs(tool_options[tooltype]) do
+            table.insert(names, opt.name)
             if fs.is_tool_available(vars[opt.var], opt.name, opt.checkarg) then
                tool = opt
                tool_cache[tooltype] = opt
@@ -37,7 +41,8 @@ do
          end
       end
       if not tool then
-         return nil
+         local tool_names = table.concat(names, ", ", 1, #names - 1) .. " or " .. names[#names]
+         return nil, "no " .. tool_options[tooltype].desc .. " tool available," .. " please install " .. tool_names .. " in your system"
       end
       return tool.name, vars[tool.var] .. (tool.cmdarg and " "..tool.cmdarg or "")
    end
@@ -142,10 +147,13 @@ function tools.use_downloader(url, filename, cache)
    assert(type(filename) == "string" or not filename)
 
    filename = fs.absolute_name(filename or dir.base_name(url))
-   
-   local downloader = fs.which_tool("downloader")
 
-   local ok
+   local downloader, err = fs.which_tool("downloader")
+   if not downloader then
+      return nil, err
+   end
+
+   local ok = false
    if downloader == "wget" then
       local wget_cmd = vars.WGET.." "..vars.WGETNOCERTFLAG.." --no-cache --user-agent=\""..cfg.user_agent.." via wget\" --quiet "
       if cfg.connection_timeout and cfg.connection_timeout > 0 then
@@ -168,15 +176,16 @@ function tools.use_downloader(url, filename, cache)
       if cfg.connection_timeout and cfg.connection_timeout > 0 then
         curl_cmd = curl_cmd .. "--connect-timeout "..tostring(cfg.connection_timeout).." "
       end
-      ok = fs.execute_string(fs.quiet_stderr(curl_cmd..fs.Q(url).." > "..fs.Q(filename)))
-   else
-      return false, "No downloader tool available -- please install 'wget' or 'curl' in your system"
+      if cache then
+         curl_cmd = curl_cmd .. " -R -z \"" .. filename .. "\" "
+      end
+      ok = fs.execute_string(fs.quiet_stderr(curl_cmd..fs.Q(url).." --output "..fs.Q(filename)))
    end
    if ok then
       return true, filename
    else
       os.remove(filename)
-      return false, "Failed downloading " .. url
+      return false, "failed downloading " .. url
    end
 end
 
@@ -185,20 +194,20 @@ end
 -- @return string: The MD5 checksum or nil + message
 function tools.get_md5(file)
    local ok, md5checker = fs.which_tool("md5checker")
-   if ok then
-      local pipe = io.popen(md5checker.." "..fs.Q(fs.absolute_name(file)))
-      local computed = pipe:read("*l")
-      pipe:close()
-      if computed then
-         computed = computed:match("("..("%x"):rep(32)..")")
-      end
-      if computed then
-         return computed
-      else
-         return nil, "Failed to compute MD5 hash for file "..tostring(fs.absolute_name(file))
-      end
+   if not ok then
+      return false, md5checker
+   end
+
+   local pipe = io.popen(md5checker.." "..fs.Q(fs.absolute_name(file)))
+   local computed = pipe:read("*l")
+   pipe:close()
+   if computed then
+      computed = computed:match("("..("%x"):rep(32)..")")
+   end
+   if computed then
+      return computed
    else
-      return false, "No MD5 checking tool available -- please install 'md5', 'md5sum' or 'openssl' in your system"
+      return nil, "Failed to compute MD5 hash for file "..tostring(fs.absolute_name(file))
    end
 end
 

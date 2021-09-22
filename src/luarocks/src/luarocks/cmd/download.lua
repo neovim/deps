@@ -11,6 +11,7 @@ function cmd_download.add_to_parser(parser)
 
    cmd:argument("name", "Name of the rock.")
       :args("?")
+      :action(util.namespaced_name_action)
    cmd:argument("version", "Version of the rock.")
       :args("?")
 
@@ -19,6 +20,8 @@ function cmd_download.add_to_parser(parser)
       cmd:flag("--source", "Download .src.rock if available."),
       cmd:flag("--rockspec", "Download .rockspec if available."),
       cmd:option("--arch", "Download rock for a specific architecture."))
+   cmd:flag("--check-lua-versions", "If the rock can't be found, check repository "..
+      "and report if it is available for another Lua version.")
 end
 
 --- Driver function for the "download" command.
@@ -29,9 +32,7 @@ function cmd_download.command(args)
       return nil, "Argument missing. "..util.see_help("download")
    end
 
-   local name = util.adjust_name_and_namespace(args.name, args)
-
-   if not name then name, args.version = "", "" end
+   args.name = args.name or ""
 
    local arch
 
@@ -42,8 +43,8 @@ function cmd_download.command(args)
    elseif args.arch then
       arch = args.arch
    end
-   
-   local dl, err = download.download(arch, name:lower(), args.version, args.all)
+
+   local dl, err = download.download(arch, args.name, args.namespace, args.version, args.all, args.check_lua_versions)
    return dl and true, err
 end
 

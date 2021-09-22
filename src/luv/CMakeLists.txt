@@ -7,9 +7,14 @@ endif()
 project (luv C ASM)
 
 set(LUV_VERSION_MAJOR 1)
-set(LUV_VERSION_MINOR 40)
+set(LUV_VERSION_MINOR 42)
 set(LUV_VERSION_PATCH 0)
 set(LUV_VERSION ${LUV_VERSION_MAJOR}.${LUV_VERSION_MINOR}.${LUV_VERSION_PATCH})
+
+if(NOT ${CMAKE_VERSION} VERSION_LESS "3.5.0")
+    # generate compilation database used by C code intelligence tools
+  set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+endif()
 
 option(BUILD_MODULE "Build as module" ON)
 option(BUILD_STATIC_LIBS "Build static library" OFF)
@@ -76,6 +81,7 @@ if (LUA)
   MESSAGE(STATUS "Lua: using information from luarocks")
 
   MESSAGE(STATUS "LUA_LIBDIR: " ${LUA_LIBDIR})
+  MESSAGE(STATUS "LUA_LIBFILE: " ${LUA_LIBFILE})
   MESSAGE(STATUS "LUA_INCDIR: " ${LUA_INCDIR})
   MESSAGE(STATUS "LUA: " ${LUA})
 
@@ -86,19 +92,31 @@ if (LUA)
 
   SET(INSTALL_LIB_DIR ${LIBDIR})
 
-  GET_FILENAME_COMPONENT(LUA_EXEC_NAME ${LUA_EXECUTABLE} NAME_WE)
-  IF(LUA_EXEC_NAME STREQUAL "luajit")
-  FIND_LIBRARY(LUA_LIBRARIES
-    NAMES luajit libluajit
-    PATHS ${LUA_LIBDIR}
-    NO_DEFAULT_PATH)
-  ELSEIF(LUA_EXEC_NAME MATCHES "lua.*")
-    FIND_LIBRARY(LUA_LIBRARIES
-      NAMES lua lua54 lua53 lua52 lua51 liblua liblua54 liblua53 liblua52 liblua51
-      PATHS ${LUA_LIBDIR}
-      NO_DEFAULT_PATH)
-  ENDIF()
-  MESSAGE(STATUS "Lua library: ${LUA_LIBRARIES}")
+  if (LUA_LIBDIR)
+    if (NOT LUA_LIBFILE)
+      # If LIBDIR is set but LIBFILE is not, then that means
+      # Luarocks 2.x is being used, and we'll need to find the lib
+      # ourselves
+      GET_FILENAME_COMPONENT(LUA_EXEC_NAME ${LUA_EXECUTABLE} NAME_WE)
+      IF(LUA_EXEC_NAME STREQUAL "luajit")
+      FIND_LIBRARY(LUA_LIBRARIES
+        NAMES luajit libluajit
+        PATHS ${LUA_LIBDIR}
+        NO_DEFAULT_PATH)
+      ELSEIF(LUA_EXEC_NAME MATCHES "lua.*")
+        FIND_LIBRARY(LUA_LIBRARIES
+          NAMES lua lua54 lua53 lua52 lua51 liblua liblua54 liblua53 liblua52 liblua51
+          PATHS ${LUA_LIBDIR}
+          NO_DEFAULT_PATH)
+      ENDIF()
+    else()
+      # Otherwise, we can just use the LIBFILE that Luarocks provides
+      get_filename_component(LUA_LIBRARIES "${LUA_LIBDIR}/${LUA_LIBFILE}" ABSOLUTE)
+    endif()
+    MESSAGE(STATUS "Lua library: ${LUA_LIBRARIES}")
+  else()
+    MESSAGE(STATUS "Lua library not set, presuming LuaRocks config has link_lua_explicitly set to false")
+  endif()
 
   include_directories(${LUA_INCLUDE_DIR})
 else (LUA)

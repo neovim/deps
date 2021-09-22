@@ -9,9 +9,8 @@ local util = require("luarocks.util")
 local dir = require("luarocks.dir")
 local manif = require("luarocks.manif")
 local vers = require("luarocks.core.vers")
-local E = {}
 
-local unpack = unpack or table.unpack
+local unpack = unpack or table.unpack  -- luacheck: ignore 211
 
 --- Get type and name of an item (a module or a command) provided by a file.
 -- @param deploy_type string: rock manifest subtree the file comes from ("bin", "lua", or "lib").
@@ -48,7 +47,7 @@ end
 -- versions of a package, or nil if none is available.
 local function get_installed_versions(name)
    assert(type(name) == "string" and not name:match("/"))
-   
+
    local dirs = fs.list_dir(path.versions_dir(name))
    return (dirs and #dirs > 0) and dirs or nil
 end
@@ -62,7 +61,7 @@ end
 function repos.is_installed(name, version)
    assert(type(name) == "string" and not name:match("/"))
    assert(type(version) == "string")
-      
+
    return fs.is_dir(path.install_dir(name, version))
 end
 
@@ -77,7 +76,7 @@ function repos.recurse_rock_manifest_entry(entry, action)
 
       for file, sub in pairs(tree) do
          local sub_path = (parent_path and (parent_path .. "/") or "") .. file
-         local ok, err
+         local ok, err  -- luacheck: ignore 231
 
          if type(sub) == "table" then
             ok, err = do_recurse_rock_manifest_entry(sub, sub_path)
@@ -173,11 +172,11 @@ function repos.run_hook(rockspec, hook_name)
    if not hooks then
       return true
    end
-   
+
    if cfg.hooks_enabled == false then
       return nil, "This rockspec contains hooks, which are blocked by the 'hooks_enabled' setting in your LuaRocks configuration."
    end
-   
+
    if not hooks.substituted_variables then
       util.variable_substitutions(hooks, rockspec.variables)
       hooks.substituted_variables = true
@@ -249,6 +248,14 @@ end
 local function check_spot_if_available(name, version, deploy_type, file_path)
    local item_type, item_name = get_provided_item(deploy_type, file_path)
    local cur_name, cur_version = manif.get_current_provider(item_type, item_name)
+
+   -- older versions of LuaRocks (< 3) registered "foo.init" files as "foo"
+   -- (which caused problems, so that behavior was changed). But look for that
+   -- in the manifest anyway for backward compatibility.
+   if not cur_name and deploy_type == "lua" and item_name:match("%.init$") then
+      cur_name, cur_version = manif.get_current_provider(item_type, (item_name:gsub("%.init$", "")))
+   end
+
    if (not cur_name)
       or (name < cur_name)
       or (name == cur_name and (version == cur_version
@@ -270,27 +277,71 @@ local function backup_existing(should_backup, target)
       repeat
          backup = backup.."~"
       until not fs.exists(backup) -- Slight race condition here, but shouldn't be a problem.
-   
+
       util.warning(target.." is not tracked by this installation of LuaRocks. Moving it to "..backup)
-      local move_ok, move_err = fs.move(target, backup)
+      local move_ok, move_err = os.rename(target, backup)
       if not move_ok then
          return nil, move_err
       end
+      return backup
    end
 end
 
-local function op_install(op)
-   local ok, err = fs.make_dir(dir.dir_name(op.dst))
-   if not ok then
-      return nil, err
+local function prepare_op_install()
+   local mkdirs = {}
+   local rmdirs = {}
+
+   local function memoize_mkdir(d)
+      if mkdirs[d] then
+         return true
+      end
+      local ok, err = fs.make_dir(d)
+      if not ok then
+         return nil, err
+      end
+      mkdirs[d] = true
+      return true
    end
 
-   ok, err = op.fn(op.src, op.dst, op.backup)
-   if not ok then
-      return nil, err
+   local function op_install(op)
+      local ok, err = memoize_mkdir(dir.dir_name(op.dst))
+      if not ok then
+         return nil, err
+      end
+
+      local backup, err = backup_existing(op.backup, op.realdst or op.dst)
+      if err then
+         return nil, err
+      end
+      if backup then
+         op.backup_file = backup
+      end
+
+      ok, err = op.fn(op.src, op.dst, op.backup)
+      if not ok then
+         return nil, err
+      end
+
+      rmdirs[dir.dir_name(op.src)] = true
+      return true
    end
 
-   fs.remove_dir_tree_if_empty(dir.dir_name(op.src))
+   local function done_op_install()
+      for d, _ in pairs(rmdirs) do
+         fs.remove_dir_tree_if_empty(d)
+      end
+   end
+
+   return op_install, done_op_install
+end
+
+local function rollback_install(op)
+   fs.delete(op.dst)
+   if op.backup_file then
+      os.rename(op.backup_file, op.dst)
+   end
+   fs.remove_dir_tree_if_empty(dir.dir_name(op.dst))
+   return true
 end
 
 local function op_rename(op)
@@ -303,7 +354,7 @@ local function op_rename(op)
    if fs.exists(op.src) then
       fs.make_dir(dir.dir_name(op.dst))
       fs.delete(op.dst)
-      local ok, err = fs.move(op.src, op.dst)
+      local ok, err = os.rename(op.src, op.dst)
       fs.remove_dir_tree_if_empty(dir.dir_name(op.src))
       return ok, err
    else
@@ -311,15 +362,64 @@ local function op_rename(op)
    end
 end
 
-local function op_delete(op)
-   if op.suffix then
-      local suffix = check_suffix(op.name, op.suffix)
-      op.name = op.name .. suffix
+local function rollback_rename(op)
+   return op_rename({ src = op.dst, dst = op.src })
+end
+
+local function prepare_op_delete()
+   local deletes = {}
+   local rmdirs = {}
+
+   local function done_op_delete()
+      for _, f in ipairs(deletes) do
+         os.remove(f)
+      end
+
+      for d, _ in pairs(rmdirs) do
+         fs.remove_dir_tree_if_empty(d)
+      end
    end
 
-   local ok, err = fs.delete(op.name)
-   fs.remove_dir_tree_if_empty(dir.dir_name(op.name))
-   return ok, err
+   local function op_delete(op)
+      if op.suffix then
+         local suffix = check_suffix(op.name, op.suffix)
+         op.name = op.name .. suffix
+      end
+
+      table.insert(deletes, op.name)
+
+      rmdirs[dir.dir_name(op.name)] = true
+   end
+
+   return op_delete, done_op_delete
+end
+
+local function rollback_ops(ops, op_fn, n)
+   for i = 1, n do
+      op_fn(ops[i])
+   end
+end
+
+--- Double check that all files referenced in `rock_manifest` are installed in `repo`.
+function repos.check_everything_is_installed(name, version, rock_manifest, repo, accept_versioned)
+   local missing = {}
+   for _, category in ipairs({"bin", "lua", "lib"}) do
+      local suffix = (category == "bin") and cfg.wrapper_suffix or ""
+      if rock_manifest[category] then
+         repos.recurse_rock_manifest_entry(rock_manifest[category], function(file_path)
+            local paths = get_deploy_paths(name, version, category, file_path, repo)
+            if not (fs.exists(paths.nv .. suffix) or (accept_versioned and fs.exists(paths.v .. suffix))) then
+               table.insert(missing, paths.nv .. suffix)
+            end
+         end)
+      end
+   end
+   if #missing > 0 then
+      return nil, "failed deploying files. " ..
+                  "The following files were not installed:\n" ..
+                  table.concat(missing, "\n")
+   end
+   return true
 end
 
 --- Deploy a package from the rocks subdirectory.
@@ -336,28 +436,24 @@ function repos.deploy_files(name, version, wrap_bin_scripts, deps_mode)
 
    local rock_manifest, load_err = manif.load_rock_manifest(name, version)
    if not rock_manifest then return nil, load_err end
-   
+
    local repo = cfg.root_dir
    local renames = {}
    local installs = {}
 
-   local function install_binary(source, target, should_backup)
+   local function install_binary(source, target)
       if wrap_bin_scripts and fs.is_lua(source) then
-         backup_existing(should_backup, target .. (cfg.wrapper_suffix or ""))
          return fs.wrap_script(source, target, deps_mode, name, version)
       else
-         backup_existing(should_backup, target)
          return fs.copy_binary(source, target)
       end
    end
 
-   local function move_lua(source, target, should_backup)
-      backup_existing(should_backup, target)
+   local function move_lua(source, target)
       return fs.move(source, target, "read")
    end
 
-   local function move_lib(source, target, should_backup)
-      backup_existing(should_backup, target)
+   local function move_lib(source, target)
       return fs.move(source, target, "exec")
    end
 
@@ -372,8 +468,12 @@ function repos.deploy_files(name, version, wrap_bin_scripts, deps_mode)
             local cur_paths = get_deploy_paths(cur_name, cur_version, "bin", file_path, repo)
             table.insert(renames, { src = cur_paths.nv, dst = cur_paths.v, suffix = cfg.wrapper_suffix })
          end
+         local target = mode == "nv" and paths.nv or paths.v
          local backup = name ~= cur_name or version ~= cur_version
-         table.insert(installs, { fn = install_binary, src = source, dst = mode == "nv" and paths.nv or paths.v, backup = backup })
+         local realdst = (wrap_bin_scripts and fs.is_lua(source))
+                         and (target .. (cfg.wrapper_suffix or ""))
+                         or target
+         table.insert(installs, { fn = install_binary, src = source, dst = target, backup = backup, realdst = realdst })
       end)
    end
 
@@ -390,8 +490,9 @@ function repos.deploy_files(name, version, wrap_bin_scripts, deps_mode)
             cur_paths = get_deploy_paths(cur_name, cur_version, "lib", file_path:gsub("%.lua$", "." .. cfg.lib_extension), repo)
             table.insert(renames, { src = cur_paths.nv, dst = cur_paths.v })
          end
+         local target = mode == "nv" and paths.nv or paths.v
          local backup = name ~= cur_name or version ~= cur_version
-         table.insert(installs, { fn = move_lua, src = source, dst = mode == "nv" and paths.nv or paths.v, backup = backup })
+         table.insert(installs, { fn = move_lua, src = source, dst = target, backup = backup })
       end)
    end
 
@@ -408,20 +509,59 @@ function repos.deploy_files(name, version, wrap_bin_scripts, deps_mode)
             cur_paths = get_deploy_paths(cur_name, cur_version, "lib", file_path, repo)
             table.insert(renames, { src = cur_paths.nv, dst = cur_paths.v })
          end
+         local target = mode == "nv" and paths.nv or paths.v
          local backup = name ~= cur_name or version ~= cur_version
-         table.insert(installs, { fn = move_lib, src = source, dst = mode == "nv" and paths.nv or paths.v, backup = backup })
+         table.insert(installs, { fn = move_lib, src = source, dst = target, backup = backup })
       end)
    end
 
-   for _, op in ipairs(renames) do
-      op_rename(op)
+   for i, op in ipairs(renames) do
+      local ok, err = op_rename(op)
+      if not ok then
+         rollback_ops(renames, rollback_rename, i - 1)
+         return nil, err
+      end
    end
-   for _, op in ipairs(installs) do
-      op_install(op)
+   local op_install, done_op_install = prepare_op_install()
+   for i, op in ipairs(installs) do
+      local ok, err = op_install(op)
+      if not ok then
+         rollback_ops(installs, rollback_install, i - 1)
+         rollback_ops(renames, rollback_rename, #renames)
+         return nil, err
+      end
+   end
+   done_op_install()
+
+   local ok, err = repos.check_everything_is_installed(name, version, rock_manifest, repo, true)
+   if not ok then
+      return nil, err
    end
 
    local writer = require("luarocks.manif.writer")
    return writer.add_to_manifest(name, version, nil, deps_mode)
+end
+
+local function add_to_double_checks(double_checks, name, version)
+   double_checks[name] = double_checks[name] or {}
+   double_checks[name][version] = true
+end
+
+local function double_check_all(double_checks, repo)
+   local errs = {}
+   for next_name, versions in pairs(double_checks) do
+      for next_version in pairs(versions) do
+         local rock_manifest, load_err = manif.load_rock_manifest(next_name, next_version)
+         local ok, err = repos.check_everything_is_installed(next_name, next_version, rock_manifest, repo, true)
+         if not ok then
+            table.insert(errs, err)
+         end
+      end
+   end
+   if next(errs) then
+      return nil, table.concat(errs, "\n")
+   end
+   return true
 end
 
 --- Delete a package from the local repository.
@@ -440,11 +580,20 @@ function repos.delete_version(name, version, deps_mode, quick)
    assert(type(deps_mode) == "string")
 
    local rock_manifest, load_err = manif.load_rock_manifest(name, version)
-   if not rock_manifest then return nil, load_err end
+   if not rock_manifest then
+      if not quick then
+         local writer = require("luarocks.manif.writer")
+         writer.remove_from_manifest(name, version, nil, deps_mode)
+         return nil, "rock_manifest file not found for "..name.." "..version.." - removed entry from the manifest"
+      end
+      return nil, load_err
+   end
 
    local repo = cfg.root_dir
    local renames = {}
    local deletes = {}
+
+   local double_checks = {}
 
    if rock_manifest.bin then
       repos.recurse_rock_manifest_entry(rock_manifest.bin, function(file_path)
@@ -457,7 +606,8 @@ function repos.delete_version(name, version, deps_mode, quick)
 
             local next_name, next_version = manif.get_next_provider("command", item_name)
             if next_name then
-               local next_paths = get_deploy_paths(next_name, next_version, "lua", file_path, repo)
+               add_to_double_checks(double_checks, next_name, next_version)
+               local next_paths = get_deploy_paths(next_name, next_version, "bin", file_path, repo)
                table.insert(renames, { src = next_paths.v, dst = next_paths.nv, suffix = cfg.wrapper_suffix })
             end
          end
@@ -475,6 +625,7 @@ function repos.delete_version(name, version, deps_mode, quick)
 
             local next_name, next_version = manif.get_next_provider("module", item_name)
             if next_name then
+               add_to_double_checks(double_checks, next_name, next_version)
                local next_lua_paths = get_deploy_paths(next_name, next_version, "lua", file_path, repo)
                table.insert(renames, { src = next_lua_paths.v, dst = next_lua_paths.nv })
                local next_lib_paths = get_deploy_paths(next_name, next_version, "lib", file_path:gsub("%.[^.]+$", ".lua"), repo)
@@ -495,6 +646,7 @@ function repos.delete_version(name, version, deps_mode, quick)
 
             local next_name, next_version = manif.get_next_provider("module", item_name)
             if next_name then
+               add_to_double_checks(double_checks, next_name, next_version)
                local next_lua_paths = get_deploy_paths(next_name, next_version, "lua", file_path:gsub("%.[^.]+$", ".lua"), repo)
                table.insert(renames, { src = next_lua_paths.v, dst = next_lua_paths.nv })
                local next_lib_paths = get_deploy_paths(next_name, next_version, "lib", file_path, repo)
@@ -504,12 +656,20 @@ function repos.delete_version(name, version, deps_mode, quick)
       end)
    end
 
+   local op_delete, done_op_delete = prepare_op_delete()
    for _, op in ipairs(deletes) do
       op_delete(op)
    end
+   done_op_delete()
+
    if not quick then
       for _, op in ipairs(renames) do
          op_rename(op)
+      end
+
+      local ok, err = double_check_all(double_checks, repo)
+      if not ok then
+         return nil, err
       end
    end
 

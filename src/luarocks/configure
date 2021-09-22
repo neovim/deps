@@ -90,10 +90,7 @@ BLUE() {
 
 show_help() {
 cat <<EOF
-Usage: ./configure [OPTION]... [VAR=VALUE]...
-
-To assign environment variables (e.g., CC, CFLAGS...), specify them as
-VAR=VALUE.  See below for descriptions of some of the useful variables.
+Usage: ./configure [OPTION]...
 
 Defaults for the options are specified in brackets.
 
@@ -323,7 +320,7 @@ do
 done
 
 echo
-BLUE "Configuring LuaRocks version 3.2.1..."
+BLUE "Configuring LuaRocks version 3.7.0..."
 echo
 echo
 
@@ -433,15 +430,19 @@ check_incdir() {
    for lua_h in \
       "$incdir/lua/$LUA_VERSION/lua.h" \
       "$incdir/lua$LUA_VERSION/lua.h" \
+      "$incdir/lua-$LUA_VERSION/lua.h" \
       "$incdir/lua$(echo "$LUA_VERSION" | tr -d .)/lua.h" \
       "$incdir/lua.h" \
       $("$LUA_BINDIR/$LUA_INTERPRETER" -e 'print(jit and [['"$incdir"'/luajit-]]..jit.version:match("(%d+%.%d+)")..[[/lua.h]] or "")')
    do
-      [ -f "$lua_h" ] && return
+      if [ -f "$lua_h" ]
+      then
+         grep "LUA_VERSION_NUM.*$LUA_VERSION" "$lua_h" > /dev/null 2> /dev/null && return
+      fi
       tried="$tried $lua_h"
    done
 
-   echo "$(RED "lua.h not found") (tried$tried)"
+   echo "$(RED "lua.h for Lua $LUA_VERSION not found") (tried$tried)"
    echo
    echo "If the development files for Lua (headers and libraries)"
    echo "are installed in your system, you may need to use the"

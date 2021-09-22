@@ -16,28 +16,40 @@
  */
 #ifndef LUV_H
 #define LUV_H
+#include "uv.h"
+#include <lauxlib.h>
 #include <lua.h>
 #include <lualib.h>
-#include <lauxlib.h>
-#include "uv.h"
 
-#include <string.h>
-#include <stdlib.h>
 #include <assert.h>
+#include <stdlib.h>
+#include <string.h>
 
 #if defined(_WIN32)
 # include <fcntl.h>
-# include <sys/types.h>
 # include <sys/stat.h>
-# ifndef __MINGW32__
-#   define S_ISREG(x)  (((x) & _S_IFMT) == _S_IFREG)
-#   define S_ISDIR(x)  (((x) & _S_IFMT) == _S_IFDIR)
-#   define S_ISFIFO(x) (((x) & _S_IFMT) == _S_IFIFO)
-#   define S_ISCHR(x)  (((x) & _S_IFMT) == _S_IFCHR)
-#   define S_ISBLK(x)  0
+# include <sys/types.h>
+# ifndef S_ISREG
+#  define S_ISREG(x)  (((x) & _S_IFMT) == _S_IFREG)
 # endif
-# define S_ISLNK(x)  (((x) & S_IFLNK) == S_IFLNK)
-# define S_ISSOCK(x) 0
+# ifndef S_ISDIR
+#  define S_ISDIR(x)  (((x) & _S_IFMT) == _S_IFDIR)
+# endif
+# ifndef S_ISFIFO
+#  define S_ISFIFO(x) (((x) & _S_IFMT) == _S_IFIFO)
+# endif
+# ifndef S_ISCHR
+#  define S_ISCHR(x)  (((x) & _S_IFMT) == _S_IFCHR)
+# endif
+# ifndef S_ISBLK
+#  define S_ISBLK(x)  0
+# endif
+# ifndef S_ISLNK
+#  define S_ISLNK(x)  (((x) & S_IFLNK) == S_IFLNK)
+# endif
+# ifndef S_ISSOCK
+#  define S_ISSOCK(x) 0
+# endif
 #else
 # include <unistd.h>
 #endif
@@ -72,13 +84,21 @@
  */
 typedef int (*luv_CFpcall) (lua_State* L, int nargs, int nresults, int flags);
 
+typedef int (*luv_CFcpcall) (lua_State* L, lua_CFunction func, void* ud, int flags);
+
 /* Default implemention of event callback */
 LUALIB_API int luv_cfpcall(lua_State* L, int nargs, int nresult, int flags);
+
+/* Default implemention of thread entory function */
+LUALIB_API int luv_cfcpcall(lua_State* L, lua_CFunction func, void* ud, int flags);
 
 typedef struct {
   uv_loop_t*   loop;        /* main loop */
   lua_State*   L;           /* main thread,ensure coroutines works */
-  luv_CFpcall  pcall;       /* luv event callback function in protected mode */
+  luv_CFpcall  cb_pcall;    /* luv event callback function in protected mode */
+  luv_CFpcall  thrd_pcall;  /* luv thread function in protected mode*/
+  luv_CFcpcall thrd_cpcall; /* luv thread c function in protected mode*/
+
   int          mode;        /* the mode used to run the loop (-1 if not running) */
 
   void* extra;              /* extra data */
@@ -106,6 +126,20 @@ LUALIB_API void luv_set_loop(lua_State* L, uv_loop_t* loop);
    (otherwise luv will use the default callback function: luv_cfpcall)
 */
 LUALIB_API void luv_set_callback(lua_State* L, luv_CFpcall pcall);
+
+/* Set or clear an external c routine for luv thread When using
+ * a custom/external function, this must be called before luaopen_luv
+ * in the function that create the lua_State of the thread
+   (otherwise luv will use the default callback function: luv_cfpcall)
+*/
+LUALIB_API void luv_set_thread(lua_State* L, luv_CFpcall pcall);
+
+/* Set or clear an external c routine for luv c thread When using
+ * a custom/external function, this must be called before luaopen_luv
+ * in the function that create the lua_State of the thread
+   (otherwise luv will use the default callback function: luv_cfcpcall)
+*/
+LUALIB_API void luv_set_cthread(lua_State* L, luv_CFcpcall cpcall);
 
 /* This is the main hook to load the library.
    This can be called multiple times in a process as long

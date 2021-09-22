@@ -16,6 +16,7 @@ local queries = require("luarocks.queries")
 local cmd = require("luarocks.cmd")
 
 function purge.add_to_parser(parser)
+   -- luacheck: push ignore 431
    local cmd = parser:command("purge", [[
 This command removes rocks en masse from a given tree.
 By default, it removes all rocks from a tree.
@@ -23,6 +24,7 @@ By default, it removes all rocks from a tree.
 The --tree option is mandatory: luarocks purge does not assume a default tree.]],
    util.see_also())
       :summary("Remove all installed rocks from a tree.")
+   -- luacheck: pop
 
    cmd:flag("--old-versions", "Keep the highest-numbered version of each "..
       "rock and remove the other ones. By default it only removes old "..
@@ -40,7 +42,7 @@ function purge.command(args)
    if type(tree) ~= "string" then
       return nil, "The --tree argument is mandatory. "..util.see_help("purge")
    end
-   
+
    local results = {}
    if not fs.is_dir(tree) then
       return nil, "Directory not found: "..tree
@@ -60,8 +62,10 @@ function purge.command(args)
       for version, _ in util.sortedpairs(versions, sort) do
          if args.old_versions then
             util.printout("Keeping "..package.." "..version.."...")
-            local ok, err = remove.remove_other_versions(package, version, args.force, args.force_fast)
+            local ok, err, warn = remove.remove_other_versions(package, version, args.force, args.force_fast)
             if not ok then
+               util.printerr(err)
+            elseif warn then
                util.printerr(err)
             end
             break

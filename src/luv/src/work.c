@@ -64,10 +64,12 @@ static int luv_work_ctx_tostring(lua_State* L) {
   return 1;
 }
 
-static void luv_work_cb(uv_work_t* req) {
+static int luv_work_cb(lua_State* L) {
+  uv_work_t* req = lua_touserdata(L, 1);
   luv_work_t* work = (luv_work_t*)req->data;
   luv_work_ctx_t* ctx = work->ctx;
-  lua_State *L = work->args.L;
+  luv_ctx_t *lctx = luv_context(L);
+  lua_pop(L, 1);
 
   int top = lua_gettop(L);
 
@@ -93,37 +95,59 @@ static void luv_work_cb(uv_work_t* req) {
 
   if (lua_isfunction(L, -1)) {
     int i = luv_thread_arg_push(L, &work->args, LUVF_THREAD_SIDE_CHILD);
-    i = luv_cfpcall(L, i, LUA_MULTRET, 0);
+    // If exit is called on a thread in the thread pool, abort is called in
+    // uv__threadpool_cleanup, so exit is not called in luv_cfpcall.
+    i = lctx->thrd_pcall(L, i, LUA_MULTRET, LUVF_CALLBACK_NOEXIT);
     if ( i>=0 ) {
       //clear in main threads, luv_after_work_cb
       i = luv_thread_arg_set(L, &work->rets, top + 1, lua_gettop(L),
           LUVF_THREAD_MODE_ASYNC|LUVF_THREAD_SIDE_CHILD);
+      if (i < 0) {
+        return luv_thread_arg_error(L);
+      }
       lua_pop(L, i);  // pop all returned value
       luv_thread_arg_clear(L, &work->rets, LUVF_THREAD_MODE_ASYNC|LUVF_THREAD_SIDE_CHILD);
     }
     luv_thread_arg_clear(L, &work->args, LUVF_THREAD_SIDE_CHILD);
   } else {
-    fprintf(stderr, "Uncaught Error: %s can't be work entry\n",
-            lua_typename(L, lua_type(L,-1)));
     lua_pop(L, 1);
     luv_thread_arg_clear(L, &work->args, LUVF_THREAD_SIDE_CHILD);
+    return luaL_error(L, "Uncaught Error: %s can't be work entry\n",
+            lua_typename(L, lua_type(L,-1)));
   }
   work->args.L = L;
   if (top!=lua_gettop(L))
-    luaL_error(L, "stack not balance in luv_work_cb, need %d but %d", top, lua_gettop(L));
+    return luaL_error(L, "stack not balance in luv_work_cb, need %d but %d", top, lua_gettop(L));
+  return LUA_OK;
+}
+
+static void luv_work_cb_wrapper(uv_work_t* req) {
+  luv_work_t* work =  (luv_work_t*)req->data;
+  luv_work_ctx_t* ctx = work->ctx;
+  lua_State *L = work->args.L;
+  luv_ctx_t* lctx = luv_context(L);
+
+  // If exit is called on a thread in the thread pool, abort is called in
+  // uv__threadpool_cleanup, so exit is not called in luv_cfpcall.
+  int i = lctx->thrd_cpcall(L, luv_work_cb, (void*)req, LUVF_CALLBACK_NOEXIT);
+  if (i != LUA_OK) {
+    luv_thread_arg_clear(L, &work->rets, LUVF_THREAD_MODE_ASYNC|LUVF_THREAD_SIDE_CHILD);
+    luv_thread_arg_clear(L, &work->args, LUVF_THREAD_SIDE_CHILD);
+  }
 }
 
 static void luv_after_work_cb(uv_work_t* req, int status) {
   luv_work_t* work = (luv_work_t*)req->data;
   luv_work_ctx_t* ctx = work->ctx;
   lua_State* L = ctx->L;
+  luv_ctx_t *lctx = luv_context(L);
   int i;
 
   (void)status;
 
   lua_rawgeti(L, LUA_REGISTRYINDEX, ctx->after_work_cb);
   i = luv_thread_arg_push(L, &work->rets, LUVF_THREAD_SIDE_MAIN);
-  luv_cfpcall(L, i, 0, 0);
+  lctx->cb_pcall(L, i, 0, 0);
 
   //cache lua_State to reuse
   lua_rawgeti(L, LUA_REGISTRYINDEX, ctx->pool_ref);
@@ -181,6 +205,7 @@ static int luv_queue_work(lua_State* L) {
   luv_work_t* work = (luv_work_t*)malloc(sizeof(*work));
   int ret, n;
 
+  memset(work, 0, sizeof(*work));
   //prepare lua_State for threadpool
   lua_rawgeti(L, LUA_REGISTRYINDEX, ctx->pool_ref);
   n = lua_rawlen(L, -1);
@@ -200,11 +225,31 @@ static int luv_queue_work(lua_State* L) {
     work->args.L = acquire_vm_cb();
   lua_pop(L, 1);
 
-  luv_thread_arg_set(L, &work->args, 2, top, LUVF_THREAD_SIDE_MAIN); //clear in sub threads,luv_work_cb
+  ret = luv_thread_arg_set(L, &work->args, 2, top, LUVF_THREAD_SIDE_MAIN); //clear in sub threads,luv_work_cb
+  if (ret < 0) {
+    //cache lua_State to reuse
+    lua_rawgeti(L, LUA_REGISTRYINDEX, ctx->pool_ref);
+    int i = lua_rawlen(L, -1);
+    *(lua_State**)lua_newuserdata(L, sizeof(lua_State*)) = work->args.L;
+    lua_rawseti(L, -2, i+1);
+    lua_pop(L, 1);
+
+    luv_thread_arg_clear(L, &work->args, LUVF_THREAD_SIDE_MAIN);
+    free(work);
+    return luv_thread_arg_error(L);
+  }
   work->ctx = ctx;
   work->work.data = work;
-  ret = uv_queue_work(luv_loop(L), &work->work, luv_work_cb, luv_after_work_cb);
+  ret = uv_queue_work(luv_loop(L), &work->work, luv_work_cb_wrapper, luv_after_work_cb);
   if (ret < 0) {
+    //cache lua_State to reuse
+    lua_rawgeti(L, LUA_REGISTRYINDEX, ctx->pool_ref);
+    int i = lua_rawlen(L, -1);
+    *(lua_State**)lua_newuserdata(L, sizeof(lua_State*)) = work->args.L;
+    lua_rawseti(L, -2, i+1);
+    lua_pop(L, 1);
+
+    luv_thread_arg_clear(L, &work->args, LUVF_THREAD_SIDE_MAIN);
     free(work);
     return luv_error(L, ret);
   }

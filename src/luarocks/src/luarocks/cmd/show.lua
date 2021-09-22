@@ -22,6 +22,7 @@ With flags, return only the desired information.]], util.see_also())
       :summary("Show information about an installed rock.")
 
    cmd:argument("rock", "Name of an installed rock.")
+      :action(util.namespaced_name_action)
    cmd:argument("version", "Rock version.")
       :args("?")
 
@@ -99,7 +100,7 @@ local function keys_as_string(t, sep)
    return table.concat(keys, sep or " ")
 end
 
-local function word_wrap(line) 
+local function word_wrap(line)
    local width = tonumber(os.getenv("COLUMNS")) or 80
    if width > 80 then width = 80 end
    if #line > width then
@@ -148,6 +149,9 @@ local function render(template, data)
             local n = cmd == "*" and #d or 1
             for i = 1, n do
                local tbl = cmd == "*" and d[i] or data
+               if type(tbl) == "string" then
+                  tbl = tbl:gsub("%%", "%%%%")
+               end
                table.insert(out, (line:gsub("${([a-z]+)}", tbl)))
             end
          end
@@ -235,7 +239,7 @@ local function indirect_deps(mdeps, rdeps, tree)
 end
 
 local function show_rock(template, namespace, name, version, rockspec, repo, minfo, tree)
-   local desc = rockspec.description
+   local desc = rockspec.description or {}
    local data = {
       namespace = namespace,
       package = rockspec.package,
@@ -260,12 +264,9 @@ end
 --- Driver function for "show" command.
 -- @return boolean: True if succeeded, nil on errors.
 function show.command(args)
-   local name = util.adjust_name_and_namespace(args.rock, args)
-   local version = args.version
-   local query = queries.new(name, version)
-   
-   local repo, repo_url
-   name, version, repo, repo_url = search.pick_installed_rock(query, args.tree)
+   local query = queries.new(args.rock, args.namespace, args.version, true)
+
+   local name, version, repo, repo_url = search.pick_installed_rock(query, args.tree)
    if not name then
       return nil, version
    end

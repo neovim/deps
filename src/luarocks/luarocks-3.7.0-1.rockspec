@@ -1,9 +1,9 @@
 rockspec_format = "3.0"
 package = "luarocks"
-version = "3.2.1-1"
+version = "3.7.0-1"
 source = {
    url = "git+https://github.com/luarocks/luarocks",
-   tag = "v3.2.1"
+   tag = "v3.7.0"
 }
 description = {
    summary = "A package manager for Lua modules.",
@@ -23,6 +23,7 @@ description = {
 }
 test_dependencies = {
    "luacov",
+   "busted-htest",
 }
 test = {
    type = "busted",

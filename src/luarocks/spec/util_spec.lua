@@ -9,15 +9,15 @@ describe("Basic tests #integration", function()
       test_env.setup_specs()
    end)
 
-   it("LuaRocks version", function()
+   it("--version", function()
       assert.is_true(run.luarocks_bool("--version"))
    end)
 
-   it("LuaRocks unknown command", function()
+   it("unknown command", function()
       assert.is_false(run.luarocks_bool("unknown_command"))
    end)
 
-   it("LuaRocks arguments fail", function()
+   it("arguments fail", function()
       assert.is_false(run.luarocks_bool("--porcelain=invalid"))
       assert.is_false(run.luarocks_bool("--invalid-flag"))
       assert.is_false(run.luarocks_bool("--server"))
@@ -26,14 +26,14 @@ describe("Basic tests #integration", function()
       assert.is_false(run.luarocks_bool("invalid=5"))
    end)
 
-   it("LuaRocks execute from not existing directory #unix", function()
+   it("executing from not existing directory #unix", function()
       local main_path = lfs.currentdir()
       assert.is_true(lfs.mkdir("idontexist"))
       assert.is_true(lfs.chdir("idontexist"))
       local delete_path = lfs.currentdir()
       assert.is_true(os.remove(delete_path))
 
-      local output = run.luarocks("")      
+      local output = run.luarocks("")
       assert.is.falsy(output:find("the Lua package manager"))
       assert.is_true(lfs.chdir(main_path))
 
@@ -41,15 +41,15 @@ describe("Basic tests #integration", function()
       assert.is.truthy(output:find("the Lua package manager"))
    end)
 
-   it("LuaRocks timeout", function()
+   it("--timeout", function()
       assert.is.truthy(run.luarocks("--timeout=10"))
    end)
-   
-   it("LuaRocks timeout invalid", function()
+
+   it("--timeout invalid", function()
       assert.is_false(run.luarocks_bool("--timeout=abc"))
    end)
 
-   it("LuaRocks only server=testing", function()
+   it("--only-server", function()
       assert.is.truthy(run.luarocks("--only-server=testing"))
    end)
 
@@ -59,19 +59,19 @@ test_env.unload_luarocks()
 local util = require("luarocks.util")
 local core_util = require("luarocks.core.util")
 
-describe("Luarocks util test #unit", function()
+describe("luarocks.util #unit", function()
    local runner
-   
+
    setup(function()
       runner = require("luacov.runner")
       runner.init(testing_paths.testrun_dir .. "/luacov.config")
       runner.tick = true
    end)
-   
+
    teardown(function()
       runner.shutdown()
    end)
-   
+
    describe("util.sortedpairs", function()
       local function collect(iter, state, var)
          local collected = {}
@@ -122,30 +122,30 @@ describe("Luarocks util test #unit", function()
          }, {"k3", {"k2", {"sub order"}}, "k1"})))
       end)
    end)
-   
+
    describe("core.util.show_table", function()
       it("returns a pretty-printed string containing the representation of the given table", function()
          local result
-         
+
          local t1 = {1, 2, 3}
          result = core_util.show_table(t1)
          assert.truthy(result:find("[1] = 1", 1, true))
          assert.truthy(result:find("[2] = 2", 1, true))
          assert.truthy(result:find("[3] = 3", 1, true))
-         
+
          local t2 = {a = 1, b = 2, c = 3}
          result = core_util.show_table(t2)
          assert.truthy(result:find("[\"a\"] = 1", 1, true))
          assert.truthy(result:find("[\"b\"] = 2", 1, true))
          assert.truthy(result:find("[\"c\"] = 3", 1, true))
-         
+
          local t3 = {a = 1, b = "2", c = {3}}
          result = core_util.show_table(t3)
          assert.truthy(result:find("[\"a\"] = 1", 1, true))
          assert.truthy(result:find("[\"b\"] = \"2\"", 1, true))
          assert.truthy(result:find("[\"c\"] = {", 1, true))
          assert.truthy(result:find("[1] = 3", 1, true))
-         
+
          local t4 = {a = 1, b = {c = 2, d = {e = "4"}}}
          result = core_util.show_table(t4)
          assert.truthy(result:find("[\"a\"] = 1", 1, true))
@@ -155,7 +155,7 @@ describe("Luarocks util test #unit", function()
          assert.truthy(result:find("[\"e\"] = \"4\"", 1, true))
       end)
    end)
-      
+
    describe("core.util.cleanup_path", function()
      it("does not change order of existing items of prepended path", function()
         local sys_path = '/usr/local/bin;/usr/bin'

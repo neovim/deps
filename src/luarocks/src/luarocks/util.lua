@@ -20,6 +20,7 @@ util.warning = core.warning
 util.keys = core.keys
 
 local unpack = unpack or table.unpack
+local pack = table.pack or function(...) return { n = select("#", ...), ... } end
 
 local scheduled_functions = {}
 local debug = require("debug")
@@ -33,8 +34,8 @@ local debug = require("debug")
 -- which can be used to remove the item later from the list.
 function util.schedule_function(f, ...)
    assert(type(f) == "function")
-   
-   local item = { fn = f, args = {...} }
+
+   local item = { fn = f, args = pack(...) }
    table.insert(scheduled_functions, item)
    return item
 end
@@ -64,7 +65,7 @@ function util.run_scheduled_functions()
    end
    for i = #scheduled_functions, 1, -1 do
       local item = scheduled_functions[i]
-      item.fn(unpack(item.args))
+      item.fn(unpack(item.args, 1, item.args.n))
    end
 end
 
@@ -121,12 +122,12 @@ end
 -- exists in vars. Only string values are processed; this function
 -- does not scan subtables recursively.
 -- @param tbl table: Table to have its string values modified.
--- @param vars table: Table containing string-string key-value pairs 
+-- @param vars table: Table containing string-string key-value pairs
 -- representing variables to replace in the strings values of tbl.
 function util.variable_substitutions(tbl, vars)
    assert(type(tbl) == "table")
    assert(type(vars) == "table")
-   
+
    local updated = {}
    for k, v in pairs(tbl) do
       if type(v) == "string" then
@@ -213,6 +214,10 @@ function util.this_program(default)
    end
 
    return prog
+end
+
+function util.format_rock_name(name, namespace, version)
+   return (namespace and namespace.."/" or "")..name..(version and " "..version or "")
 end
 
 function util.deps_mode_option(parser, program)
@@ -338,30 +343,6 @@ function util.LQ(s)
    return ("%q"):format(s)
 end
 
---- Normalize the --namespace option and the user/rock syntax for namespaces.
--- If a namespace is given in user/rock syntax, update the --namespace option;
--- If a namespace is given in --namespace option, update the user/rock syntax.
--- In case of conflicts, the user/rock syntax takes precedence.
-function util.adjust_name_and_namespace(ns_name, args)
-   assert(type(ns_name) == "string" or not ns_name)
-   assert(type(args) == "table")
-
-   if not ns_name then
-      return
-   elseif ns_name:match("%.rockspec$") or ns_name:match("%.rock$") then
-      return ns_name
-   end
-
-   local name, namespace = util.split_namespace(ns_name)
-   if namespace then
-      args.namespace = namespace
-   end
-   if args.namespace then
-      name = args.namespace .. "/" .. name
-   end
-   return name:lower()
-end
-
 -- Split name and namespace of a package name.
 -- @param ns_name a name that may be in "namespace/name" format
 -- @return string, string? - name and optionally a namespace
@@ -371,6 +352,27 @@ function util.split_namespace(ns_name)
       return p2, p1
    end
    return ns_name
+end
+
+--- Argparse action callback for namespaced rock arguments.
+function util.namespaced_name_action(args, target, ns_name)
+   assert(type(args) == "table")
+   assert(type(target) == "string")
+   assert(type(ns_name) == "string" or not ns_name)
+
+   if not ns_name then
+      return
+   end
+
+   if ns_name:match("%.rockspec$") or ns_name:match("%.rock$") then
+      args[target] = ns_name
+   else
+      local name, namespace = util.split_namespace(ns_name)
+      args[target] = name:lower()
+      if namespace then
+         args.namespace = namespace:lower()
+      end
+   end
 end
 
 function util.deep_copy(tbl)
@@ -448,13 +450,13 @@ do
    function util.get_luajit_version()
       local cfg = require("luarocks.core.cfg")
       if cfg.cache.luajit_version_checked then
-         return cfg.cache.luajit_version 
+         return cfg.cache.luajit_version
       end
       cfg.cache.luajit_version_checked = true
 
       local ljv
       if cfg.lua_version == "5.1" then
-         ljv = util.popen_read(Q(cfg.variables["LUA_BINDIR"] .. "/" .. cfg.lua_interpreter) .. ' -e "io.write(tostring(jit and jit.version:gsub([[^%w-JIT ]], [[]])))"')
+         ljv = util.popen_read(Q(cfg.variables["LUA_BINDIR"] .. "/" .. cfg.lua_interpreter) .. ' -e "io.write(tostring(jit and jit.version:gsub([[^%S+ ]], [[]])))"')
          if ljv == "nil" then
             ljv = nil
          end
@@ -480,7 +482,7 @@ do
          end
       end
 
-      find_lua_bindir = function(prefix, luaver)
+      find_lua_bindir = function(prefix, luaver, verbose)
          local names = {}
          if luaver then
             insert_lua_variants(names, luaver)
@@ -494,11 +496,11 @@ do
          end
          table.insert(names, "lua" .. exe_suffix)
 
-         local bindirs = { prefix .. "/bin", prefix }
          local tried = {}
-         for _, d in ipairs(bindirs) do
+         local dir_sep = package.config:sub(1, 1)
+         for _, d in ipairs({ prefix .. dir_sep .. "bin", prefix }) do
             for _, name in ipairs(names) do
-               local lua_exe = d .. "/" .. name
+               local lua_exe = d .. dir_sep .. name
                local is_wrapper, err = util.lua_is_wrapper(lua_exe)
                if is_wrapper == false then
                   local lv = util.check_lua_version(lua_exe, luaver)
@@ -516,13 +518,13 @@ do
                         and ("Lua " .. luaver .. " interpreter")
                         or  "Lua interpreter"
          return nil, interp .. " not found at " .. prefix .. "\n" ..
-                     "Tried:\t" .. table.concat(tried, "\n\t")
+                     (verbose and "Tried:\t" .. table.concat(tried, "\n\t") or "")
       end
    end
 
-   function util.find_lua(prefix, luaver)
+   function util.find_lua(prefix, luaver, verbose)
       local lua_interpreter, bindir
-      lua_interpreter, bindir, luaver = find_lua_bindir(prefix, luaver)
+      lua_interpreter, bindir, luaver = find_lua_bindir(prefix, luaver, verbose)
       if not lua_interpreter then
          return nil, bindir
       end
@@ -551,9 +553,9 @@ end
 
 function util.opts_table(type_name, valid_opts)
    local opts_mt = {}
-   
+
    opts_mt.__index = opts_mt
-   
+
    function opts_mt.type()
       return type_name
    end
@@ -588,7 +590,7 @@ end
 -- "lua" for the Lua version and, for format 3.0+, "luajit" if detected).
 function util.get_rocks_provided(rockspec)
    local cfg = require("luarocks.core.cfg")
-   
+
    if not rockspec and cfg.cache.rocks_provided then
       return cfg.cache.rocks_provided
    end
@@ -599,7 +601,7 @@ function util.get_rocks_provided(rockspec)
 
    rocks_provided["lua"] = lv.."-1"
 
-   if lv == "5.2" or lv == "5.3" then
+   if lv == "5.2" then
       rocks_provided["bit32"] = lv.."-1"
    end
 
@@ -628,5 +630,20 @@ function util.get_rocks_provided(rockspec)
    return rocks_provided
 end
 
-return util
+function util.remove_doc_dir(name, version)
+   local path = require("luarocks.path")
+   local fs = require("luarocks.fs")
+   local dir = require("luarocks.dir")
 
+   local install_dir = path.install_dir(name, version)
+   for _, f in ipairs(fs.list_dir(install_dir)) do
+      local doc_dirs = { "doc", "docs" }
+      for _, d in ipairs(doc_dirs) do
+         if f == d then
+            fs.delete(dir.path(install_dir, f))
+         end
+      end
+   end
+end
+
+return util

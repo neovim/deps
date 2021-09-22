@@ -10,17 +10,18 @@
 -- files. Run `luarocks` with no arguments to see the locations of
 -- these files in your platform.
 
-local next, table, pairs, require, os, pcall, ipairs, package, tonumber, type, assert =
-      next, table, pairs, require, os, pcall, ipairs, package, tonumber, type, assert
+local table, pairs, require, os, pcall, ipairs, package, type, assert =
+      table, pairs, require, os, pcall, ipairs, package, type, assert
 
 local util = require("luarocks.core.util")
 local persist = require("luarocks.core.persist")
 local sysdetect = require("luarocks.core.sysdetect")
+local vers = require("luarocks.core.vers")
 
 --------------------------------------------------------------------------------
 
-local program_version = "3.2.1"
-local program_series = "3.2"
+local program_version = "3.7.0"
+local program_series = "3.7"
 local major_version = (program_version:match("([^.]%.[^.])")) or program_series
 
 local is_windows = package.config:sub(1,1) == "\\"
@@ -45,6 +46,7 @@ local platform_order = {
    "windows",
    "win32",
    "mingw32",
+   "msys2_mingw_w64",
 }
 
 local function detect_sysconfdir()
@@ -66,24 +68,6 @@ local function detect_sysconfdir()
    end
    -- Otherwise, use base directory of sources
    return basedir
-end
-
-local function set_confdirs(cfg, platforms, hardcoded_sysconfdir)
-   local sysconfdir = os.getenv("LUAROCKS_SYSCONFDIR") or hardcoded_sysconfdir
-   if platforms.windows then
-      cfg.home = os.getenv("APPDATA") or "c:"
-      cfg.home_tree = cfg.home.."/luarocks"
-      cfg.homeconfdir = cfg.home_tree
-      cfg.sysconfdir = sysconfdir or ((os.getenv("PROGRAMFILES") or "c:") .. "/luarocks")
-   else
-      if not sysconfdir then
-         sysconfdir = detect_sysconfdir()
-      end
-      cfg.home = os.getenv("HOME") or ""
-      cfg.home_tree = (os.getenv("USER") ~= "root") and cfg.home.."/.luarocks"
-      cfg.homeconfdir = cfg.home.."/.luarocks"
-      cfg.sysconfdir = sysconfdir or "/etc/luarocks"
-   end
 end
 
 local load_config_file
@@ -167,6 +151,7 @@ local platform_sets = {
    linux = { unix = true, linux = true },
    mingw = { windows = true, win32 = true, mingw32 = true, mingw = true },
    msys = { unix = true, cygwin = true, msys = true },
+   msys2_mingw_w64 = { windows = true, win32 = true, mingw32 = true, mingw = true, msys = true, msys2_mingw_w64 = true },
 }
 
 local function make_platforms(system)
@@ -187,11 +172,11 @@ local function make_defaults(lua_version, target_cpu, platforms, home)
       fs_use_modules = true,
       hooks_enabled = true,
       deps_mode = "one",
+      no_manifest = false,
       check_certificates = false,
 
       cache_timeout = 60,
       cache_fail_timeout = 86400,
-      version_check_on_fail = true,
 
       lua_modules_path = "/share/lua/"..lua_version,
       lib_modules_path = "/lib/lua/"..lua_version,
@@ -206,7 +191,7 @@ local function make_defaults(lua_version, target_cpu, platforms, home)
          {
            "https://luarocks.org",
            "https://raw.githubusercontent.com/rocks-moonscript-org/moonrocks-mirror/master/",
-           "http://luafr.org/moonrocks/",
+           "https://luafr.org/luarocks/",
            "http://luarocks.logiceditor.com/rocks",
          }
       },
@@ -385,7 +370,8 @@ local function make_defaults(lua_version, target_cpu, platforms, home)
       }
       defaults.export_path_separator = ":"
       defaults.wrapper_suffix = ""
-      defaults.local_cache = home.."/.cache/luarocks"
+      local xdg_cache_home = os.getenv("XDG_CACHE_HOME") or home.."/.cache"
+      defaults.local_cache = xdg_cache_home.."/luarocks"
       if not defaults.variables.CFLAGS:match("-fPIC") then
          defaults.variables.CFLAGS = defaults.variables.CFLAGS.." -fPIC"
       end
@@ -416,6 +402,29 @@ local function make_defaults(lua_version, target_cpu, platforms, home)
          lib = { "lib?.so", "?.dll", "lib?.dll" },
          include = { "?.h" }
       }
+      if platforms.mingw then
+         -- MSYS2 can build Windows programs that depend on
+         -- msys-2.0.dll (based on Cygwin) but MSYS2 is also designed
+         -- for building native Windows programs by MinGW. These
+         -- programs don't depend on msys-2.0.dll.
+         local pipe = io.popen("cygpath --windows %MINGW_PREFIX%")
+         local mingw_prefix = pipe:read("*l")
+         pipe:close()
+         defaults.external_deps_dirs = { mingw_prefix, "c:/windows/system32" }
+         defaults.makefile = "Makefile"
+         defaults.cmake_generator = "MSYS Makefiles"
+         defaults.local_cache = home.."/.cache/luarocks"
+         defaults.variables.MAKE = "make"
+         defaults.variables.CC = "gcc"
+         defaults.variables.RC = "windres"
+         defaults.variables.LD = "gcc"
+         defaults.variables.MT = nil
+         defaults.variables.AR = "ar"
+         defaults.variables.RANLIB = "ranlib"
+         defaults.variables.LUALIB = "liblua"..lua_version..".dll.a"
+         defaults.variables.CFLAGS = "-O2 -fPIC"
+         defaults.variables.LIBFLAG = "-shared"
+      end
    end
 
    if platforms.bsd then
@@ -428,16 +437,19 @@ local function make_defaults(lua_version, target_cpu, platforms, home)
       defaults.arch = "macosx-"..target_cpu
       defaults.variables.LIBFLAG = "-bundle -undefined dynamic_lookup -all_load"
       local version = util.popen_read("sw_vers -productVersion")
-      version = tonumber(version and version:match("^[^.]+%.([^.]+)")) or 3
-      if version >= 10 then
-         version = 8
-      elseif version >= 5 then
-         version = 5
+      if not (version:match("^%d+%.%d+%.%d+$") or version:match("^%d+%.%d+$")) then
+         version = "10.3"
+      end
+      version = vers.parse_version(version)
+      if version >= vers.parse_version("10.10") then
+         version = vers.parse_version("10.8")
+      elseif version >= vers.parse_version("10.5") then
+         version = vers.parse_version("10.5")
       else
          defaults.gcc_rpath = false
       end
-      defaults.variables.CC = "env MACOSX_DEPLOYMENT_TARGET=10."..version.." gcc"
-      defaults.variables.LD = "env MACOSX_DEPLOYMENT_TARGET=10."..version.." gcc"
+      defaults.variables.CC = "env MACOSX_DEPLOYMENT_TARGET="..tostring(version).." gcc"
+      defaults.variables.LD = "env MACOSX_DEPLOYMENT_TARGET="..tostring(version).." gcc"
       defaults.web_browser = "open"
    end
 
@@ -457,8 +469,10 @@ local function make_defaults(lua_version, target_cpu, platforms, home)
    if platforms.freebsd then
       defaults.arch = "freebsd-"..target_cpu
       defaults.gcc_rpath = false
-      defaults.variables.CC = "cc"
-      defaults.variables.LD = "cc"
+      defaults.variables.CC = os.getenv("CC") or "cc"
+      defaults.variables.CFLAGS = os.getenv("CFLAGS") or defaults.variables.CFLAGS
+      defaults.variables.LD = defaults.variables.CC
+      defaults.variables.LIBFLAG = (os.getenv("LDFLAGS") or "").." -shared"
    end
 
    if platforms.openbsd then
@@ -504,13 +518,26 @@ local function use_defaults(cfg, defaults)
    end
 end
 
+local function get_first_arg()
+   if not arg then
+      return
+   end
+   local first_arg = arg[0]
+   local i = -1
+   while arg[i] do
+      first_arg = arg[i]
+      i = i -1
+   end
+   return first_arg
+end
+
 --------------------------------------------------------------------------------
 
 local cfg = {}
 
 --- Initializes the LuaRocks configuration for variables, paths
 -- and OS detection.
--- @param detected table containing information detected about the 
+-- @param detected table containing information detected about the
 -- environment. All fields below are optional:
 -- * lua_version (in x.y format, e.g. "5.3")
 -- * lua_bindir (e.g. "/usr/local/bin")
@@ -527,7 +554,7 @@ function cfg.init(detected, warning)
    if not hc_ok then
       hardcoded = {}
    end
-   
+
    local init = cfg.init
 
    ----------------------------------------
@@ -542,14 +569,20 @@ function cfg.init(detected, warning)
    cfg.program_series = program_series
    cfg.major_version = major_version
 
+   if hardcoded.IS_BINARY then
+      cfg.is_binary = true
+   end
+
    -- Use detected values as defaults, overridable via config files or CLI args
 
+   local first_arg = get_first_arg()
+
    cfg.lua_version = detected.lua_version or hardcoded.LUA_VERSION or _VERSION:sub(5)
-   cfg.lua_interpreter = detected.lua_interpreter or hardcoded.LUA_INTERPRETER or (arg and arg[-1] and arg[-1]:gsub(".*[\\/]", "")) or (is_windows and "lua.exe" or "lua")
+   cfg.lua_interpreter = detected.lua_interpreter or hardcoded.LUA_INTERPRETER or (first_arg and first_arg:gsub(".*[\\/]", "")) or (is_windows and "lua.exe" or "lua")
    cfg.project_dir = (not hardcoded.FORCE_CONFIG) and detected.project_dir
 
    do
-      local lua_bindir = detected.lua_bindir or hardcoded.LUA_BINDIR or (arg and arg[-1] and arg[-1]:gsub("[\\/][^\\/]+$", ""))
+      local lua_bindir = detected.lua_bindir or hardcoded.LUA_BINDIR or (first_arg and first_arg:gsub("[\\/][^\\/]+$", ""))
       local lua_dir = detected.lua_dir or hardcoded.LUA_DIR or (lua_bindir and lua_bindir:gsub("[\\/]bin$", ""))
       cfg.variables = {
          LUA_DIR = lua_dir,
@@ -581,12 +614,14 @@ function cfg.init(detected, warning)
          -- running from the Development Command prompt for VS 2017
          system = "windows"
       else
-         local fd = io.open("/bin/sh", "r")
-         if fd then
-            fd:close()
+         local msystem = os.getenv("MSYSTEM")
+         if msystem == nil then
+            system = "mingw"
+         elseif msystem == "MSYS" then
             system = "msys"
          else
-            system = "mingw"
+            -- MINGW32 or MINGW64
+            system = "msys2_mingw_w64"
          end
       end
    end
@@ -603,17 +638,24 @@ function cfg.init(detected, warning)
    local sys_config_file
    local home_config_file
    local project_config_file
+
+   local config_file_name = "config-"..cfg.lua_version..".lua"
+
    do
-      set_confdirs(cfg, platforms, hardcoded.SYSCONFDIR)
-      local name = "config-"..cfg.lua_version..".lua"
-      sys_config_file = (cfg.sysconfdir .. "/" .. name):gsub("\\", "/")
-      home_config_file = (cfg.homeconfdir .. "/" .. name):gsub("\\", "/")
-      if cfg.project_dir then
-         project_config_file = cfg.project_dir .. "/.luarocks/" .. name
+      local sysconfdir = os.getenv("LUAROCKS_SYSCONFDIR") or hardcoded.SYSCONFDIR
+      if platforms.windows and not platforms.msys2_mingw_w64 then
+         cfg.home = os.getenv("APPDATA") or "c:"
+         cfg.home_tree = cfg.home.."/luarocks"
+         cfg.sysconfdir = sysconfdir or ((os.getenv("PROGRAMFILES") or "c:") .. "/luarocks")
+      else
+         cfg.home = os.getenv("HOME") or ""
+         cfg.home_tree = cfg.home.."/.luarocks"
+         cfg.sysconfdir = sysconfdir or detect_sysconfdir() or "/etc/luarocks"
       end
    end
 
    -- Load system configuration file
+   sys_config_file = (cfg.sysconfdir .. "/" .. config_file_name):gsub("\\", "/")
    local sys_config_ok, err = load_config_file(cfg, platforms, sys_config_file)
    if err then
       return nil, err, "config"
@@ -643,8 +685,21 @@ function cfg.init(detected, warning)
          end
       end
 
+      -- try XDG config home
+      if platforms.unix and not home_config_ok then
+         local xdg_config_home = os.getenv("XDG_CONFIG_HOME") or cfg.home .. "/.config"
+         cfg.homeconfdir = xdg_config_home .. "/luarocks"
+         home_config_file = (cfg.homeconfdir .. "/" .. config_file_name):gsub("\\", "/")
+         home_config_ok, err = load_config_file(cfg, platforms, home_config_file)
+         if err then
+            return nil, err, "config"
+         end
+      end
+
       -- try the alternative defaults if there was no environment specified file or it didn't work
       if not home_config_ok then
+         cfg.homeconfdir = cfg.home_tree
+         home_config_file = (cfg.homeconfdir .. "/" .. config_file_name):gsub("\\", "/")
          home_config_ok, err = load_config_file(cfg, platforms, home_config_file)
          if err then
             return nil, err, "config"
@@ -653,6 +708,7 @@ function cfg.init(detected, warning)
 
       -- finally, use the project-specific config file if any
       if cfg.project_dir then
+         project_config_file = cfg.project_dir .. "/.luarocks/" .. config_file_name
          project_config_ok, err = load_config_file(cfg, platforms, project_config_file)
          if err then
             return nil, err, "config"
@@ -665,14 +721,14 @@ function cfg.init(detected, warning)
    -- Let's finish up the cfg table.
    ----------------------------------------
 
-   cfg.variables.LUA_DIR = detected.given_lua_dir or cfg.variables.LUA_DIR
-
    -- Settings given via the CLI (i.e. --lua-dir) take precedence over config files.
    cfg.project_dir = detected.given_project_dir or cfg.project_dir
    cfg.lua_version = detected.given_lua_version or cfg.lua_version
    if detected.given_lua_dir then
       cfg.variables.LUA_DIR = detected.given_lua_dir
       cfg.variables.LUA_BINDIR = detected.lua_bindir
+      cfg.variables.LUA_LIBDIR = nil
+      cfg.variables.LUA_INCDIR = nil
       cfg.lua_interpreter = detected.lua_interpreter
    end
 
@@ -722,7 +778,7 @@ function cfg.init(detected, warning)
                     and home_config_file
                     or sys_config_file),
    }
-   
+
    cfg.cache = {}
 
    ----------------------------------------

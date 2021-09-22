@@ -3,7 +3,6 @@
 -- Builds a rock, compiling its C parts if any.
 local cmd_build = {}
 
-local dir = require("luarocks.dir")
 local pack = require("luarocks.pack")
 local path = require("luarocks.path")
 local util = require("luarocks.util")
@@ -19,22 +18,28 @@ local make = require("luarocks.cmd.make")
 local cmd = require("luarocks.cmd")
 
 function cmd_build.add_to_parser(parser)
-   local cmd = parser:command("build", "Build and install a rock, compiling its C parts if any.\n"..
+   local cmd = parser:command("build", "Build and install a rock, compiling its C parts if any.\n"..  -- luacheck: ignore 431
+      "If the sources contain a luarocks.lock file, uses it as an authoritative source for "..
+      "exact version of dependencies.\n"..
       "If no arguments are given, behaves as luarocks make.", util.see_also())
       :summary("Build/compile a rock.")
 
    cmd:argument("rock", "A rockspec file, a source rock file, or the name of "..
       "a rock to be fetched from a repository.")
       :args("?")
+      :action(util.namespaced_name_action)
    cmd:argument("version", "Rock version.")
       :args("?")
 
-   cmd:flag("--only-deps", "Installs only the dependencies of the rock.")
-   cmd:flag("--no-doc", "Installs the rock without its documentation.")
+   cmd:flag("--only-deps --deps-only", "Install only the dependencies of the rock.")
    cmd:option("--branch", "Override the `source.branch` field in the loaded "..
       "rockspec. Allows to specify a different branch to fetch. Particularly "..
       'for "dev" rocks.')
       :argname("<name>")
+   parser:flag("--pin", "Create a luarocks.lock file listing the exact "..
+      "versions of each dependency found for this rock (recursively), "..
+      "and store it in the rock's directory. "..
+      "Ignores any existing luarocks.lock file in the rock's sources.")
    make.cmd_options(cmd)
 end
 
@@ -72,27 +77,26 @@ local function build_rock(rock_filename, opts)
    return ok, err, errcode
 end
 
-local function do_build(ns_name, version, opts)
-   assert(type(ns_name) == "string")
+local function do_build(name, namespace, version, opts)
+   assert(type(name) == "string")
+   assert(type(namespace) == "string" or not namespace)
    assert(version == nil or type(version) == "string")
    assert(opts:type() == "build.opts")
 
    local url, err
-   if ns_name:match("%.rockspec$") or ns_name:match("%.rock$") then
-      url = ns_name
+   if name:match("%.rockspec$") or name:match("%.rock$") then
+      url = name
    else
-      url, err = search.find_src_or_rockspec(ns_name, version, true)
+      url, err = search.find_src_or_rockspec(name, namespace, version, opts.check_lua_versions)
       if not url then
          return nil, err
       end
-      local _, namespace = util.split_namespace(ns_name)
-      opts.namespace = namespace
    end
 
    if url:match("%.rockspec$") then
-      local rockspec, err, errcode = fetch.load_rockspec(url, nil, opts.verify)
+      local rockspec, err = fetch.load_rockspec(url, nil, opts.verify)
       if not rockspec then
-         return nil, err, errcode
+         return nil, err
       end
       return build.build_rockspec(rockspec, opts)
    end
@@ -102,18 +106,6 @@ local function do_build(ns_name, version, opts)
    end
 
    return build_rock(url, opts)
-end
-
-local function remove_doc_dir(name, version)
-   local install_dir = path.install_dir(name, version)
-   for _, f in ipairs(fs.list_dir(install_dir)) do
-      local doc_dirs = { "doc", "docs" }
-      for _, d in ipairs(doc_dirs) do
-         if f == d then
-            fs.delete(dir.path(install_dir, f))
-         end
-      end
-   end
 end
 
 --- Driver function for "build" command.
@@ -127,16 +119,17 @@ function cmd_build.command(args)
       return make.command(args)
    end
 
-   local name = util.adjust_name_and_namespace(args.rock, args)
-
    local opts = build.opts({
       need_to_fetch = true,
       minimal_mode = false,
       deps_mode = deps.get_deps_mode(args),
-      build_only_deps = not not args.only_deps,
+      build_only_deps = not not (args.only_deps and not args.pack_binary_rock),
       namespace = args.namespace,
       branch = args.branch,
       verify = not not args.verify,
+      check_lua_versions = not not args.check_lua_versions,
+      pin = not not args.pin,
+      no_install = false
    })
 
    if args.sign and not args.pack_binary_rock then
@@ -144,28 +137,27 @@ function cmd_build.command(args)
    end
 
    if args.pack_binary_rock then
-      return pack.pack_binary_rock(name, args.version, args.sign, function()
-         opts.build_only_deps = false
-         local name, version, errcode = do_build(name, args.version, opts)
+      return pack.pack_binary_rock(args.rock, args.namespace, args.version, args.sign, function()
+         local name, version = do_build(args.rock, args.namespace, args.version, opts)
          if name and args.no_doc then
-            remove_doc_dir(name, version)
+            util.remove_doc_dir(name, version)
          end
-         return name, version, errcode
+         return name, version
       end)
    end
-   
+
    local ok, err = fs.check_command_permissions(args)
    if not ok then
       return nil, err, cmd.errorcodes.PERMISSIONDENIED
    end
 
-   ok, err = do_build(name, args.version, opts)
-   if not ok then return nil, err end
-   local version
-   name, version = ok, err
+   local name, version = do_build(args.rock, args.namespace, args.version, opts)
+   if not name then
+      return nil, version
+   end
 
    if args.no_doc then
-      remove_doc_dir(name, version)
+      util.remove_doc_dir(name, version)
    end
 
    if opts.build_only_deps then
@@ -173,14 +165,18 @@ function cmd_build.command(args)
       util.printout()
    else
       if (not args.keep) and not cfg.keep_other_versions then
-         local ok, err = remove.remove_other_versions(name, version, args.force, args.force_fast)
+         local ok, err, warn = remove.remove_other_versions(name, version, args.force, args.force_fast)
          if not ok then
+            return nil, err
+         elseif warn then
             util.printerr(err)
          end
       end
    end
 
-   writer.check_dependencies(nil, deps.get_deps_mode(args))
+   if opts.deps_mode ~= "none" then
+      writer.check_dependencies(nil, deps.get_deps_mode(args))
+   end
    return name, version
 end
 

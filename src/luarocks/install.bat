@@ -6,7 +6,7 @@ local vars = {}
 
 
 vars.PREFIX = nil
-vars.VERSION = "3.2"
+vars.VERSION = "3.7"
 vars.SYSCONFDIR = nil
 vars.CONFBACKUPDIR = nil
 vars.SYSCONFFILENAME = nil
@@ -415,9 +415,12 @@ local function get_architecture()
 	if not proc then
 		die("Could not detect processor architecture used in "..vars.LUA_INTERPRETER)
 	end
+	print("arch: " .. proc .. " -> " .. pe.const.Machine[proc])
 	proc = pe.const.Machine[proc]  -- collect name from constant value
 	if proc == "IMAGE_FILE_MACHINE_I386" then
 		proc = "x86"
+	elseif proc == "IMAGE_FILE_MACHINE_ARM64" then
+		proc = "arm64"
 	else
 		proc = "x86_64"
 	end
@@ -554,9 +557,9 @@ local function get_msvc_env_setup_cmd()
 	if vsdir then
 		local vcvarsall = vsdir .. '\\VC\\Auxiliary\\Build\\vcvarsall.bat'
 		if exists(vcvarsall) then
-			local vcvarsall_args = { x86 = "", x86_64 = " x64" }
-			assert(vcvarsall_args[vars.UNAME_M], "vars.UNAME_M: only x86 and x86_64 are supported")
-			return ('call "%s"%s'):format(vcvarsall, vcvarsall_args[vars.UNAME_M])
+			local vcvarsall_args = { x86 = "", x86_64 = " x64", arm64 = " x86_arm64" }
+			assert(vcvarsall_args[vars.UNAME_M], "vars.UNAME_M: only x86, x86_64 and arm64 are supported")
+			return ('call "%s"%s > NUL'):format(vcvarsall, vcvarsall_args[vars.UNAME_M])
 		end
 	end
 
@@ -571,13 +574,16 @@ local function get_msvc_env_setup_cmd()
 			x86_64 = {
 				"bin\\amd64\\vcvars64.bat", -- prefers native compiler
 				"bin\\x86_amd64\\vcvarsx86_amd64.bat" -- then cross compiler
+			},
+			arm64 = {
+				"bin\\x86_arm64\\vcvarsx86_arm64.bat" -- need to use cross compiler"
 			}
 		}
-		assert(vcvars_bats[vars.UNAME_M], "vars.UNAME_M: only x86 and x86_64 are supported")
+		assert(vcvars_bats[vars.UNAME_M], "vars.UNAME_M: only x86, arm64 and x86_64 are supported")
 		for _, bat in ipairs(vcvars_bats[vars.UNAME_M]) do
 			local full_path = vcdir .. bat
 			if exists(full_path) then
-				return ('call "%s"'):format(full_path)
+				return ('call "%s" > NUL'):format(full_path)
 			end
 		end
 
@@ -585,8 +591,8 @@ local function get_msvc_env_setup_cmd()
 		-- but this way we don't know if specified compiler is installed...
 		local vcvarsall = vcdir .. 'vcvarsall.bat'
 		if exists(vcvarsall) then
-			local vcvarsall_args = { x86 = "", x86_64 = " amd64" }
-			return ('call "%s"%s'):format(vcvarsall, vcvarsall_args[vars.UNAME_M])
+			local vcvarsall_args = { x86 = "", x86_64 = " amd64", arm64 = " x86_arm64" }
+			return ('call "%s"%s > NUL'):format(vcvarsall, vcvarsall_args[vars.UNAME_M])
 		end
 	end
 
@@ -595,7 +601,7 @@ local function get_msvc_env_setup_cmd()
 	if wsdkdir then
 		local setenv = wsdkdir.."Bin\\SetEnv.cmd"
 		if exists(setenv) then
-			return ('call "%s" /%s'):format(setenv, x64 and "x64" or "x86")
+			return ('call "%s" /%s > NUL'):format(setenv, x64 and "x64" or "x86")
 		end
 	end
 
@@ -735,12 +741,12 @@ local find_gcc_suite = function()
         end
     end
 
-    vars.MINGW_MAKE = (result.make and '[['..result.make..']]') or "nil  -- not found by installer"
-    vars.MINGW_CC = (result.gcc and '[['..result.gcc..']]') or "nil  -- not found by installer"
-    vars.MINGW_RC = (result.windres and '[['..result.windres..']]') or "nil  -- not found by installer"
-    vars.MINGW_LD = (result.gcc and '[['..result.gcc..']]') or "nil  -- not found by installer"
-    vars.MINGW_AR = (result.ar and '[['..result.ar..']]') or "nil  -- not found by installer"
-    vars.MINGW_RANLIB = (result.ranlib and '[['..result.ranlib..']]') or "nil  -- not found by installer"
+    vars.MINGW_MAKE = (result.make and '[['..result.make..']]') or "nil,  -- not found by installer"
+    vars.MINGW_CC = (result.gcc and '[['..result.gcc..']]') or "nil,  -- not found by installer"
+    vars.MINGW_RC = (result.windres and '[['..result.windres..']]') or "nil,  -- not found by installer"
+    vars.MINGW_LD = (result.gcc and '[['..result.gcc..']]') or "nil,  -- not found by installer"
+    vars.MINGW_AR = (result.ar and '[['..result.ar..']]') or "nil,  -- not found by installer"
+    vars.MINGW_RANLIB = (result.ranlib and '[['..result.ranlib..']]') or "nil,  -- not found by installer"
     return true
 end
 

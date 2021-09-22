@@ -10,6 +10,8 @@ local cfg = require("luarocks.core.cfg")
 local dir = require("luarocks.dir")
 local util = require("luarocks.util")
 
+local pack = table.pack or function(...) return { n = select("#", ...), ... } end
+
 local socket_ok, zip_ok, lfs_ok, md5_ok, posix_ok, bz2_ok, _
 local http, ftp, zip, lfs, md5, posix, bz2
 
@@ -54,7 +56,9 @@ end
 
 local function quote_args(command, ...)
    local out = { command }
-   for _, arg in ipairs({...}) do
+   local args = pack(...)
+   for i=1, args.n do
+      local arg = args[i]
       assert(type(arg) == "string")
       out[#out+1] = fs.Q(arg)
    end
@@ -128,7 +132,7 @@ function fs_lua.is_tool_available(tool_cmd, tool_name, arg)
 
    if ok then
       return true
-   else   
+   else
       local msg = "'%s' program not found. Make sure %s is installed and is available in your PATH " ..
                   "(or you may want to edit the 'variables.%s' value in file '%s')"
       return nil, msg:format(tool_cmd, tool_name, tool_name:upper(), cfg.config_files.nearest)
@@ -211,7 +215,7 @@ function fs_lua.modules(at)
 
    local modules = {}
    local is_duplicate = {}
-   for _, path in ipairs(paths) do
+   for _, path in ipairs(paths) do  -- luacheck: ignore 421
       local files = fs.list_dir(path)
       for _, filename in ipairs(files or {}) do
          if filename:match("%.[lL][uU][aA]$") then
@@ -380,6 +384,20 @@ function fs_lua.remove_dir_tree_if_empty(d)
    end
 end
 
+local function are_the_same_file(f1, f2)
+   if f1 == f2 then
+      return true
+   end
+   if cfg.is_platform("unix") then
+      local i1 = lfs.attributes(f1, "ino")
+      local i2 = lfs.attributes(f2, "ino")
+      if i1 ~= nil and i1 == i2 then
+         return true
+      end
+   end
+   return false
+end
+
 --- Copy a file.
 -- @param src string: Pathname of source
 -- @param dest string: Pathname of destination
@@ -395,7 +413,7 @@ function fs_lua.copy(src, dest, perms)
    if destmode == "directory" then
       dest = dir.path(dest, dir.base_name(src))
    end
-   if src == dest or (cfg.is_platform("unix") and lfs.attributes(src, "ino") == lfs.attributes(dest, "ino")) then
+   if are_the_same_file(src, dest) then
       return nil, "The source and destination are the same files"
    end
    local src_h, err = io.open(src, "rb")
@@ -517,7 +535,7 @@ end
 --- Internal implementation function for fs.dir.
 -- Yields a filename on each iteration.
 -- @param at string: directory to list
--- @return nil or (nil and string): an error message on failure 
+-- @return nil or (nil and string): an error message on failure
 function fs_lua.dir_iterator(at)
    local pok, iter, arg = pcall(lfs.dir, at)
    if not pok then
@@ -687,9 +705,9 @@ local redirect_protocols = {
    https = luasec_ok and https,
 }
 
-local function request(url, method, http, loop_control)
+local function request(url, method, http, loop_control)  -- luacheck: ignore 431
    local result = {}
-   
+
    if cfg.verbose then
       print(method, url)
    end
@@ -787,13 +805,13 @@ end
 -- via the HTTP Last-Modified header if the full download is needed.
 -- @return (boolean | (nil, string, string?)): True if successful, or
 -- nil, error message and optionally HTTPS error in case of errors.
-local function http_request(url, filename, http, cache)
+local function http_request(url, filename, http, cache)  -- luacheck: ignore 431
    if cache then
       local status = read_timestamp(filename..".status")
       local timestamp = read_timestamp(filename..".timestamp")
       if status or timestamp then
          local unixtime = read_timestamp(filename..".unixtime")
-         if unixtime then
+         if tonumber(unixtime) then
             local diff = os.time() - tonumber(unixtime)
             if status then
                if diff < cfg.cache_fail_timeout then
@@ -806,7 +824,7 @@ local function http_request(url, filename, http, cache)
             end
          end
 
-         local result, status, headers, err = request(url, "HEAD", http)
+         local result, status, headers, err = request(url, "HEAD", http)  -- luacheck: ignore 421
          if not result then
             return fail_with_status(filename, status, headers)
          end
@@ -891,8 +909,11 @@ function fs_lua.download(url, filename, cache)
       err = "Unsupported protocol"
    end
    if https_err then
+      local downloader, err = fs.which_tool("downloader")
+      if not downloader then
+         return nil, err
+      end
       if not downloader_warning then
-         local downloader = fs.which_tool("downloader")
          util.warning("falling back to "..downloader.." - install luasec to get native HTTPS support")
          downloader_warning = true
       end
@@ -1011,6 +1032,10 @@ end
 
 function fs_lua.current_user()
    return posix.getpwuid(posix.geteuid()).pw_name
+end
+
+function fs_lua.is_superuser()
+   return false
 end
 
 -- This call is not available on all systems, see #677

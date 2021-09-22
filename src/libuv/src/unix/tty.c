@@ -34,6 +34,34 @@
 #define IMAXBEL 0
 #endif
 
+#if defined(__PASE__)
+/* On IBM i PASE, for better compatibility with running interactive programs in
+ * a 5250 environment, isatty() will return true for the stdin/stdout/stderr
+ * streams created by QSH/QP2TERM.
+ *
+ * For more, see docs on PASE_STDIO_ISATTY in
+ * https://www.ibm.com/support/knowledgecenter/ssw_ibm_i_74/apis/pase_environ.htm
+ *
+ * This behavior causes problems for Node as it expects that if isatty() returns
+ * true that TTY ioctls will be supported by that fd (which is not an
+ * unreasonable expectation) and when they don't it crashes with assertion
+ * errors.
+ *
+ * Here, we create our own version of isatty() that uses ioctl() to identify
+ * whether the fd is *really* a TTY or not.
+ */
+static int isreallyatty(int file) {
+  int rc;
+ 
+  rc = !ioctl(file, TXISATTY + 0x81, NULL);
+  if (!rc && errno != EBADF)
+      errno = ENOTTY;
+
+  return rc;
+}
+#define isatty(fd) isreallyatty(fd)
+#endif
+
 static int orig_termios_fd = -1;
 static struct termios orig_termios;
 static uv_spinlock_t termios_spinlock = UV_SPINLOCK_INITIALIZER;
@@ -214,6 +242,24 @@ static void uv__tty_make_raw(struct termios* tio) {
   tio->c_lflag &= ~(ECHO | ECHONL | ICANON | ISIG | IEXTEN);
   tio->c_cflag &= ~(CSIZE | PARENB);
   tio->c_cflag |= CS8;
+
+  /*
+   * By default, most software expects a pending read to block until at
+   * least one byte becomes available.  As per termio(7I), this requires
+   * setting the MIN and TIME parameters appropriately.
+   *
+   * As a somewhat unfortunate artifact of history, the MIN and TIME slots
+   * in the control character array overlap with the EOF and EOL slots used
+   * for canonical mode processing.  Because the EOF character needs to be
+   * the ASCII EOT value (aka Control-D), it has the byte value 4.  When
+   * switching to raw mode, this is interpreted as a MIN value of 4; i.e.,
+   * reads will block until at least four bytes have been input.
+   *
+   * Other platforms with a distinct MIN slot like Linux and FreeBSD appear
+   * to default to a MIN value of 1, so we'll force that value here:
+   */
+  tio->c_cc[VMIN] = 1;
+  tio->c_cc[VTIME] = 0;
 #else
   cfmakeraw(tio);
 #endif /* #ifdef __sun */
@@ -293,14 +339,7 @@ uv_handle_type uv_guess_handle(uv_file file) {
   if (file < 0)
     return UV_UNKNOWN_HANDLE;
 
-#if defined(__PASE__)
-  /* On IBMi PASE isatty() always returns true for stdin, stdout and stderr.
-   * Use ioctl() instead to identify whether it's actually a TTY.
-   */
-  if (!ioctl(file, TXISATTY + 0x81, NULL) || errno != ENOTTY)
-#else
   if (isatty(file))
-#endif
     return UV_TTY;
 
   if (fstat(file, &s))

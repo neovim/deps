@@ -15,8 +15,11 @@ local util = require("luarocks.util")
 -- See http://lua-users.org/lists/lua-l/2013-11/msg00367.html
 local _prefix = "type NUL && "
 local _popen, _execute = io.popen, os.execute
+
+-- luacheck: push globals io os
 io.popen = function(cmd, ...) return _popen(_prefix..cmd, ...) end
 os.execute = function(cmd, ...) return _execute(_prefix..cmd, ...) end
+-- luacheck: pop
 
 --- Annotate command string for quiet execution.
 -- @param cmd string: A command-line string.
@@ -32,23 +35,32 @@ function win32.quiet_stderr(cmd)
    return cmd.." 2> NUL"
 end
 
--- Split path into root and the rest.
--- Root part consists of an optional drive letter (e.g. "C:")
--- and an optional directory separator.
-local function split_root(path)
+-- Split path into drive, root and the rest.
+-- Example: "c:\\hello\\world" becomes "c:" "\\" "hello\\world"
+-- if any part is missing from input, it becomes an empty string.
+local function split_root(pathname)
+   local drive = ""
    local root = ""
+   local rest
 
-   if path:match("^.:") then
-      root = path:sub(1, 2)
-      path = path:sub(3)
+   local unquoted = pathname:match("^['\"](.*)['\"]$")
+   if unquoted then
+      pathname = unquoted
    end
 
-   if path:match("^[\\/]") then
-      root = path:sub(1, 1)
-      path = path:sub(2)
+   if pathname:match("^.:") then
+      drive = pathname:sub(1, 2)
+      pathname = pathname:sub(3)
    end
 
-   return root, path
+   if pathname:match("^[\\/]") then
+      root = pathname:sub(1, 1)
+      rest = pathname:sub(2)
+   else
+      rest = pathname
+   end
+
+   return drive, root, rest
 end
 
 --- Quote argument for shell processing. Fixes paths on Windows.
@@ -59,7 +71,8 @@ function win32.Q(arg)
    assert(type(arg) == "string")
    -- Use Windows-specific directory separator for paths.
    -- Paths should be converted to absolute by now.
-   if split_root(arg) ~= "" then
+   local drive, root, rest = split_root(arg)
+   if root ~= "" then
       arg = arg:gsub("/", "\\")
    end
    if arg == "\\" then
@@ -81,7 +94,8 @@ function win32.Qb(arg)
    assert(type(arg) == "string")
    -- Use Windows-specific directory separator for paths.
    -- Paths should be converted to absolute by now.
-   if split_root(arg) ~= "" then
+   local drive, root, rest = split_root(arg)
+   if root ~= "" then
       arg = arg:gsub("/", "\\")
    end
    if arg == "\\" then
@@ -105,11 +119,11 @@ function win32.absolute_name(pathname, relative_to)
    assert(type(pathname) == "string")
    assert(type(relative_to) == "string" or not relative_to)
 
-   relative_to = relative_to or fs.current_dir()
-   local root, rest = split_root(pathname)
+   relative_to = (relative_to or fs.current_dir()):gsub("[\\/]*$", "")
+   local drive, root, rest = split_root(pathname)
    if root:match("[\\/]$") then
-      -- It's an absolute path already.
-      return pathname
+      -- It's an absolute path already. Ensure is not quoted.
+      return drive .. root .. rest
    else
       -- It's a relative path, join it with base path.
       -- This drops drive letter from paths like "C:foo".
@@ -122,7 +136,8 @@ end
 -- @param pathname string: pathname to use.
 -- @return string: The root of the given pathname.
 function win32.root_of(pathname)
-   return (split_root(fs.absolute_name(pathname)))
+   local drive, root, rest = split_root(fs.absolute_name(pathname))
+   return drive .. root
 end
 
 --- Create a wrapper to make a script executable from the command-line.
@@ -151,12 +166,18 @@ function win32.wrap_script(script, target, deps_mode, name, version, ...)
       "package.path="..util.LQ(lpath..";").."..package.path",
       "package.cpath="..util.LQ(lcpath..";").."..package.cpath",
    }
+
+   local remove_interpreter = false
    if target == "luarocks" or target == "luarocks-admin" then
+      if cfg.is_binary then
+         remove_interpreter = true
+      end
       luainit = {
          "package.path="..util.LQ(package.path),
          "package.cpath="..util.LQ(package.cpath),
       }
    end
+
    if name and version then
       local addctx = "local k,l,_=pcall(require,'luarocks.loader') _=k " ..
                      "and l.add_context('"..name.."','"..version.."')"
@@ -170,6 +191,11 @@ function win32.wrap_script(script, target, deps_mode, name, version, ...)
       script and fs.Qb(script) or "%I%",
       ...
    }
+   if remove_interpreter then
+      table.remove(argv, 1)
+      table.remove(argv, 1)
+      table.remove(argv, 1)
+   end
 
    wrapper:write("@echo off\r\n")
    wrapper:write("setlocal\r\n")
@@ -191,7 +217,7 @@ function win32.is_actual_binary(name)
    return false
 end
 
-function win32.copy_binary(filename, dest) 
+function win32.copy_binary(filename, dest)
    local ok, err = fs.copy(filename, dest)
    if not ok then
       return nil, err
@@ -313,11 +339,20 @@ function win32.make_temp_dir(name_pattern)
 end
 
 function win32.tmpname()
-   return os.getenv("TMP")..os.tmpname()
+   local name = os.tmpname()
+   local tmp = os.getenv("TMP")
+   if tmp and name:sub(1, #tmp) ~= tmp then
+      name = (tmp .. "\\" .. name):gsub("\\+", "\\")
+   end
+   return name
 end
 
 function win32.current_user()
    return os.getenv("USERNAME")
+end
+
+function win32.is_superuser()
+   return false
 end
 
 function win32.export_cmd(var, val)

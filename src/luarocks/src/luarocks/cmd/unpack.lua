@@ -19,17 +19,20 @@ In the latter case, the rock version may be given as a second argument.]],
       :summary("Unpack the contents of a rock.")
 
    cmd:argument("rock", "A rock file or the name of a rock.")
+      :action(util.namespaced_name_action)
    cmd:argument("version", "Rock version.")
       :args("?")
 
    cmd:flag("--force", "Unpack files even if the output directory already exists.")
+   cmd:flag("--check-lua-versions", "If the rock can't be found, check repository "..
+      "and report if it is available for another Lua version.")
 end
 
 --- Load a rockspec file to the given directory, fetches the source
 -- files specified in the rockspec, and unpack them inside the directory.
 -- @param rockspec_file string: The URL for a rockspec file.
 -- @param dir_name string: The directory where to store and unpack files.
--- @return table or (nil, string): the loaded rockspec table or 
+-- @return table or (nil, string): the loaded rockspec table or
 -- nil and an error message.
 local function unpack_rockspec(rockspec_file, dir_name)
    assert(type(rockspec_file) == "string")
@@ -58,7 +61,7 @@ end
 -- @param dir_name string: The directory where to unpack.
 -- @param kind string: the kind of rock file, as in the second-level
 -- extension in the rock filename (eg. "src", "all", "linux-x86")
--- @return table or (nil, string): the loaded rockspec table or 
+-- @return table or (nil, string): the loaded rockspec table or
 -- nil and an error message.
 local function unpack_rock(rock_file, dir_name, kind)
    assert(type(rock_file) == "string")
@@ -99,7 +102,7 @@ end
 -- by an error message.
 local function run_unpacker(file, force)
    assert(type(file) == "string")
-   
+
    local base_name = dir.base_name(file)
    local dir_name, kind, extension = base_name:match("(.*)%.([^.]+)%.(rock)$")
    if not extension then
@@ -136,7 +139,7 @@ local function run_unpacker(file, force)
             return nil, "Failed copying unpacked rockspec into unpacked source directory."
          end
       end
-      util.printout()   
+      util.printout()
       util.printout("Done. You may now enter directory ")
       util.printout(dir.path(dir_name, rockspec.source.dir))
       util.printout("and type 'luarocks make' to build.")
@@ -149,13 +152,11 @@ end
 -- @return boolean or (nil, string): true if successful or nil followed
 -- by an error message.
 function unpack.command(args)
-   local ns_name = util.adjust_name_and_namespace(args.rock, args)
-
    local url, err
-   if ns_name:match(".*%.rock") or ns_name:match(".*%.rockspec") then
-      url = ns_name
+   if args.rock:match(".*%.rock") or args.rock:match(".*%.rockspec") then
+      url = args.rock
    else
-      url, err = search.find_src_or_rockspec(ns_name, args.version, true)
+      url, err = search.find_src_or_rockspec(args.rock, args.namespace, args.version, args.check_lua_versions)
       if not url then
          return nil, err
       end

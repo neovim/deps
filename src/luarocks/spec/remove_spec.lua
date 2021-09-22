@@ -2,6 +2,7 @@ local test_env = require("spec.util.test_env")
 local lfs = require("lfs")
 local run = test_env.run
 local testing_paths = test_env.testing_paths
+local env_variables = test_env.env_variables
 
 test_env.unload_luarocks()
 
@@ -9,40 +10,42 @@ local extra_rocks = {
    "/abelhas-1.1-1.src.rock",
    "/copas-2.0.1-1.src.rock",
    "/coxpcall-1.16.0-1.src.rock",
-   "/coxpcall-1.16.0-1.rockspec"
+   "/coxpcall-1.16.0-1.rockspec",
+   "/luafilesystem-1.7.0-1.src.rock",
+   "/luafilesystem-1.6.3-2.src.rock",
 }
 
-describe("LuaRocks remove tests #integration", function()
+describe("luarocks remove #integration", function()
 
    before_each(function()
       test_env.setup_specs(extra_rocks)
    end)
 
-   describe("LuaRocks remove basic tests", function()
-      it("LuaRocks remove with no flags/arguments", function()
+   describe("basic tests", function()
+      it("with no flags/arguments", function()
          assert.is_false(run.luarocks_bool("remove"))
       end)
 
-      it("LuaRocks remove invalid rock", function()
+      it("invalid rock", function()
          assert.is_false(run.luarocks_bool("remove invalid.rock"))
       end)
-      
-      it("LuaRocks remove missing rock", function()
+
+      it("missing rock", function()
          assert.is_false(run.luarocks_bool("remove missing_rock"))
       end)
-      
-      it("LuaRocks remove invalid argument", function()
+
+      it("invalid argument", function()
          assert.is_false(run.luarocks_bool("remove luacov --deps-mode"))
       end)
 
-      it("LuaRocks remove built abelhas", function()
+      it("built abelhas", function()
          assert.is_true(run.luarocks_bool("build abelhas 1.1"))
          assert.is.truthy(lfs.attributes(testing_paths.testing_sys_rocks .. "/abelhas"))
          assert.is_true(run.luarocks_bool("remove abelhas 1.1"))
          assert.is.falsy(lfs.attributes(testing_paths.testing_sys_rocks .. "/abelhas"))
       end)
 
-      it("LuaRocks remove built abelhas with uppercase name", function()
+      it("built abelhas with uppercase name", function()
          assert.is_true(run.luarocks_bool("build abelhas 1.1"))
          assert.is.truthy(lfs.attributes(testing_paths.testing_sys_rocks .. "/abelhas"))
          assert.is_true(run.luarocks_bool("remove Abelhas 1.1"))
@@ -50,20 +53,20 @@ describe("LuaRocks remove tests #integration", function()
       end)
    end)
 
-   describe("LuaRocks remove more complex tests", function()
+   describe("more complex tests", function()
       before_each(function()
          assert.is.truthy(test_env.need_rock("coxpcall"))
       end)
 
-      it("LuaRocks remove fail, break dependencies", function()
+      it("fail, break dependencies", function()
          assert.is.truthy(lfs.attributes(testing_paths.testing_sys_rocks .. "/coxpcall"))
          assert.is_true(run.luarocks_bool("build copas"))
 
          assert.is_false(run.luarocks_bool("remove coxpcall"))
          assert.is.truthy(lfs.attributes(testing_paths.testing_sys_rocks .. "/coxpcall"))
       end)
-      
-      it("LuaRocks remove force", function()
+
+      it("force", function()
          assert.is.truthy(lfs.attributes(testing_paths.testing_sys_rocks .. "/coxpcall"))
          assert.is_true(run.luarocks_bool("build copas"))
 
@@ -71,8 +74,8 @@ describe("LuaRocks remove tests #integration", function()
          assert.is.falsy(lfs.attributes(testing_paths.testing_sys_rocks .. "/coxpcall"))
          assert.is.truthy(output:find("Checking stability of dependencies"))
       end)
-      
-      it("LuaRocks remove force fast", function()
+
+      it("force fast", function()
          assert.is.truthy(lfs.attributes(testing_paths.testing_sys_rocks .. "/coxpcall"))
          assert.is_true(run.luarocks_bool("build copas"))
 
@@ -80,12 +83,42 @@ describe("LuaRocks remove tests #integration", function()
          assert.is.falsy(lfs.attributes(testing_paths.testing_sys_rocks .. "/coxpcall"))
          assert.is.falsy(output:find("Checking stability of dependencies"))
       end)
+
+      it("restores old versions", function()
+         assert.is_true(run.luarocks_bool("install luafilesystem 1.6.3"))
+         assert.is.truthy(lfs.attributes(testing_paths.testing_sys_tree .. "/lib/lua/"..env_variables.LUA_VERSION.."/lfs."..test_env.lib_extension))
+
+         if test_env.TEST_TARGET_OS ~= "windows" then
+            local fd = io.open(testing_paths.testing_sys_tree .. "/lib/lua/"..env_variables.LUA_VERSION.."/lfs."..test_env.lib_extension, "r")
+            assert(fd:read("*a"):match("LuaFileSystem 1.6.3", 1, true))
+            fd:close()
+         end
+
+         assert.is_true(run.luarocks_bool("install luafilesystem 1.7.0 --keep"))
+         assert.is.truthy(lfs.attributes(testing_paths.testing_sys_tree .. "/lib/lua/"..env_variables.LUA_VERSION.."/lfs."..test_env.lib_extension))
+         assert.is.truthy(lfs.attributes(testing_paths.testing_sys_tree .. "/lib/lua/"..env_variables.LUA_VERSION.."/luafilesystem_1_6_3_2-lfs."..test_env.lib_extension))
+
+         if test_env.TEST_TARGET_OS ~= "windows" then
+            local fd = io.open(testing_paths.testing_sys_tree .. "/lib/lua/"..env_variables.LUA_VERSION.."/lfs."..test_env.lib_extension, "r")
+            assert(fd:read("*a"):match("LuaFileSystem 1.7.0", 1, true))
+            fd:close()
+         end
+
+         assert.is_true(run.luarocks_bool("remove luafilesystem 1.7.0"))
+         assert.is.truthy(lfs.attributes(testing_paths.testing_sys_tree .. "/lib/lua/"..env_variables.LUA_VERSION.."/lfs."..test_env.lib_extension))
+
+         if test_env.TEST_TARGET_OS ~= "windows" then
+            local fd = io.open(testing_paths.testing_sys_tree .. "/lib/lua/"..env_variables.LUA_VERSION.."/lfs."..test_env.lib_extension, "r")
+            assert(fd:read("*a"):match("LuaFileSystem 1.6.3", 1, true))
+            fd:close()
+         end
+      end)
    end)
 
    it("#admin remove #ssh", function()
       assert.is_true(run.luarocks_admin_bool("--server=testing remove coxpcall-1.16.0-1.src.rock"))
    end)
-   
+
    it("#admin remove missing", function()
       assert.is_false(run.luarocks_admin_bool("--server=testing remove"))
    end)
