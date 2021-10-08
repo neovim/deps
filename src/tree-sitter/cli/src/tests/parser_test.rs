@@ -63,9 +63,14 @@ fn test_parsing_with_logging() {
     )));
     assert!(messages.contains(&(LogType::Lex, "skip character:' '".to_string())));
 
+    let mut row_starts_from_0 = false;
     for (_, m) in &messages {
-        assert!(!m.contains("row:0"));
+        if m.contains("row:0") {
+            row_starts_from_0 = true;
+            break;
+        }
     }
+    assert!(row_starts_from_0);
 }
 
 #[test]
@@ -849,7 +854,10 @@ fn test_parsing_with_multiple_included_ranges() {
         hello_text_node.start_byte(),
         source_code.find("Hello").unwrap()
     );
-    assert_eq!(hello_text_node.end_byte(), source_code.find("<b>").unwrap());
+    assert_eq!(
+        hello_text_node.end_byte(),
+        source_code.find(" <b>").unwrap()
+    );
 
     assert_eq!(b_start_tag_node.kind(), "start_tag");
     assert_eq!(
@@ -869,6 +877,40 @@ fn test_parsing_with_multiple_included_ranges() {
     assert_eq!(
         b_end_tag_node.end_byte(),
         source_code.find(".</div>").unwrap()
+    );
+}
+
+#[test]
+fn test_parsing_with_included_range_containing_mismatched_positions() {
+    let source_code = "<div>test</div>{_ignore_this_part_}";
+
+    let mut parser = Parser::new();
+    parser.set_language(get_language("html")).unwrap();
+
+    let end_byte = source_code.find("{_ignore_this_part_").unwrap();
+
+    let range_to_parse = Range {
+        start_byte: 0,
+        start_point: Point {
+            row: 10,
+            column: 12,
+        },
+        end_byte,
+        end_point: Point {
+            row: 10,
+            column: 12 + end_byte,
+        },
+    };
+
+    parser.set_included_ranges(&[range_to_parse]).unwrap();
+
+    let html_tree = parser.parse(source_code, None).unwrap();
+
+    assert_eq!(html_tree.root_node().range(), range_to_parse);
+
+    assert_eq!(
+        html_tree.root_node().to_sexp(),
+        "(fragment (element (start_tag (tag_name)) (text) (end_tag (tag_name))))"
     );
 }
 
