@@ -20,8 +20,8 @@ local vers = require("luarocks.core.vers")
 
 --------------------------------------------------------------------------------
 
-local program_version = "3.7.0"
-local program_series = "3.7"
+local program_version = "3.8.0"
+local program_series = "3.8"
 local major_version = (program_version:match("([^.]%.[^.])")) or program_series
 
 local is_windows = package.config:sub(1,1) == "\\"
@@ -50,6 +50,9 @@ local platform_order = {
 }
 
 local function detect_sysconfdir()
+   if not debug then
+      return
+   end
    local src = debug.getinfo(1, "S").source:gsub("\\", "/"):gsub("/+", "/")
    if src:sub(1, 1) == "@" then
       src = src:sub(2)
@@ -477,6 +480,11 @@ local function make_defaults(lua_version, target_cpu, platforms, home)
 
    if platforms.openbsd then
       defaults.arch = "openbsd-"..target_cpu
+      defaults.gcc_rpath = false
+      defaults.variables.CC = os.getenv("CC") or "cc"
+      defaults.variables.CFLAGS = os.getenv("CFLAGS") or defaults.variables.CFLAGS
+      defaults.variables.LD = defaults.variables.CC
+      defaults.variables.LIBFLAG = (os.getenv("LDFLAGS") or "").." -shared"
    end
 
    if platforms.netbsd then

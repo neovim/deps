@@ -223,7 +223,7 @@ function deps.fulfill_dependency(dep, deps_mode, rocks_provided, verify, depskey
    local search = require("luarocks.search")
    local install = require("luarocks.cmd.install")
 
-   local url, search_err = search.find_suitable_rock(dep, true)
+   local url, search_err = search.find_suitable_rock(dep)
    if not url then
       return nil, "Could not satisfy dependency "..tostring(dep)..": "..search_err
    end
@@ -373,7 +373,7 @@ end
 -- @param files The array of constructed names
 local function add_all_patterns(file, patterns, files)
    for _, pattern in ipairs(patterns) do
-      table.insert(files, (pattern:gsub("?", file)))
+      table.insert(files, {#files + 1, (pattern:gsub("?", file))})
    end
 end
 
@@ -425,7 +425,7 @@ local function add_patterns_for_file(files, file, patterns)
             add_all_patterns(matched, patterns, files)
          end
       end
-      table.insert(files, file)
+      table.insert(files, {#files + 1, file})
    end
 end
 
@@ -460,16 +460,17 @@ local function check_external_dependency_at(prefix, name, ext_files, vars, dirs,
 
          local found = false
          table.sort(files, function(a, b)
-            if (not a:match("%*")) and b:match("%*") then
+            if (not a[2]:match("%*")) and b[2]:match("%*") then
                return true
-            elseif a:match("%*") and (not b:match("%*")) then
+            elseif a[2]:match("%*") and (not b[2]:match("%*")) then
                return false
             else
-               return a < b
+               return a[1] < b[1]
             end
          end)
-         for _, f in ipairs(files) do
+         for _, fa in ipairs(files) do
 
+            local f = fa[2]
             -- small convenience hack
             if f:match("%.so$") or f:match("%.dylib$") or f:match("%.dll$") then
                f = f:gsub("%.[^.]+$", "."..cfg.external_lib_extension)
@@ -711,7 +712,12 @@ function deps.check_lua_incdir(vars)
 end
 
 function deps.check_lua_libdir(vars)
+   local fs = require("luarocks.fs")
    local ljv = util.get_luajit_version()
+
+   if vars.LUA_LIBDIR and vars.LUALIB and fs.exists(dir.path(vars.LUA_LIBDIR, vars.LUALIB)) then
+      return true
+   end
 
    local shortv = cfg.lua_version:gsub("%.", "")
    local libnames = {
@@ -729,7 +735,9 @@ function deps.check_lua_libdir(vars)
    local ok = check_external_dependency("LUA", { library = libnames }, vars, "build", cache)
    vars.LUA_INCDIR = save_LUA_INCDIR
    if ok then
-      vars.LUALIB = vars.LUA_LIBDIR_FILE
+      if fs.exists(dir.path(vars.LUA_LIBDIR, vars.LUA_LIBDIR_FILE)) then
+         vars.LUALIB = vars.LUA_LIBDIR_FILE
+      end
       return true
    end
    return nil, "Failed finding Lua library. You may need to configure LUA_LIBDIR.", "dependency"
