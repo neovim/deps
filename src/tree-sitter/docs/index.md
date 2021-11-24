@@ -18,10 +18,12 @@ There are currently bindings that allow Tree-sitter to be used from the followin
 * [Haskell](https://github.com/tree-sitter/haskell-tree-sitter)
 * [JavaScript (Node.js)](https://github.com/tree-sitter/node-tree-sitter)
 * [JavaScript (Wasm)](https://github.com/tree-sitter/tree-sitter/tree/master/lib/binding_web)
+* [Lua](https://github.com/euclidianAce/ltreesitter)
 * [OCaml](https://github.com/returntocorp/ocaml-tree-sitter-core)
 * [Python](https://github.com/tree-sitter/py-tree-sitter)
 * [Ruby](https://github.com/tree-sitter/ruby-tree-sitter)
 * [Rust](https://github.com/tree-sitter/tree-sitter/tree/master/lib/binding_rust)
+* [Swift](https://github.com/ChimeHQ/SwiftTreeSitter)
 
 ### Available Parsers
 
@@ -36,6 +38,7 @@ Parsers for these languages are fairly complete:
 * [CUDA](https://github.com/theHamsta/tree-sitter-cuda)
 * [DOT](https://github.com/rydesun/tree-sitter-dot)
 * [Elm](https://github.com/elm-tooling/tree-sitter-elm)
+* [Emacs Lisp](https://github.com/Wilfred/tree-sitter-elisp)
 * [Eno](https://github.com/eno-lang/tree-sitter-eno)
 * [ERB / EJS](https://github.com/tree-sitter/tree-sitter-embedded-template)
 * [Fennel](https://github.com/travonted/tree-sitter-fennel)

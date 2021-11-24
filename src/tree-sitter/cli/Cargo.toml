@@ -1,7 +1,7 @@
 [package]
 name = "tree-sitter-cli"
 description = "CLI tool for developing, testing, and using Tree-sitter parsers"
-version = "0.20.0"
+version = "0.20.1"
 authors = ["Max Brunsfeld <maxbrunsfeld@gmail.com>"]
 edition = "2018"
 license = "MIT"
@@ -76,6 +76,7 @@ features = ["std"]
 [dev-dependencies]
 rand = "0.8"
 tempfile = "3"
+pretty_assertions = "0.7.2"
 
 [build-dependencies]
 toml = "0.5"
