@@ -896,6 +896,33 @@ TSSymbolType ts_language_symbol_type(const TSLanguage *, TSSymbol);
  */
 uint32_t ts_language_version(const TSLanguage *);
 
+/**********************************/
+/* Section - Global Configuration */
+/**********************************/
+
+/**
+ * Set the allocation functions used by the library.
+ *
+ * By default, Tree-sitter uses the standard libc allocation functions,
+ * but aborts the process when an allocation fails. This function lets
+ * you supply alternative allocation functions at runtime.
+ * 
+ * If you pass `NULL` for any parameter, Tree-sitter will switch back to
+ * its default implementation of that function.
+ * 
+ * If you call this function after the library has already been used, then
+ * you must ensure that either:
+ *  1. All the existing objects have been freed.
+ *  2. The new allocator shares its state with the old one, so it is capable
+ *     of freeing memory that was allocated by the old allocator.
+ */
+void ts_set_allocator(
+  void *(*new_malloc)(size_t),
+	void *(*new_calloc)(size_t, size_t),
+	void *(*new_realloc)(void *, size_t),
+	void (*new_free)(void *)
+);
+
 #ifdef __cplusplus
 }
 #endif
