@@ -107,6 +107,12 @@ pub struct TSQueryCapture {
     pub node: TSNode,
     pub index: u32,
 }
+pub const TSQuantifier_TSQuantifierZero: TSQuantifier = 0;
+pub const TSQuantifier_TSQuantifierZeroOrOne: TSQuantifier = 1;
+pub const TSQuantifier_TSQuantifierZeroOrMore: TSQuantifier = 2;
+pub const TSQuantifier_TSQuantifierOne: TSQuantifier = 3;
+pub const TSQuantifier_TSQuantifierOneOrMore: TSQuantifier = 4;
+pub type TSQuantifier = ::std::os::raw::c_uint;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct TSQueryMatch {
@@ -666,6 +672,15 @@ extern "C" {
     ) -> *const ::std::os::raw::c_char;
 }
 extern "C" {
+    #[doc = " Get the quantifier of the query's captures. Each capture is * associated"]
+    #[doc = " with a numeric id based on the order that it appeared in the query's source."]
+    pub fn ts_query_capture_quantifier_for_id(
+        arg1: *const TSQuery,
+        pattern_id: u32,
+        capture_id: u32,
+    ) -> TSQuantifier;
+}
+extern "C" {
     pub fn ts_query_string_value_for_id(
         arg1: *const TSQuery,
         id: u32,
@@ -855,5 +870,5 @@ extern "C" {
     );
 }
 
-pub const TREE_SITTER_LANGUAGE_VERSION: usize = 13;
+pub const TREE_SITTER_LANGUAGE_VERSION: usize = 14;
 pub const TREE_SITTER_MIN_COMPATIBLE_LANGUAGE_VERSION: usize = 13;
