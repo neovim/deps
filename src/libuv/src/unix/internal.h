@@ -145,7 +145,8 @@ typedef struct uv__stream_queued_fds_s uv__stream_queued_fds_t;
 
 /* loop flags */
 enum {
-  UV_LOOP_BLOCK_SIGPROF = 1
+  UV_LOOP_BLOCK_SIGPROF = 0x1,
+  UV_LOOP_REAP_CHILDREN = 0x2
 };
 
 /* flags of excluding ifaddr */
@@ -241,14 +242,15 @@ void uv__server_io(uv_loop_t* loop, uv__io_t* w, unsigned int events);
 int uv__accept(int sockfd);
 int uv__dup2_cloexec(int oldfd, int newfd);
 int uv__open_cloexec(const char* path, int flags);
+int uv__slurp(const char* filename, char* buf, size_t len);
 
 /* tcp */
-int uv_tcp_listen(uv_tcp_t* tcp, int backlog, uv_connection_cb cb);
+int uv__tcp_listen(uv_tcp_t* tcp, int backlog, uv_connection_cb cb);
 int uv__tcp_nodelay(int fd, int on);
 int uv__tcp_keepalive(int fd, int on, unsigned int delay);
 
 /* pipe */
-int uv_pipe_listen(uv_pipe_t* handle, int backlog, uv_connection_cb cb);
+int uv__pipe_listen(uv_pipe_t* handle, int backlog, uv_connection_cb cb);
 
 /* signal */
 void uv__signal_close(uv_signal_t* handle);
@@ -282,6 +284,7 @@ uv_handle_type uv__handle_type(int fd);
 FILE* uv__open_file(const char* path);
 int uv__getpwuid_r(uv_passwd_t* pwd);
 int uv__search_path(const char* prog, char* buf, size_t* buflen);
+void uv__wait_children(uv_loop_t* loop);
 
 /* random */
 int uv__random_devurandom(void* buf, size_t buflen);
