@@ -28,9 +28,6 @@ uv_thread_t subthreads[2];
 static void check_thread(void* arg) {
   uv_thread_t *thread_id = arg;
   uv_thread_t self_id = uv_thread_self();
-#ifdef _WIN32
-  ASSERT_NOT_NULL(self_id);
-#endif
   ASSERT(uv_thread_equal(&main_thread_id, &self_id) == 0);
   *thread_id = uv_thread_self();
 }
@@ -38,9 +35,6 @@ static void check_thread(void* arg) {
 TEST_IMPL(thread_equal) {
   uv_thread_t threads[2];
   main_thread_id = uv_thread_self();
-#ifdef _WIN32
-  ASSERT_NOT_NULL(main_thread_id);
-#endif
   ASSERT(0 != uv_thread_equal(&main_thread_id, &main_thread_id));
   ASSERT(0 == uv_thread_create(threads + 0, check_thread, subthreads + 0));
   ASSERT(0 == uv_thread_create(threads + 1, check_thread, subthreads + 1));

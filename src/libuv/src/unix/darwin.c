@@ -280,18 +280,14 @@ static int uv__get_cpu_speed(uint64_t* speed) {
                                                     NULL,
                                                     0);
         if (freq_ref) {
-          const UInt8* freq_ref_ptr = pCFDataGetBytePtr(freq_ref);
+          uint32_t freq;
           CFIndex len = pCFDataGetLength(freq_ref);
-          if (len == 8)
-            memcpy(speed, freq_ref_ptr, 8);
-          else if (len == 4) {
-            uint32_t v;
-            memcpy(&v, freq_ref_ptr, 4);
-            *speed = v;
-          } else {
-            *speed = 0;
-          }
+          CFRange range;
+          range.location = 0;
+          range.length = len;
 
+          pCFDataGetBytes(freq_ref, range, (UInt8*)&freq);
+          *speed = freq;
           pCFRelease(freq_ref);
           pCFRelease(data);
           break;

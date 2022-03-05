@@ -308,12 +308,8 @@ static void read_cb(uv_stream_t* handle,
     return;
   }
 
-  ASSERT_GE(nread, 0);
-
   pipe = (uv_pipe_t*) handle;
-  ASSERT_EQ(pipe, &ctx2.channel);
-
-  while (uv_pipe_pending_count(pipe) > 0) {
+  do {
     if (++read_cb_count == 2) {
       recv = &ctx2.recv;
       write_req = &ctx2.write_req;
@@ -321,6 +317,10 @@ static void read_cb(uv_stream_t* handle,
       recv = &ctx2.recv2;
       write_req = &ctx2.write_req2;
     }
+
+    ASSERT(pipe == &ctx2.channel);
+    ASSERT(nread >= 0);
+    ASSERT(uv_pipe_pending_count(pipe) > 0);
 
     pending = uv_pipe_pending_type(pipe);
     ASSERT(pending == UV_NAMED_PIPE || pending == UV_TCP);
@@ -344,7 +344,7 @@ static void read_cb(uv_stream_t* handle,
                   &recv->stream,
                   write2_cb);
     ASSERT(r == 0);
-  }
+  } while (uv_pipe_pending_count(pipe) > 0);
 }
 
 static void send_recv_start(void) {

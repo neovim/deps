@@ -22,10 +22,6 @@
 #include "uv.h"
 #include "task.h"
 #include <string.h>
-#ifndef _WIN32
-#include <unistd.h>
-#include <sys/types.h>
-#endif
 
 TEST_IMPL(get_passwd) {
 /* TODO(gengjiawen): Fix test on QEMU. */
@@ -68,15 +64,11 @@ TEST_IMPL(get_passwd) {
 #endif
 
 #ifdef _WIN32
-  ASSERT_EQ(pwd.uid, (unsigned)-1);
-  ASSERT_EQ(pwd.gid, (unsigned)-1);
+  ASSERT(pwd.uid == -1);
+  ASSERT(pwd.gid == -1);
 #else
-  ASSERT_NE(pwd.uid, (unsigned)-1);
-  ASSERT_NE(pwd.gid, (unsigned)-1);
-  ASSERT_EQ(pwd.uid, geteuid());
-  if (pwd.uid != 0 && pwd.gid != getgid())
-    /* This will be likely true, as only root could have changed it. */
-    ASSERT_EQ(pwd.gid, getegid());
+  ASSERT(pwd.uid >= 0);
+  ASSERT(pwd.gid >= 0);
 #endif
 
   /* Test uv_os_free_passwd() */

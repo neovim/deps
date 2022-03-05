@@ -136,11 +136,6 @@ static void maybe_resize(uv__os390_epoll* lst, unsigned int len) {
 }
 
 
-void uv__os390_cleanup(void) {
-  msgctl(uv_backend_fd(uv_default_loop()), IPC_RMID, NULL);
-}
-
-
 static void init_message_queue(uv__os390_epoll* lst) {
   struct {
     long int header;

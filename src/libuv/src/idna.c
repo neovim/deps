@@ -21,7 +21,6 @@
 #include "idna.h"
 #include <assert.h>
 #include <string.h>
-#include <limits.h> /* UINT_MAX */
 
 static unsigned uv__utf8_decode1_slow(const char** p,
                                       const char* pe,
@@ -130,7 +129,7 @@ static int uv__idna_toascii_label(const char* s, const char* se,
   while (s < se) {
     c = uv__utf8_decode1(&s, se);
 
-    if (c == UINT_MAX)
+    if (c == -1u)
       return UV_EINVAL;
 
     if (c < 128)
@@ -152,7 +151,7 @@ static int uv__idna_toascii_label(const char* s, const char* se,
   s = ss;
   while (s < se) {
     c = uv__utf8_decode1(&s, se);
-    assert(c != UINT_MAX);
+    assert(c != -1u);
 
     if (c > 127)
       continue;
@@ -183,7 +182,7 @@ static int uv__idna_toascii_label(const char* s, const char* se,
 
     while (s < se) {
       c = uv__utf8_decode1(&s, se);
-      assert(c != UINT_MAX);
+      assert(c != -1u);
 
       if (c >= n)
         if (c < m)
@@ -202,7 +201,7 @@ static int uv__idna_toascii_label(const char* s, const char* se,
     s = ss;
     while (s < se) {
       c = uv__utf8_decode1(&s, se);
-      assert(c != UINT_MAX);
+      assert(c != -1u);
 
       if (c < n)
         if (++delta == 0)
@@ -281,7 +280,7 @@ long uv__idna_toascii(const char* s, const char* se, char* d, char* de) {
     st = si;
     c = uv__utf8_decode1(&si, se);
 
-    if (c == UINT_MAX)
+    if (c == -1u)
       return UV_EINVAL;
 
     if (c != '.')

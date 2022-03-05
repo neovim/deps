@@ -277,7 +277,7 @@ const char* fmt(double d);
 /* Reserved test exit codes. */
 enum test_status {
   TEST_OK = 0,
-  TEST_SKIP = 7
+  TEST_SKIP
 };
 
 #define RETURN_OK()                                                           \
