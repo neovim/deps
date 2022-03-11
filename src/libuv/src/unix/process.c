@@ -63,12 +63,18 @@ extern char **environ;
 # include "zos-base.h"
 #endif
 
-#if defined(__APPLE__) || defined(__DragonFly__) || defined(__FreeBSD__) || defined(__NetBSD__)
+#if defined(__APPLE__) || \
+    defined(__DragonFly__) || \
+    defined(__FreeBSD__) || \
+    defined(__NetBSD__) || \
+    defined(__OpenBSD__)
 #include <sys/event.h>
+#else
+#define UV_USE_SIGCHLD
 #endif
 
 
-#if !(defined(__APPLE__) || defined(__DragonFly__) || defined(__FreeBSD__) || defined(__NetBSD__))
+#ifdef UV_USE_SIGCHLD
 static void uv__chld(uv_signal_t* handle, int signum) {
   assert(signum == SIGCHLD);
   uv__wait_children(handle->loop);
@@ -80,6 +86,7 @@ void uv__wait_children(uv_loop_t* loop) {
   int exit_status;
   int term_signal;
   int status;
+  int options;
   pid_t pid;
   QUEUE pending;
   QUEUE* q;
@@ -93,19 +100,33 @@ void uv__wait_children(uv_loop_t* loop) {
     process = QUEUE_DATA(q, uv_process_t, queue);
     q = QUEUE_NEXT(q);
 
+#ifndef UV_USE_SIGCHLD
+    if ((process->flags & UV_HANDLE_REAP) == 0)
+      continue;
+    options = 0;
+    process->flags &= ~UV_HANDLE_REAP;
+#else
+    options = WNOHANG;
+#endif
+
     do
-      pid = waitpid(process->pid, &status, WNOHANG);
+      pid = waitpid(process->pid, &status, options);
     while (pid == -1 && errno == EINTR);
 
-    if (pid == 0)
+#ifdef UV_USE_SIGCHLD
+    if (pid == 0) /* Not yet exited */
       continue;
+#endif
 
     if (pid == -1) {
       if (errno != ECHILD)
         abort();
+      /* The child died, and we missed it. This probably means someone else
+       * stole the waitpid from us. Handle this by not handling it at all. */
       continue;
     }
 
+    assert(pid == process->pid);
     process->status = status;
     QUEUE_REMOVE(&process->queue);
     QUEUE_INSERT_TAIL(&pending, &process->queue);
@@ -216,16 +237,14 @@ static void uv__write_int(int fd, int val) {
     n = write(fd, &val, sizeof(val));
   while (n == -1 && errno == EINTR);
 
-  if (n == -1 && errno == EPIPE)
-    return; /* parent process has quit */
-
-  assert(n == sizeof(val));
+  /* The write might have failed (e.g. if the parent process has died),
+   * but we have nothing left but to _exit ourself now too. */
+  _exit(127);
 }
 
 
 static void uv__write_errno(int error_fd) {
   uv__write_int(error_fd, UV__ERR(errno));
-  _exit(127);
 }
 
 
@@ -284,10 +303,8 @@ static void uv__process_child_init(const uv_process_options_t* options,
       uv__write_errno(error_fd);
 #ifndef F_DUPFD_CLOEXEC /* POSIX 2008 */
     n = uv__cloexec(pipes[fd][1], 1);
-    if (n) {
+    if (n)
       uv__write_int(error_fd, n);
-      _exit(127);
-    }
 #endif
   }
 
@@ -313,10 +330,8 @@ static void uv__process_child_init(const uv_process_options_t* options,
     if (fd == use_fd) {
       if (close_fd == -1) {
         n = uv__cloexec(use_fd, 0);
-        if (n) {
+        if (n)
           uv__write_int(error_fd, n);
-          _exit(127);
-        }
       }
     }
     else {
@@ -368,7 +383,6 @@ static void uv__process_child_init(const uv_process_options_t* options,
 #endif
 
   uv__write_errno(error_fd);
-  abort();
 }
 #endif
 
@@ -394,30 +408,22 @@ static void uv__spawn_init_posix_spawn_fncs(void) {
 
 
 static void uv__spawn_init_can_use_setsid(void) {
-  static const int MACOS_CATALINA_VERSION_MAJOR = 19;
-  char version_str[256];
-  char* version_major_str;
-  size_t version_str_size = 256;
-  int r;
-  int version_major;
+  int which[] = {CTL_KERN, KERN_OSRELEASE};
+  unsigned major;
+  unsigned minor;
+  unsigned patch;
+  char buf[256];
+  size_t len;
 
-  /* Get a version string */
-  r = sysctlbyname("kern.osrelease", version_str, &version_str_size, NULL, 0);
-  if (r != 0)
+  len = sizeof(buf);
+  if (sysctl(which, ARRAY_SIZE(which), buf, &len, NULL, 0))
     return;
 
-  /* Try to get the major version number. If not found
-   * fall back to the fork/exec flow */
-  version_major_str = strtok(version_str, ".");
-  if (version_major_str == NULL)
+  /* NULL specifies to use LC_C_LOCALE */
+  if (3 != sscanf_l(buf, NULL, "%u.%u.%u", &major, &minor, &patch))
     return;
 
-  /* Parse the version major as a number. If it is greater than
-   * the major version for macOS Catalina (aka macOS 10.15), then
-   * the POSIX_SPAWN_SETSID flag is available */
-  version_major = atoi_l(version_major_str, NULL); /* Use LC_C_LOCALE */
-  if (version_major >= MACOS_CATALINA_VERSION_MAJOR)
-    posix_spawn_can_use_setsid = 1;
+  posix_spawn_can_use_setsid = (major >= 19);  /* macOS Catalina */
 }
 
 
@@ -980,7 +986,7 @@ int uv_spawn(uv_loop_t* loop,
       goto error;
   }
 
-#if !(defined(__APPLE__) || defined(__DragonFly__) || defined(__FreeBSD__) || defined(__NetBSD__))
+#ifdef UV_USE_SIGCHLD
   uv_signal_start(&loop->child_watcher, uv__chld, SIGCHLD);
 #endif
 
@@ -999,13 +1005,14 @@ int uv_spawn(uv_loop_t* loop,
    * fail to open a stdio handle. This ensures we can eventually reap the child
    * with waitpid. */
   if (exec_errorno == 0) {
-#if defined(__APPLE__) || defined(__DragonFly__) || defined(__FreeBSD__) || defined(__NetBSD__)
+#ifndef UV_USE_SIGCHLD
     struct kevent event;
     EV_SET(&event, pid, EVFILT_PROC, EV_ADD | EV_ONESHOT, NOTE_EXIT, 0, 0);
     if (kevent(loop->backend_fd, &event, 1, NULL, 0, NULL)) {
       if (errno != ESRCH)
         abort();
       /* Process already exited. Call waitpid on the next loop iteration. */
+      process->flags |= UV_HANDLE_REAP;
       loop->flags |= UV_LOOP_REAP_CHILDREN;
     }
 #endif
