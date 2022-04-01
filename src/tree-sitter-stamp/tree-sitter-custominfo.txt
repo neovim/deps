@@ -1,0 +1,9 @@
+# This is a generated file and its contents are an internal implementation detail.
+# The download step will be re-executed if anything in this file changes.
+# No other meaning or use of this file is supported.
+
+method=custom
+command=/usr/local/bin/cmake;-DPREFIX=/home/runner/work/deps/deps/neovim/deps/build;-DDOWNLOAD_DIR=/home/runner/work/deps/deps/neovim/deps/build/downloads/tree-sitter;-DURL=https://github.com/tree-sitter/tree-sitter/archive/v0.20.6.tar.gz;-DEXPECTED_SHA256=4d37eaef8a402a385998ff9aca3e1043b4a3bba899bceeff27a7178e1165b9de;-DTARGET=tree-sitter;-DUSE_EXISTING_SRC_DIR=OFF;-P;/home/runner/work/deps/deps/neovim/third-party/cmake/DownloadAndExtractFile.cmake
+source_dir=/home/runner/work/deps/deps/neovim/deps/build/src/tree-sitter
+work_dir=/home/runner/work/deps/deps/neovim/deps/build/downloads/tree-sitter
+

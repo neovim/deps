@@ -1,0 +1,9 @@
+# This is a generated file and its contents are an internal implementation detail.
+# The download step will be re-executed if anything in this file changes.
+# No other meaning or use of this file is supported.
+
+method=custom
+command=/usr/local/bin/cmake;-DPREFIX=/home/runner/work/deps/deps/neovim/deps/build;-DDOWNLOAD_DIR=/home/runner/work/deps/deps/neovim/deps/build/downloads/luajit;-DURL=https://github.com/LuaJIT/LuaJIT/archive/e2c312e0deb874aa5fa8ce502c08d87deb38e82f.tar.gz;-DEXPECTED_SHA256=bff4764c19466def90667d2f7fcbd0781b8e62476b12105868f8e44babd03f8e;-DTARGET=luajit;-DUSE_EXISTING_SRC_DIR=OFF;-P;/home/runner/work/deps/deps/neovim/third-party/cmake/DownloadAndExtractFile.cmake
+source_dir=/home/runner/work/deps/deps/neovim/deps/build/src/luajit
+work_dir=/home/runner/work/deps/deps/neovim/deps/build/downloads/luajit
+

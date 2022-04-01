@@ -1,0 +1,9 @@
+# This is a generated file and its contents are an internal implementation detail.
+# The download step will be re-executed if anything in this file changes.
+# No other meaning or use of this file is supported.
+
+method=custom
+command=/usr/local/bin/cmake;-DPREFIX=/home/runner/work/deps/deps/neovim/deps/build;-DDOWNLOAD_DIR=/home/runner/work/deps/deps/neovim/deps/build/downloads/libvterm;-DURL=https://www.leonerd.org.uk/code/libvterm/libvterm-0.1.4.tar.gz;-DEXPECTED_SHA256=bc70349e95559c667672fc8c55b9527d9db9ada0fb80a3beda533418d782d3dd;-DTARGET=libvterm;-DUSE_EXISTING_SRC_DIR=OFF;-P;/home/runner/work/deps/deps/neovim/third-party/cmake/DownloadAndExtractFile.cmake
+source_dir=/home/runner/work/deps/deps/neovim/deps/build/src/libvterm
+work_dir=/home/runner/work/deps/deps/neovim/deps/build/downloads/libvterm
+
