@@ -1,8 +1,85 @@
+# 2021-08-01 version 4.0.0
+  * Fix and improve alignment logic (#962)
+  * Fix iovec name conflict (#953)
+  * Fix empty string print (#942)
+  * Fix buffer ptr size (#899)
+  * Fix UB. Check null pointer before using memcpy() (#890)
+  * Improve CI environment (#885, #899)
+
+## << breaking changes >>
+* Separate C part of the msgpack-c from C/C++ mixed msgpack-c (#876, #878)
+
+
+# 2020-06-05 version 3.3.0
+  * Add json example for C (#870)
+  * Add both header and body packing functions for C (#870)
+  * Set default ref_size and chunk_size to vrefbuffer (#865)
+  * Add examples (#861)
+  * Improve build system (#839, #842)
+  * Improve tests (#829)
+  * Improve documents (#828)
+  * Remove some warnings (#827, #851, #871)
+  * Improve CI environment (#824, #831, #833, #834, #846, #860, 874)
+
+# 2019-12-10 version 3.2.1
+  * Fix snprintf return value checking (#821)
+  * Remove some warnings (#819)
+  * Fix fbuffer result checking (#812)
+  * Fix temporary object handling (#807)
+  * Improve cmake support (#804)
+  * Fix invalid `int main` parameter (#800)
+  * Improve supporting platform (#797, #817)
+  * Fix ZLIB error handling (#795)
+  * Remove unused variable (#793)
+  * Improve integer overflow checking (#792)
+
+# 2019-05-27 version 3.2.0
+
+  * Fix invalid include (#783)
+  * Add timespec support (#781)
+  * Fix unchecked fnprintf on C (#780)
+  * Improve integer overflow checking on C (#776)
+  * Fix warnings on `-Wconversion` (#770, #777, #784)
+  * Fix invalid passed by value on aligned_zone_size_visitor (#764)
+  * Improve windows support (#757, #779)
+  * Fix msgpack::object size caluclation error (#754)
+  * Fix memory error on example code (#753)
+  * Fix redundant memory allocation on C (#747)
+  * Fix msgpack::type::tuple base class conversion (#743)
+
+# 2018-09-09 version 3.1.1
+
+  * Add force endian set functionality (#736)
+  * Fix vrefbuffer memory management problem (#733)
+  * Fix msvc specific problem (#731, #732)
+  * Update boost from 1.61.0 to 1.68.0 (#730)
+  * Fix msgpack_timestamp type mismatch bug (#726)
+
+# 2018-08-10 version 3.1.0
+
+  * Improve documents (#687, #718)
+  * Add fuzzer support (#689)
+  * Fix msgpack::object union member access bug (#694)
+  * Improve cross platform configuration (#704)
+  * Fix out of range dereference bug of EXT (#705)
+  * Add timestamp support. std::chrono::system_clock::time_point is mapped to TIMESTAMP (#706)
+  * Add minimal timestamp support for C. The type `msgpack_timestamp` and the function `msgpack_object_to_timestamp()` are introduced (#707)
+  * Improve MSGPACK_DEFINE family name confliction probability (#710)
+  * Add no static-library build option (BUILD_SHARED_LIBS=ON) (#713, #717, #722)
+  * Add header only cmake target (#721)
+  * Add `std::byte` adaptor (#719)
+  * Remove some warnings (#720)
+
+# 2018-05-12 version 3.0.1
+
+  * Add fuzz directory to release tar ball (#686)
+  * Add include file checking for X-Code (#683)
+
 # 2018-05-09 version 3.0.0
 
 ## << breaking changes >>
 
-  * Change offset parameter updating rule. If parse error is happend, offset is updated to the error position. (#639, #666)
+  * Change offset parameter updating rule. If parse error happens, offset is updated to the error position. (#639, #666)
 
 ## << other updates >>
 

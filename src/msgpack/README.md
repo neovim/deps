@@ -1,7 +1,8 @@
-`msgpack` for C/C++
+`msgpack` for C
 ===================
 
-Version 3.0.0 [![Build Status](https://travis-ci.org/msgpack/msgpack-c.svg?branch=master)](https://travis-ci.org/msgpack/msgpack-c) [![Build status](https://ci.appveyor.com/api/projects/status/8kstcgt79qj123mw/branch/master?svg=true)](https://ci.appveyor.com/project/redboltz/msgpack-c/branch/master)
+Version 4.0.0 [![Build Status](https://github.com/msgpack/msgpack-c/workflows/CI/badge.svg?branch=c_master)](https://github.com/msgpack/msgpack-c/actions) [![Build status](https://ci.appveyor.com/api/projects/status/8kstcgt79qj123mw/branch/c_master?svg=true)](https://ci.appveyor.com/project/redboltz/msgpack-c/branch/c_master)
+[![codecov](https://codecov.io/gh/msgpack/msgpack-c/branch/c_master/graph/badge.svg)](https://codecov.io/gh/msgpack/msgpack-c/branch/c_master)
 
 It's like JSON but smaller and faster.
 
@@ -16,8 +17,6 @@ addition to the strings themselves.
 
 Example
 -------
-
-In C:
 
 ```c
 #include <msgpack.h>
@@ -60,61 +59,8 @@ int main(void)
 
 See [`QUICKSTART-C.md`](./QUICKSTART-C.md) for more details.
 
-In C++:
-
-```c++
-#include <msgpack.hpp>
-#include <string>
-#include <iostream>
-#include <sstream>
-
-int main(void)
-{
-    msgpack::type::tuple<int, bool, std::string> src(1, true, "example");
-
-    // serialize the object into the buffer.
-    // any classes that implements write(const char*,size_t) can be a buffer.
-    std::stringstream buffer;
-    msgpack::pack(buffer, src);
-
-    // send the buffer ...
-    buffer.seekg(0);
-
-    // deserialize the buffer into msgpack::object instance.
-    std::string str(buffer.str());
-
-    msgpack::object_handle oh =
-        msgpack::unpack(str.data(), str.size());
-
-    // deserialized object is valid during the msgpack::object_handle instance is alive.
-    msgpack::object deserialized = oh.get();
-
-    // msgpack::object supports ostream.
-    std::cout << deserialized << std::endl;
-
-    // convert msgpack::object instance into the original type.
-    // if the type is mismatched, it throws msgpack::type_error exception.
-    msgpack::type::tuple<int, bool, std::string> dst;
-    deserialized.convert(dst);
-
-    return 0;
-}
-```
-
-See [`QUICKSTART-CPP.md`](./QUICKSTART-CPP.md) for more details.
-
 Usage
 -----
-
-### C++ Header Only Library
-
-When you use msgpack on C++03 and C++11, you can just add
-msgpack-c/include to your include path:
-
-    g++ -I msgpack-c/include your_source_file.cpp
-
-If you want to use C version of msgpack, you need to build it. You can
-also install the C and C++ versions of msgpack.
 
 ### Building and Installing
 
@@ -127,21 +73,23 @@ You will need:
  - `gcc >= 4.1.0`
  - `cmake >= 2.8.0`
 
-C and C++03:
+How to build:
 
     $ git clone https://github.com/msgpack/msgpack-c.git
     $ cd msgpack-c
+    $ git checkout c_master
     $ cmake .
     $ make
     $ sudo make install
 
-If you want to setup C++11 version of msgpack instead,
-execute the following commands:
+How to run tests:
 
-    $ git clone https://github.com/msgpack/msgpack-c.git
-    $ cd msgpack-c
-    $ cmake -DMSGPACK_CXX11=ON .
-    $ sudo make install
+In order to run tests you must have the [GoogleTest](https://github.com/google/googletest) framework installed. If you do not currently have it, install it and re-run `cmake`.
+Then:
+
+    $ make test
+
+When you use the C part of `msgpack-c`, you need to build and link the library. By default, both static/shared libraries are built. If you want to build only static library, set `BUILD_SHARED_LIBS=OFF` to cmake. If you want to build only shared library, set `BUILD_SHARED_LIBS=ON`.
 
 #### GUI on Windows
 
@@ -153,24 +101,26 @@ or using GUI git client.
 
 e.g.) tortoise git https://code.google.com/p/tortoisegit/
 
-1. Launch [cmake GUI client](http://www.cmake.org/cmake/resources/software.html).
+1. Checkout to c_master branch
 
-2. Set 'Where is the source code:' text box and 'Where to build
+2. Launch [cmake GUI client](http://www.cmake.org/cmake/resources/software.html).
+
+3. Set 'Where is the source code:' text box and 'Where to build
 the binaries:' text box.
 
-3. Click 'Configure' button.
+4. Click 'Configure' button.
 
-4. Choose your Visual Studio version.
+5. Choose your Visual Studio version.
 
-5. Click 'Generate' button.
+6. Click 'Generate' button.
 
-6. Open the created msgpack.sln on Visual Studio.
+7. Open the created msgpack.sln on Visual Studio.
 
-7. Build all.
+8. Build all.
 
 ### Documentation
 
-You can get addtional information on the
+You can get additional information including the tutorial on the
 [wiki](https://github.com/msgpack/msgpack-c/wiki).
 
 Contributing

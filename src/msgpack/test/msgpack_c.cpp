@@ -4,13 +4,28 @@
 #include <vector>
 #include <limits>
 
+#if defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wconversion"
+#endif //defined(__GNUC__)
+
 #include <gtest/gtest.h>
+
+#if defined(__GNUC__)
+#pragma GCC diagnostic pop
+#endif //defined(__GNUC__)
 
 #if defined(_MSC_VER) || defined(__MINGW32__)
 #define msgpack_rand() ((double)rand() / RAND_MAX)
 #else  // _MSC_VER || __MINGW32__
 #define msgpack_rand() drand48()
 #endif // _MSC_VER || __MINGW32__
+
+#if defined(_MSC_VER)
+#define msgpack_snprintf sprintf_s
+#else  // _MSC_VER
+#define msgpack_snprintf snprintf
+#endif // _MSC_VER
 
 using namespace std;
 
@@ -26,7 +41,7 @@ const double kEPS = 1e-10;
         v.push_back(numeric_limits<test_type>::min());                  \
         v.push_back(numeric_limits<test_type>::max());                  \
         for (unsigned int i = 0; i < kLoop; i++)                        \
-            v.push_back(rand());                                        \
+            v.push_back(static_cast<test_type>(rand()));                \
         for (unsigned int i = 0; i < v.size() ; i++) {                  \
             test_type val = v[i];                                       \
             msgpack_sbuffer sbuf;                                       \
@@ -61,7 +76,7 @@ const double kEPS = 1e-10;
         v.push_back(numeric_limits<test_type>::min());                  \
         v.push_back(numeric_limits<test_type>::max());                  \
         for (unsigned int i = 0; i < kLoop; i++)                        \
-            v.push_back(rand());                                        \
+            v.push_back(static_cast<test_type>(rand()));                \
         for (unsigned int i = 0; i < v.size() ; i++) {                  \
             test_type val = v[i];                                       \
             msgpack_sbuffer sbuf;                                       \
@@ -627,6 +642,105 @@ TEST(MSGPACKC, simple_buffer_fixext_4byte_65536)
     msgpack_sbuffer_destroy(&sbuf);
 }
 
+TEST(MSGPACKC, simple_buffer_timestamp_32)
+{
+    msgpack_timestamp ts = {
+        0xffffffff,
+        0
+    };
+
+    msgpack_sbuffer sbuf;
+    msgpack_sbuffer_init(&sbuf);
+    msgpack_packer pk;
+    msgpack_packer_init(&pk, &sbuf, msgpack_sbuffer_write);
+
+    msgpack_pack_timestamp(&pk, &ts);
+    msgpack_zone z;
+    msgpack_zone_init(&z, 2048);
+    msgpack_object obj;
+    msgpack_unpack_return ret =
+        msgpack_unpack(sbuf.data, sbuf.size, NULL, &z, &obj);
+    EXPECT_EQ(MSGPACK_UNPACK_SUCCESS, ret);
+    EXPECT_EQ(MSGPACK_OBJECT_EXT, obj.type);
+    EXPECT_EQ(4u, obj.via.ext.size);
+    EXPECT_EQ(-1, obj.via.ext.type);
+    msgpack_timestamp ts2;
+    bool r = msgpack_object_to_timestamp(&obj, &ts2);
+
+    EXPECT_TRUE(r);
+    EXPECT_EQ(ts.tv_sec, ts2.tv_sec);
+    EXPECT_EQ(ts.tv_nsec, ts2.tv_nsec);
+
+    msgpack_zone_destroy(&z);
+    msgpack_sbuffer_destroy(&sbuf);
+}
+
+TEST(MSGPACKC, simple_buffer_timestamp_64)
+{
+    msgpack_timestamp ts = {
+        0x3ffffffffL,
+        999999999
+    };
+
+    msgpack_sbuffer sbuf;
+    msgpack_sbuffer_init(&sbuf);
+    msgpack_packer pk;
+    msgpack_packer_init(&pk, &sbuf, msgpack_sbuffer_write);
+
+    msgpack_pack_timestamp(&pk, &ts);
+    msgpack_zone z;
+    msgpack_zone_init(&z, 2048);
+    msgpack_object obj;
+    msgpack_unpack_return ret =
+        msgpack_unpack(sbuf.data, sbuf.size, NULL, &z, &obj);
+    EXPECT_EQ(MSGPACK_UNPACK_SUCCESS, ret);
+    EXPECT_EQ(MSGPACK_OBJECT_EXT, obj.type);
+    EXPECT_EQ(8u, obj.via.ext.size);
+    EXPECT_EQ(-1, obj.via.ext.type);
+    msgpack_timestamp ts2;
+    bool r = msgpack_object_to_timestamp(&obj, &ts2);
+
+    EXPECT_TRUE(r);
+    EXPECT_EQ(ts.tv_sec, ts2.tv_sec);
+    EXPECT_EQ(ts.tv_nsec, ts2.tv_nsec);
+
+    msgpack_zone_destroy(&z);
+    msgpack_sbuffer_destroy(&sbuf);
+}
+
+TEST(MSGPACKC, simple_buffer_timestamp_96)
+{
+    msgpack_timestamp ts = {
+        0x7fffffffffffffffLL,
+        999999999
+    };
+
+    msgpack_sbuffer sbuf;
+    msgpack_sbuffer_init(&sbuf);
+    msgpack_packer pk;
+    msgpack_packer_init(&pk, &sbuf, msgpack_sbuffer_write);
+
+    msgpack_pack_timestamp(&pk, &ts);
+    msgpack_zone z;
+    msgpack_zone_init(&z, 2048);
+    msgpack_object obj;
+    msgpack_unpack_return ret =
+        msgpack_unpack(sbuf.data, sbuf.size, NULL, &z, &obj);
+    EXPECT_EQ(MSGPACK_UNPACK_SUCCESS, ret);
+    EXPECT_EQ(MSGPACK_OBJECT_EXT, obj.type);
+    EXPECT_EQ(12u, obj.via.ext.size);
+    EXPECT_EQ(-1, obj.via.ext.type);
+    msgpack_timestamp ts2;
+    bool r = msgpack_object_to_timestamp(&obj, &ts2);
+
+    EXPECT_TRUE(r);
+    EXPECT_EQ(ts.tv_sec, ts2.tv_sec);
+    EXPECT_EQ(ts.tv_nsec, ts2.tv_nsec);
+
+    msgpack_zone_destroy(&z);
+    msgpack_sbuffer_destroy(&sbuf);
+}
+
 TEST(MSGPACKC, simple_buffer_array)
 {
     unsigned int array_size = 5;
@@ -1095,6 +1209,197 @@ TEST(MSGPACKC, simple_buffer_v4raw_32_l)
     msgpack_sbuffer_destroy(&sbuf);
 }
 
+TEST(MSGPACKC, simple_object_print_buffer_str_empty)
+{
+    unsigned int str_size = 0;
+    char buffer[64];
+
+    msgpack_sbuffer sbuf;
+    msgpack_sbuffer_init(&sbuf);
+    msgpack_packer pk;
+    msgpack_packer_init(&pk, &sbuf, msgpack_sbuffer_write);
+    msgpack_pack_str(&pk, str_size);
+    msgpack_pack_str_body(&pk, "", str_size);
+
+    msgpack_zone z;
+    msgpack_zone_init(&z, 2048);
+    msgpack_object obj;
+    msgpack_unpack_return ret;
+    ret = msgpack_unpack(sbuf.data, sbuf.size, NULL, &z, &obj);
+    EXPECT_EQ(MSGPACK_UNPACK_SUCCESS, ret);
+    EXPECT_EQ(MSGPACK_OBJECT_STR, obj.type);
+    EXPECT_EQ(str_size, obj.via.str.size);
+
+    msgpack_object_print_buffer(buffer, sizeof(buffer) - 1, obj);
+    EXPECT_STREQ("\"\"", buffer);
+
+    msgpack_zone_destroy(&z);
+    msgpack_sbuffer_destroy(&sbuf);
+}
+
+TEST(MSGPACKC, simple_object_print_buffer_array_str)
+{
+    const char * str = "hello";
+    const size_t str_size = strlen(str);
+    const unsigned int array_size = 1;
+    char expected[64];
+    char buffer[64];
+
+    msgpack_sbuffer sbuf;
+    msgpack_sbuffer_init(&sbuf);
+    msgpack_packer pk;
+    msgpack_packer_init(&pk, &sbuf, msgpack_sbuffer_write);
+    msgpack_pack_array(&pk, array_size);
+    msgpack_pack_str(&pk, str_size);
+    msgpack_pack_str_body(&pk, str, str_size);
+
+    msgpack_zone z;
+    msgpack_zone_init(&z, 2048);
+    msgpack_object obj;
+    msgpack_unpack_return ret;
+    ret = msgpack_unpack(sbuf.data, sbuf.size, NULL, &z, &obj);
+    EXPECT_EQ(MSGPACK_UNPACK_SUCCESS, ret);
+    EXPECT_EQ(MSGPACK_OBJECT_ARRAY, obj.type);
+    EXPECT_EQ(array_size, obj.via.array.size);
+
+    msgpack_object o = *obj.via.array.ptr;
+    EXPECT_EQ(MSGPACK_OBJECT_STR, o.type);
+    EXPECT_EQ(str_size, o.via.str.size);
+    EXPECT_EQ(0, memcmp(str, o.via.str.ptr, str_size));
+
+    msgpack_snprintf(expected, sizeof(expected), "[\"%s\"]", str);
+    expected[sizeof(expected) - 1] = '\0'; // not needed w/ sprintf_s
+    msgpack_object_print_buffer(buffer, sizeof(buffer) - 1, obj);
+    EXPECT_STREQ(expected, buffer);
+
+    msgpack_zone_destroy(&z);
+    msgpack_sbuffer_destroy(&sbuf);
+}
+
+TEST(MSGPACKC, simple_object_print_buffer_array_str_empty)
+{
+    const unsigned int array_size = 1;
+    const unsigned int str_size = 0;
+    char buffer[64];
+
+    msgpack_sbuffer sbuf;
+    msgpack_sbuffer_init(&sbuf);
+    msgpack_packer pk;
+    msgpack_packer_init(&pk, &sbuf, msgpack_sbuffer_write);
+    msgpack_pack_array(&pk, array_size);
+    msgpack_pack_str(&pk, str_size);
+    msgpack_pack_str_body(&pk, "", 0);
+
+    msgpack_zone z;
+    msgpack_zone_init(&z, 2048);
+    msgpack_object obj;
+    msgpack_unpack_return ret;
+    ret = msgpack_unpack(sbuf.data, sbuf.size, NULL, &z, &obj);
+    EXPECT_EQ(MSGPACK_UNPACK_SUCCESS, ret);
+    EXPECT_EQ(MSGPACK_OBJECT_ARRAY, obj.type);
+    EXPECT_EQ(array_size, obj.via.array.size);
+
+    msgpack_object o = *obj.via.array.ptr;
+    EXPECT_EQ(MSGPACK_OBJECT_STR, o.type);
+    EXPECT_EQ(str_size, o.via.str.size);
+
+    msgpack_object_print_buffer(buffer, sizeof(buffer) - 1, obj);
+    EXPECT_STREQ("[\"\"]", buffer);
+
+    msgpack_zone_destroy(&z);
+    msgpack_sbuffer_destroy(&sbuf);
+}
+
+TEST(MSGPACKC, simple_object_print_buffer_map_str)
+{
+    const char * mkey = "key";
+    const char * mval = "value";
+    char expected[64];
+    char buffer[64];
+    const size_t mkey_size = strlen(mkey);;
+    const size_t mval_size = strlen(mval);
+    const unsigned int map_size = 1;
+
+    msgpack_sbuffer sbuf;
+    msgpack_sbuffer_init(&sbuf);
+    msgpack_packer pk;
+    msgpack_packer_init(&pk, &sbuf, msgpack_sbuffer_write);
+    msgpack_pack_map(&pk, map_size);
+    msgpack_pack_str(&pk, mkey_size);
+    msgpack_pack_str_body(&pk, mkey, mkey_size);
+    msgpack_pack_str(&pk, mval_size);
+    msgpack_pack_str_body(&pk, mval, mval_size);
+
+    msgpack_zone z;
+    msgpack_zone_init(&z, 2048);
+    msgpack_object obj;
+    msgpack_unpack_return ret;
+    ret = msgpack_unpack(sbuf.data, sbuf.size, NULL, &z, &obj);
+    EXPECT_EQ(MSGPACK_UNPACK_SUCCESS, ret);
+    EXPECT_EQ(MSGPACK_OBJECT_MAP, obj.type);
+    EXPECT_EQ(map_size, obj.via.map.size);
+
+    msgpack_object key = obj.via.map.ptr->key;
+    msgpack_object val = obj.via.map.ptr->val;
+    EXPECT_EQ(MSGPACK_OBJECT_STR, key.type);
+    EXPECT_EQ(mkey_size, key.via.str.size);
+    EXPECT_EQ(0, memcmp(mkey, key.via.str.ptr, mkey_size));
+    EXPECT_EQ(MSGPACK_OBJECT_STR, val.type);
+    EXPECT_EQ(mval_size, val.via.str.size);
+    EXPECT_EQ(0, memcmp(mval, val.via.str.ptr, mval_size));
+
+    msgpack_snprintf(expected, sizeof(expected), "{\"%s\"=>\"%s\"}", mkey, mval);
+    expected[sizeof(expected) - 1] = '\0'; // not needed w/ sprintf_s
+    msgpack_object_print_buffer(buffer, sizeof(buffer) - 1, obj);
+    EXPECT_STREQ(expected, buffer);
+
+    msgpack_zone_destroy(&z);
+    msgpack_sbuffer_destroy(&sbuf);
+}
+
+TEST(MSGPACKC, simple_object_print_buffer_map_str_empty)
+{
+    const char * mkey = "key";
+    char expected[64];
+    char buffer[64];
+    const size_t mkey_size = strlen(mkey);;
+    const unsigned int map_size = 1;
+
+    msgpack_sbuffer sbuf;
+    msgpack_sbuffer_init(&sbuf);
+    msgpack_packer pk;
+    msgpack_packer_init(&pk, &sbuf, msgpack_sbuffer_write);
+    msgpack_pack_map(&pk, map_size);
+    msgpack_pack_str(&pk, mkey_size);
+    msgpack_pack_str_body(&pk, mkey, mkey_size);
+    msgpack_pack_str(&pk, 0);
+    msgpack_pack_str_body(&pk, "", 0);
+
+    msgpack_zone z;
+    msgpack_zone_init(&z, 2048);
+    msgpack_object obj;
+    msgpack_unpack_return ret;
+    ret = msgpack_unpack(sbuf.data, sbuf.size, NULL, &z, &obj);
+    EXPECT_EQ(MSGPACK_UNPACK_SUCCESS, ret);
+    EXPECT_EQ(MSGPACK_OBJECT_MAP, obj.type);
+    EXPECT_EQ(map_size, obj.via.map.size);
+
+    msgpack_object key = obj.via.map.ptr->key;
+    msgpack_object val = obj.via.map.ptr->val;
+    EXPECT_EQ(MSGPACK_OBJECT_STR, key.type);
+    EXPECT_EQ(mkey_size, key.via.str.size);
+    EXPECT_EQ(0, memcmp(mkey, key.via.str.ptr, mkey_size));
+    EXPECT_EQ(MSGPACK_OBJECT_STR, val.type);
+    EXPECT_EQ(0UL, val.via.str.size);
+
+    msgpack_snprintf(expected, sizeof(expected), "{\"%s\"=>\"\"}", mkey);
+    expected[sizeof(expected) - 1] = '\0'; // not needed w/ sprintf_s
+    msgpack_object_print_buffer(buffer, sizeof(buffer) - 1, obj);
+    EXPECT_STREQ(expected, buffer);
+
+    msgpack_zone_destroy(&z);
+    msgpack_sbuffer_destroy(&sbuf);
+}
 
 TEST(MSGPACKC, unpack_fixstr)
 {
@@ -1252,4 +1557,212 @@ TEST(MSGPACKC, unpack_array_uint64)
     EXPECT_EQ(MSGPACK_OBJECT_POSITIVE_INTEGER, obj.via.array.ptr[0].type);
     EXPECT_EQ(0xFFF0000000000001LL, obj.via.array.ptr[0].via.u64);
     msgpack_zone_destroy(&z);
+}
+
+
+TEST(MSGPACKC, vref_buffer_overflow)
+{
+    msgpack_vrefbuffer vbuf;
+    msgpack_vrefbuffer to;
+    size_t ref_size = 0;
+    size_t chunk_size = std::numeric_limits<size_t>::max();
+    EXPECT_FALSE(msgpack_vrefbuffer_init(&vbuf, ref_size, chunk_size));
+    EXPECT_EQ(-1, msgpack_vrefbuffer_migrate(&vbuf, &to));
+}
+
+TEST(MSGPACKC, object_print_buffer_overflow) {
+  msgpack_object obj;
+  obj.type = MSGPACK_OBJECT_NIL;
+  char buffer[4];
+
+  int ret;
+  ret = msgpack_object_print_buffer(buffer, 1, obj);
+  EXPECT_EQ(0, ret);
+  ret = msgpack_object_print_buffer(buffer, 2, obj);
+  EXPECT_EQ(0, ret);
+  ret = msgpack_object_print_buffer(buffer, 3, obj);
+  EXPECT_EQ(0, ret);
+  ret = msgpack_object_print_buffer(buffer, 4, obj);
+  EXPECT_EQ(3, ret);
+  EXPECT_STREQ("nil", buffer);
+}
+
+TEST(MSGPACKC, object_bin_print_buffer_overflow) {
+  msgpack_object obj;
+  obj.type = MSGPACK_OBJECT_BIN;
+  obj.via.bin.ptr = "test";
+  obj.via.bin.size = 4;
+  char buffer[7];
+
+  int ret;
+  ret = msgpack_object_print_buffer(buffer, 1, obj);
+  EXPECT_EQ(0, ret);
+  ret = msgpack_object_print_buffer(buffer, 2, obj);
+  EXPECT_EQ(0, ret);
+  ret = msgpack_object_print_buffer(buffer, 3, obj);
+  EXPECT_EQ(0, ret);
+  ret = msgpack_object_print_buffer(buffer, 4, obj);
+  EXPECT_EQ(0, ret);
+  ret = msgpack_object_print_buffer(buffer, 5, obj);
+  EXPECT_EQ(0, ret);
+  ret = msgpack_object_print_buffer(buffer, 6, obj);
+  EXPECT_EQ(0, ret);
+  ret = msgpack_object_print_buffer(buffer, 7, obj);
+  EXPECT_EQ(6, ret);
+  EXPECT_STREQ("\"test\"", buffer);
+}
+
+/* test for vrefbuffer */
+#define GEN_TEST_VREFBUFFER_PREPARE(...)                       \
+    msgpack_vrefbuffer vbuf;                                   \
+    msgpack_packer pk;                                         \
+    const msgpack_iovec *iov;                                  \
+    size_t iovcnt, len = 0, i;                                 \
+    char buf[1024];                                            \
+    msgpack_vrefbuffer_init(&vbuf, 0, 0);                      \
+    msgpack_packer_init(&pk, &vbuf, msgpack_vrefbuffer_write); \
+    __VA_ARGS__;                                               \
+    iov = msgpack_vrefbuffer_vec(&vbuf);                       \
+    iovcnt = msgpack_vrefbuffer_veclen(&vbuf);                 \
+    for (i = 0; i < iovcnt; i++) {                             \
+        memcpy(buf + len, iov[i].iov_base, iov[i].iov_len);    \
+        len += iov[i].iov_len;                                 \
+    }                                                          \
+    msgpack_vrefbuffer_destroy(&vbuf)
+
+#define GEN_TEST_VREFBUFFER_CHECK(...)                \
+    msgpack_object obj;                               \
+    msgpack_unpack_return ret;                        \
+    msgpack_zone z;                                   \
+    msgpack_zone_init(&z, 2048);                      \
+    ret = msgpack_unpack(buf, len, NULL, &z, &obj);   \
+    EXPECT_EQ(MSGPACK_UNPACK_SUCCESS, ret);           \
+    __VA_ARGS__;                                      \
+    msgpack_zone_destroy(&z)
+
+TEST(buffer, vrefbuffer_uint8)
+{
+    GEN_TEST_VREFBUFFER_PREPARE(
+        msgpack_pack_uint8(&pk, 32));
+    GEN_TEST_VREFBUFFER_CHECK(
+        EXPECT_EQ(MSGPACK_OBJECT_POSITIVE_INTEGER, obj.type);
+        EXPECT_EQ(32U, obj.via.u64));
+}
+
+TEST(buffer, vrefbuffer_int8)
+{
+    GEN_TEST_VREFBUFFER_PREPARE(
+        msgpack_pack_int8(&pk, -32));
+    GEN_TEST_VREFBUFFER_CHECK(
+        EXPECT_EQ(MSGPACK_OBJECT_NEGATIVE_INTEGER, obj.type);
+        EXPECT_EQ(-32, obj.via.i64));
+}
+
+TEST(buffer, vrefbuffer_float32)
+{
+    GEN_TEST_VREFBUFFER_PREPARE(
+        msgpack_pack_float(&pk, 1.0));
+    GEN_TEST_VREFBUFFER_CHECK(
+        EXPECT_EQ(MSGPACK_OBJECT_FLOAT32, obj.type);
+        EXPECT_EQ(1.0, obj.via.f64));
+}
+
+TEST(buffer, vrefbuffer_float64)
+{
+    GEN_TEST_VREFBUFFER_PREPARE(
+        msgpack_pack_double(&pk, 1.0));
+    GEN_TEST_VREFBUFFER_CHECK(
+        EXPECT_EQ(MSGPACK_OBJECT_FLOAT64, obj.type);
+        EXPECT_EQ(1.0, obj.via.f64));
+}
+
+TEST(buffer, vrefbuffer_nil)
+{
+    GEN_TEST_VREFBUFFER_PREPARE(
+        msgpack_pack_nil(&pk));
+    GEN_TEST_VREFBUFFER_CHECK(
+        EXPECT_EQ(MSGPACK_OBJECT_NIL, obj.type));
+}
+
+TEST(buffer, vrefbuffer_false)
+{
+    GEN_TEST_VREFBUFFER_PREPARE(
+        msgpack_pack_false(&pk));
+    GEN_TEST_VREFBUFFER_CHECK(
+        EXPECT_EQ(MSGPACK_OBJECT_BOOLEAN, obj.type);
+        EXPECT_FALSE(obj.via.boolean));
+}
+
+TEST(buffer, vrefbuffer_true)
+{
+    GEN_TEST_VREFBUFFER_PREPARE(
+        msgpack_pack_true(&pk));
+    GEN_TEST_VREFBUFFER_CHECK(
+        EXPECT_EQ(MSGPACK_OBJECT_BOOLEAN, obj.type);
+        EXPECT_TRUE(obj.via.boolean));
+}
+
+#define TEST_VBUF_RAW_LEN 30U
+char test_vbuf_raw[TEST_VBUF_RAW_LEN] = "frsyuki";
+
+TEST(buffer, vrefbuffer_str)
+{
+    GEN_TEST_VREFBUFFER_PREPARE(
+        msgpack_pack_str(&pk, TEST_VBUF_RAW_LEN);
+        msgpack_pack_str_body(&pk, test_vbuf_raw, TEST_VBUF_RAW_LEN));
+    GEN_TEST_VREFBUFFER_CHECK(
+        EXPECT_EQ(MSGPACK_OBJECT_STR, obj.type);
+        EXPECT_EQ(TEST_VBUF_RAW_LEN, obj.via.str.size);
+        EXPECT_EQ(0, memcmp(test_vbuf_raw, obj.via.str.ptr, 30)));
+}
+
+TEST(buffer, vrefbuffer_bin)
+{
+    GEN_TEST_VREFBUFFER_PREPARE(
+        msgpack_pack_bin(&pk, TEST_VBUF_RAW_LEN);
+        msgpack_pack_bin_body(&pk, test_vbuf_raw, TEST_VBUF_RAW_LEN));
+    GEN_TEST_VREFBUFFER_CHECK(
+        EXPECT_EQ(TEST_VBUF_RAW_LEN, obj.via.bin.size);
+        EXPECT_EQ(0, memcmp(test_vbuf_raw, obj.via.bin.ptr, TEST_VBUF_RAW_LEN)));
+}
+
+TEST(buffer, vrefbuffer_ext)
+{
+    GEN_TEST_VREFBUFFER_PREPARE(
+        msgpack_pack_ext(&pk, TEST_VBUF_RAW_LEN, 127);
+        msgpack_pack_ext_body(&pk, test_vbuf_raw, TEST_VBUF_RAW_LEN));
+    GEN_TEST_VREFBUFFER_CHECK(
+        EXPECT_EQ(MSGPACK_OBJECT_EXT, obj.type);
+        EXPECT_EQ(TEST_VBUF_RAW_LEN, obj.via.ext.size);
+        EXPECT_EQ(0, memcmp(test_vbuf_raw, obj.via.ext.ptr, TEST_VBUF_RAW_LEN)));
+}
+
+TEST(buffer, vrefbuffer_array)
+{
+    GEN_TEST_VREFBUFFER_PREPARE(
+        msgpack_pack_array(&pk, 2);
+        msgpack_pack_int(&pk, 3);
+        msgpack_pack_int(&pk, 4));
+    GEN_TEST_VREFBUFFER_CHECK(
+        EXPECT_EQ(MSGPACK_OBJECT_ARRAY, obj.type);
+        EXPECT_EQ(2U, obj.via.array.size);
+        EXPECT_EQ(MSGPACK_OBJECT_POSITIVE_INTEGER, obj.via.array.ptr[0].type);
+        EXPECT_EQ(3U, obj.via.array.ptr[0].via.u64);
+        EXPECT_EQ(MSGPACK_OBJECT_POSITIVE_INTEGER, obj.via.array.ptr[1].type);
+        EXPECT_EQ(4U, obj.via.array.ptr[1].via.u64));
+}
+
+TEST(buffer, vrefbuffer_map)
+{
+    GEN_TEST_VREFBUFFER_PREPARE(
+        msgpack_pack_map(&pk, 1);
+        msgpack_pack_int(&pk, 2);
+        msgpack_pack_int(&pk, 3));
+    GEN_TEST_VREFBUFFER_CHECK(
+        EXPECT_EQ(MSGPACK_OBJECT_MAP, obj.type);
+        EXPECT_EQ(1U, obj.via.map.size);
+        EXPECT_EQ(MSGPACK_OBJECT_POSITIVE_INTEGER, obj.via.map.ptr[0].key.type);
+        EXPECT_EQ(2U, obj.via.map.ptr[0].key.via.u64);
+        EXPECT_EQ(MSGPACK_OBJECT_POSITIVE_INTEGER, obj.via.map.ptr[0].val.type);
+        EXPECT_EQ(3U, obj.via.map.ptr[0].val.via.u64));
 }
