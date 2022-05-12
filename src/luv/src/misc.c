@@ -221,6 +221,13 @@ static int luv_getrusage(lua_State* L) {
   return 1;
 }
 
+#if LUV_UV_VERSION_GEQ(1, 44, 0)
+static int luv_available_parallelism(lua_State* L) {
+  lua_pushinteger(L, uv_available_parallelism());
+  return 1;
+}
+#endif
+
 static int luv_cpu_info(lua_State* L) {
   uv_cpu_info_t* cpu_infos = NULL;
   int count = 0, i;
@@ -366,14 +373,15 @@ static int luv_os_get_passwd(lua_State* L) {
     lua_pushstring(L, pwd.username);
     lua_setfield(L, -2, "username");
   }
-  if (pwd.uid >= 0) {
-    lua_pushinteger(L, pwd.uid);
-    lua_setfield(L, -2, "uid");
-  }
-  if (pwd.gid >= 0) {
-    lua_pushinteger(L, pwd.gid);
-    lua_setfield(L, -2, "gid");
-  }
+  // From the uv_os_get_passwd docs:
+  // "On Windows, uid and gid are set to -1 and have no meaning"
+  // so we omit these fields on Windows.
+#ifndef _WIN32
+  lua_pushinteger(L, pwd.uid);
+  lua_setfield(L, -2, "uid");
+  lua_pushinteger(L, pwd.gid);
+  lua_setfield(L, -2, "gid");
+#endif
   if (pwd.shell) {
     lua_pushstring(L, pwd.shell);
     lua_setfield(L, -2, "shell");
