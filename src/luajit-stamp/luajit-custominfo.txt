@@ -3,7 +3,7 @@
 # No other meaning or use of this file is supported.
 
 method=custom
-command=/usr/local/bin/cmake;-DPREFIX=/home/runner/work/deps/deps/neovim/deps/build;-DDOWNLOAD_DIR=/home/runner/work/deps/deps/neovim/deps/build/downloads/luajit;-DURL=https://github.com/LuaJIT/LuaJIT/archive/91bc6b8ad1f373c1ce9003dc024b2e21fad0e444.tar.gz;-DEXPECTED_SHA256=81895031fdb87602c7dde52280259c60b1ffd1b5a8a3c2792d3e2390481163fa;-DTARGET=luajit;-DUSE_EXISTING_SRC_DIR=OFF;-P;/home/runner/work/deps/deps/neovim/third-party/cmake/DownloadAndExtractFile.cmake
+command=/usr/local/bin/cmake;-DPREFIX=/home/runner/work/deps/deps/neovim/deps/build;-DDOWNLOAD_DIR=/home/runner/work/deps/deps/neovim/deps/build/downloads/luajit;-DURL=https://github.com/LuaJIT/LuaJIT/archive/4ef96cff887c268cc676f9b4b1dc9c54a693efd5.tar.gz;-DEXPECTED_SHA256=ae913e33be80dded08a2fc368787f168305c22808519c962553bf4c8668e9856;-DTARGET=luajit;-DUSE_EXISTING_SRC_DIR=OFF;-P;/home/runner/work/deps/deps/neovim/third-party/cmake/DownloadAndExtractFile.cmake
 source_dir=/home/runner/work/deps/deps/neovim/deps/build/src/luajit
 work_dir=/home/runner/work/deps/deps/neovim/deps/build/downloads/luajit
 
