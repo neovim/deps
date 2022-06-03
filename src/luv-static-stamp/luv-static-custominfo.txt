@@ -3,7 +3,7 @@
 # No other meaning or use of this file is supported.
 
 method=custom
-command=/usr/local/bin/cmake;-DPREFIX=/home/runner/work/deps/deps/neovim/deps/build;-DDOWNLOAD_DIR=/home/runner/work/deps/deps/neovim/deps/build/downloads/luv;-DURL=https://github.com/luvit/luv/archive/02d703b42be44d31483582a6538e885fa9b37134.tar.gz;-DEXPECTED_SHA256=50831acb9b4a48dd83d942a6da06f405e46ca7125547605bac3e6a9c8efc190a;-DTARGET=luv-static;-DSRC_DIR=/home/runner/work/deps/deps/neovim/deps/build/src/luv;-DUSE_EXISTING_SRC_DIR=OFF;-P;/home/runner/work/deps/deps/neovim/third-party/cmake/DownloadAndExtractFile.cmake
+command=/usr/local/bin/cmake;-DPREFIX=/home/runner/work/deps/deps/neovim/deps/build;-DDOWNLOAD_DIR=/home/runner/work/deps/deps/neovim/deps/build/downloads/luv;-DURL=https://github.com/luvit/luv/archive/9f80386338af7d164ff1f47d480ee1ae775cb0ef.tar.gz;-DEXPECTED_SHA256=a6fe420f06944c0d84a173fccff2eb0d14dfd1293bc24666a580b98dd1a7254f;-DTARGET=luv-static;-DSRC_DIR=/home/runner/work/deps/deps/neovim/deps/build/src/luv;-DUSE_EXISTING_SRC_DIR=OFF;-P;/home/runner/work/deps/deps/neovim/third-party/cmake/DownloadAndExtractFile.cmake
 source_dir=/home/runner/work/deps/deps/neovim/deps/build/src/luv-static
 work_dir=/home/runner/work/deps/deps/neovim/deps/build/downloads/luv
 
