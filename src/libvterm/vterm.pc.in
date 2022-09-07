@@ -1,9 +1,8 @@
-prefix=@PREFIX@
 libdir=@LIBDIR@
-includedir=${prefix}/include
+includedir=@INCDIR@
 
 Name: vterm
 Description: Abstract VT220/Xterm/ECMA-48 emulation library
-Version: 0.1.4
+Version: @VERSION@
 Libs: -L${libdir} -lvterm
 Cflags: -I${includedir}

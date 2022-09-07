@@ -29,37 +29,51 @@ static VTermAllocatorFunctions default_allocator = {
 
 VTerm *vterm_new(int rows, int cols)
 {
-  return vterm_new_with_allocator(rows, cols, &default_allocator, NULL);
+  return vterm_build(&(const struct VTermBuilder){
+      .rows = rows,
+      .cols = cols,
+    });
 }
 
 VTerm *vterm_new_with_allocator(int rows, int cols, VTermAllocatorFunctions *funcs, void *allocdata)
 {
+  return vterm_build(&(const struct VTermBuilder){
+      .rows = rows,
+      .cols = cols,
+      .allocator = funcs,
+      .allocdata = allocdata,
+    });
+}
+
+/* A handy macro for defaulting values out of builder fields */
+#define DEFAULT(v, def)  ((v) ? (v) : (def))
+
+VTerm *vterm_build(const struct VTermBuilder *builder)
+{
+  const VTermAllocatorFunctions *allocator = DEFAULT(builder->allocator, &default_allocator);
+
   /* Need to bootstrap using the allocator function directly */
-  VTerm *vt = (*funcs->malloc)(sizeof(VTerm), allocdata);
+  VTerm *vt = (*allocator->malloc)(sizeof(VTerm), builder->allocdata);
 
-  vt->allocator = funcs;
-  vt->allocdata = allocdata;
+  vt->allocator = allocator;
+  vt->allocdata = builder->allocdata;
 
-  vt->rows = rows;
-  vt->cols = cols;
+  vt->rows = builder->rows;
+  vt->cols = builder->cols;
 
   vt->parser.state = NORMAL;
 
   vt->parser.callbacks = NULL;
   vt->parser.cbdata    = NULL;
 
-  vt->parser.strbuffer_len = 64;
-  vt->parser.strbuffer_cur = 0;
-  vt->parser.strbuffer = vterm_allocator_malloc(vt, vt->parser.strbuffer_len);
-
   vt->outfunc = NULL;
   vt->outdata = NULL;
 
-  vt->outbuffer_len = 64;
+  vt->outbuffer_len = DEFAULT(builder->outbuffer_len, 4096);
   vt->outbuffer_cur = 0;
   vt->outbuffer = vterm_allocator_malloc(vt, vt->outbuffer_len);
 
-  vt->tmpbuffer_len = 64;
+  vt->tmpbuffer_len = DEFAULT(builder->tmpbuffer_len, 4096);
   vt->tmpbuffer = vterm_allocator_malloc(vt, vt->tmpbuffer_len);
 
   return vt;
@@ -73,7 +87,6 @@ void vterm_free(VTerm *vt)
   if(vt->state)
     vterm_state_free(vt->state);
 
-  vterm_allocator_free(vt, vt->parser.strbuffer);
   vterm_allocator_free(vt, vt->outbuffer);
   vterm_allocator_free(vt, vt->tmpbuffer);
 
@@ -100,6 +113,9 @@ void vterm_get_size(const VTerm *vt, int *rowsp, int *colsp)
 
 void vterm_set_size(VTerm *vt, int rows, int cols)
 {
+  if(rows < 1 || cols < 1)
+    return;
+
   vt->rows = rows;
   vt->cols = cols;
 
@@ -179,15 +195,21 @@ INTERNAL void vterm_push_output_sprintf_ctrl(VTerm *vt, unsigned char ctrl, cons
   vterm_push_output_bytes(vt, vt->tmpbuffer, cur);
 }
 
-INTERNAL void vterm_push_output_sprintf_dcs(VTerm *vt, const char *fmt, ...)
+INTERNAL void vterm_push_output_sprintf_str(VTerm *vt, unsigned char ctrl, bool term, const char *fmt, ...)
 {
   size_t cur = 0;
 
-  cur += snprintf(vt->tmpbuffer + cur, vt->tmpbuffer_len - cur,
-      vt->mode.ctrl8bit ? "\x90" : ESC_S "P"); // DCS
+  if(ctrl) {
+    if(ctrl >= 0x80 && !vt->mode.ctrl8bit)
+      cur = snprintf(vt->tmpbuffer, vt->tmpbuffer_len,
+          ESC_S "%c", ctrl - 0x40);
+    else
+      cur = snprintf(vt->tmpbuffer, vt->tmpbuffer_len,
+          "%c", ctrl);
 
-  if(cur >= vt->tmpbuffer_len)
-    return;
+    if(cur >= vt->tmpbuffer_len)
+      return;
+  }
 
   va_list args;
   va_start(args, fmt);
@@ -198,11 +220,13 @@ INTERNAL void vterm_push_output_sprintf_dcs(VTerm *vt, const char *fmt, ...)
   if(cur >= vt->tmpbuffer_len)
     return;
 
-  cur += snprintf(vt->tmpbuffer + cur, vt->tmpbuffer_len - cur,
-      vt->mode.ctrl8bit ? "\x9C" : ESC_S "\\"); // ST
+  if(term) {
+    cur += snprintf(vt->tmpbuffer + cur, vt->tmpbuffer_len - cur,
+        vt->mode.ctrl8bit ? "\x9C" : ESC_S "\\"); // ST
 
-  if(cur >= vt->tmpbuffer_len)
-    return;
+    if(cur >= vt->tmpbuffer_len)
+      return;
+  }
 
   vterm_push_output_bytes(vt, vt->tmpbuffer, cur);
 }
@@ -245,10 +269,13 @@ VTermValueType vterm_get_attr_type(VTermAttr attr)
     case VTERM_ATTR_ITALIC:     return VTERM_VALUETYPE_BOOL;
     case VTERM_ATTR_BLINK:      return VTERM_VALUETYPE_BOOL;
     case VTERM_ATTR_REVERSE:    return VTERM_VALUETYPE_BOOL;
+    case VTERM_ATTR_CONCEAL:    return VTERM_VALUETYPE_BOOL;
     case VTERM_ATTR_STRIKE:     return VTERM_VALUETYPE_BOOL;
     case VTERM_ATTR_FONT:       return VTERM_VALUETYPE_INT;
     case VTERM_ATTR_FOREGROUND: return VTERM_VALUETYPE_COLOR;
     case VTERM_ATTR_BACKGROUND: return VTERM_VALUETYPE_COLOR;
+    case VTERM_ATTR_SMALL:      return VTERM_VALUETYPE_BOOL;
+    case VTERM_ATTR_BASELINE:   return VTERM_VALUETYPE_INT;
 
     case VTERM_N_ATTRS: return 0;
   }

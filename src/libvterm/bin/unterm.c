@@ -10,6 +10,18 @@
 
 #include "../src/utf8.h" // fill_utf8
 
+/*
+ * unterm [OPTIONS] SCRIPTFILE
+ *
+ * Interprets terminal sequences in SCRIPTFILE and outputs the final state of
+ * the terminal buffer at the end.
+ *
+ * OPTIONS:
+ *   -f FORMAT  -- set the output format: ["plain" | "sgr"]
+ *   -l LINES,
+ *   -c COLS    -- set the size of the emulated terminal
+ */
+
 #define streq(a,b) (!strcmp(a,b))
 
 static VTerm *vt;
@@ -96,6 +108,11 @@ static void dump_cell(const VTermScreenCell *cell, const VTermScreenCell *prevce
         if(prevcell->attrs.reverse && !cell->attrs.reverse)
           sgr[sgri++] = 27;
 
+        if(!prevcell->attrs.conceal && cell->attrs.conceal)
+          sgr[sgri++] = 8;
+        if(prevcell->attrs.conceal && !cell->attrs.conceal)
+          sgr[sgri++] = 28;
+
         if(!prevcell->attrs.strike && cell->attrs.strike)
           sgr[sgri++] = 9;
         if(prevcell->attrs.strike && !cell->attrs.strike)
@@ -143,7 +160,7 @@ static void dump_eol(const VTermScreenCell *prevcell)
     case FORMAT_SGR:
       if(prevcell->attrs.bold || prevcell->attrs.underline || prevcell->attrs.italic ||
          prevcell->attrs.blink || prevcell->attrs.reverse || prevcell->attrs.strike ||
-         prevcell->attrs.font)
+         prevcell->attrs.conceal || prevcell->attrs.font)
         printf("\x1b[m");
       break;
   }

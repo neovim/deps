@@ -170,12 +170,15 @@ INTERNAL void vterm_state_newpen(VTermState *state)
 INTERNAL void vterm_state_resetpen(VTermState *state)
 {
   state->pen.bold = 0;      setpenattr_bool(state, VTERM_ATTR_BOLD, 0);
-  state->pen.underline = 0; setpenattr_int( state, VTERM_ATTR_UNDERLINE, 0);
+  state->pen.underline = 0; setpenattr_int (state, VTERM_ATTR_UNDERLINE, 0);
   state->pen.italic = 0;    setpenattr_bool(state, VTERM_ATTR_ITALIC, 0);
   state->pen.blink = 0;     setpenattr_bool(state, VTERM_ATTR_BLINK, 0);
   state->pen.reverse = 0;   setpenattr_bool(state, VTERM_ATTR_REVERSE, 0);
+  state->pen.conceal = 0;   setpenattr_bool(state, VTERM_ATTR_CONCEAL, 0);
   state->pen.strike = 0;    setpenattr_bool(state, VTERM_ATTR_STRIKE, 0);
-  state->pen.font = 0;      setpenattr_int( state, VTERM_ATTR_FONT, 0);
+  state->pen.font = 0;      setpenattr_int (state, VTERM_ATTR_FONT, 0);
+  state->pen.small = 0;     setpenattr_bool(state, VTERM_ATTR_SMALL, 0);
+  state->pen.baseline = 0;  setpenattr_int (state, VTERM_ATTR_BASELINE, 0);
 
   state->pen.fg = state->default_fg;  setpenattr_col(state, VTERM_ATTR_FOREGROUND, state->default_fg);
   state->pen.bg = state->default_bg;  setpenattr_col(state, VTERM_ATTR_BACKGROUND, state->default_bg);
@@ -189,13 +192,17 @@ INTERNAL void vterm_state_savepen(VTermState *state, int save)
   else {
     state->pen = state->saved.pen;
 
-    setpenattr_bool(state, VTERM_ATTR_BOLD,       state->pen.bold);
-    setpenattr_int( state, VTERM_ATTR_UNDERLINE,  state->pen.underline);
-    setpenattr_bool(state, VTERM_ATTR_ITALIC,     state->pen.italic);
-    setpenattr_bool(state, VTERM_ATTR_BLINK,      state->pen.blink);
-    setpenattr_bool(state, VTERM_ATTR_REVERSE,    state->pen.reverse);
-    setpenattr_bool(state, VTERM_ATTR_STRIKE,     state->pen.strike);
-    setpenattr_int( state, VTERM_ATTR_FONT,       state->pen.font);
+    setpenattr_bool(state, VTERM_ATTR_BOLD,      state->pen.bold);
+    setpenattr_int (state, VTERM_ATTR_UNDERLINE, state->pen.underline);
+    setpenattr_bool(state, VTERM_ATTR_ITALIC,    state->pen.italic);
+    setpenattr_bool(state, VTERM_ATTR_BLINK,     state->pen.blink);
+    setpenattr_bool(state, VTERM_ATTR_REVERSE,   state->pen.reverse);
+    setpenattr_bool(state, VTERM_ATTR_CONCEAL,   state->pen.conceal);
+    setpenattr_bool(state, VTERM_ATTR_STRIKE,    state->pen.strike);
+    setpenattr_int (state, VTERM_ATTR_FONT,      state->pen.font);
+    setpenattr_bool(state, VTERM_ATTR_SMALL,     state->pen.small);
+    setpenattr_int (state, VTERM_ATTR_BASELINE,  state->pen.baseline);
+
     setpenattr_col( state, VTERM_ATTR_FOREGROUND, state->pen.fg);
     setpenattr_col( state, VTERM_ATTR_BACKGROUND, state->pen.bg);
   }
@@ -329,6 +336,11 @@ INTERNAL void vterm_state_setpen(VTermState *state, const long args[], int argco
       setpenattr_bool(state, VTERM_ATTR_REVERSE, 1);
       break;
 
+    case 8: // Conceal on
+      state->pen.conceal = 1;
+      setpenattr_bool(state, VTERM_ATTR_CONCEAL, 1);
+      break;
+
     case 9: // Strikethrough on
       state->pen.strike = 1;
       setpenattr_bool(state, VTERM_ATTR_STRIKE, 1);
@@ -368,6 +380,11 @@ INTERNAL void vterm_state_setpen(VTermState *state, const long args[], int argco
     case 27: // Reverse off
       state->pen.reverse = 0;
       setpenattr_bool(state, VTERM_ATTR_REVERSE, 0);
+      break;
+
+    case 28: // Conceal off (Reveal)
+      state->pen.conceal = 0;
+      setpenattr_bool(state, VTERM_ATTR_CONCEAL, 0);
       break;
 
     case 29: // Strikethrough off
@@ -413,6 +430,18 @@ INTERNAL void vterm_state_setpen(VTermState *state, const long args[], int argco
       setpenattr_col(state, VTERM_ATTR_BACKGROUND, state->pen.bg);
       break;
 
+    case 73: // Superscript
+    case 74: // Subscript
+    case 75: // Superscript/subscript off
+      state->pen.small = (arg != 75);
+      state->pen.baseline =
+        (arg == 73) ? VTERM_BASELINE_RAISE :
+        (arg == 74) ? VTERM_BASELINE_LOWER :
+                      VTERM_BASELINE_NORMAL;
+      setpenattr_bool(state, VTERM_ATTR_SMALL,    state->pen.small);
+      setpenattr_int (state, VTERM_ATTR_BASELINE, state->pen.baseline);
+      break;
+
     case 90: case 91: case 92: case 93:
     case 94: case 95: case 96: case 97: // Foreground colour high-intensity palette
       value = CSI_ARG(args[argi]) - 90 + 8;
@@ -431,7 +460,7 @@ INTERNAL void vterm_state_setpen(VTermState *state, const long args[], int argco
     }
 
     if(!done)
-      DEBUG_LOG("libvterm: Unhandled CSI SGR %lu\n", arg);
+      DEBUG_LOG("libvterm: Unhandled CSI SGR %ld\n", arg);
 
     while(CSI_ARG_HAS_MORE(args[argi++]));
   }
@@ -491,6 +520,9 @@ INTERNAL int vterm_state_getpen(VTermState *state, long args[], int argcount)
   if(state->pen.reverse)
     args[argi++] = 7;
 
+  if(state->pen.conceal)
+    args[argi++] = 8;
+
   if(state->pen.strike)
     args[argi++] = 9;
 
@@ -503,6 +535,13 @@ INTERNAL int vterm_state_getpen(VTermState *state, long args[], int argcount)
   argi = vterm_state_getpen_color(&state->pen.fg, argi, args, true);
 
   argi = vterm_state_getpen_color(&state->pen.bg, argi, args, false);
+
+  if(state->pen.small) {
+    if(state->pen.baseline == VTERM_BASELINE_RAISE)
+      args[argi++] = 73;
+    else if(state->pen.baseline == VTERM_BASELINE_LOWER)
+      args[argi++] = 74;
+  }
 
   return argi;
 }
@@ -530,6 +569,10 @@ int vterm_state_get_penattr(const VTermState *state, VTermAttr attr, VTermValue 
     val->boolean = state->pen.reverse;
     return 1;
 
+  case VTERM_ATTR_CONCEAL:
+    val->boolean = state->pen.conceal;
+    return 1;
+
   case VTERM_ATTR_STRIKE:
     val->boolean = state->pen.strike;
     return 1;
@@ -544,6 +587,14 @@ int vterm_state_get_penattr(const VTermState *state, VTermAttr attr, VTermValue 
 
   case VTERM_ATTR_BACKGROUND:
     val->color = state->pen.bg;
+    return 1;
+
+  case VTERM_ATTR_SMALL:
+    val->boolean = state->pen.small;
+    return 1;
+
+  case VTERM_ATTR_BASELINE:
+    val->number = state->pen.baseline;
     return 1;
 
   case VTERM_N_ATTRS:

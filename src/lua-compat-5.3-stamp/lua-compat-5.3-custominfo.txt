@@ -3,7 +3,7 @@
 # No other meaning or use of this file is supported.
 
 method=custom
-command=/usr/local/bin/cmake;-DPREFIX=/home/runner/work/deps/deps/neovim/deps/build;-DDOWNLOAD_DIR=/home/runner/work/deps/deps/neovim/deps/build/downloads/lua-compat-5.3;-DURL=https://github.com/keplerproject/lua-compat-5.3/archive/v0.9.tar.gz;-DEXPECTED_SHA256=ad05540d2d96a48725bb79a1def35cf6652a4e2ec26376e2617c8ce2baa6f416;-DTARGET=lua-compat-5.3;-DUSE_EXISTING_SRC_DIR=OFF;-P;/home/runner/work/deps/deps/neovim/third-party/cmake/DownloadAndExtractFile.cmake
+command=/usr/local/bin/cmake;-DPREFIX=/home/runner/work/deps/deps/neovim/deps/build;-DDOWNLOAD_DIR=/home/runner/work/deps/deps/neovim/deps/build/downloads/lua-compat-5.3;-DURL=https://github.com/keplerproject/lua-compat-5.3/archive/v0.9.tar.gz;-DEXPECTED_SHA256=ad05540d2d96a48725bb79a1def35cf6652a4e2ec26376e2617c8ce2baa6f416;-DTARGET=lua-compat-5.3;-DUSE_EXISTING_SRC_DIR=OFF;-P;/home/runner/work/deps/deps/neovim/cmake.deps/cmake/DownloadAndExtractFile.cmake
 source_dir=/home/runner/work/deps/deps/neovim/deps/build/src/lua-compat-5.3
 work_dir=/home/runner/work/deps/deps/neovim/deps/build/downloads/lua-compat-5.3
 

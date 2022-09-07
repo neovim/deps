@@ -12,10 +12,15 @@ extern "C" {
 #include "vterm_keycodes.h"
 
 #define VTERM_VERSION_MAJOR 0
-#define VTERM_VERSION_MINOR 1
+#define VTERM_VERSION_MINOR 3
 
 #define VTERM_CHECK_VERSION \
         vterm_check_version(VTERM_VERSION_MAJOR, VTERM_VERSION_MINOR)
+
+/* Any cell can contain at most one basic printing character and 5 combining
+ * characters. This number could be changed but will be ABI-incompatible if
+ * you do */
+#define VTERM_MAX_CHARS_PER_CELL 6
 
 typedef struct VTerm VTerm;
 typedef struct VTermState VTermState;
@@ -211,10 +216,17 @@ typedef enum {
   VTERM_N_VALUETYPES
 } VTermValueType;
 
+typedef struct {
+  const char *str;
+  size_t      len : 30;
+  bool        initial : 1;
+  bool        final : 1;
+} VTermStringFragment;
+
 typedef union {
   int boolean;
   int number;
-  char *string;
+  VTermStringFragment string;
   VTermColor color;
 } VTermValue;
 
@@ -225,10 +237,13 @@ typedef enum {
   VTERM_ATTR_ITALIC,     // bool:   3, 23
   VTERM_ATTR_BLINK,      // bool:   5, 25
   VTERM_ATTR_REVERSE,    // bool:   7, 27
+  VTERM_ATTR_CONCEAL,    // bool:   8, 28
   VTERM_ATTR_STRIKE,     // bool:   9, 29
   VTERM_ATTR_FONT,       // number: 10-19
   VTERM_ATTR_FOREGROUND, // color:  30-39 90-97
   VTERM_ATTR_BACKGROUND, // color:  40-49 100-107
+  VTERM_ATTR_SMALL,      // bool:   73, 74, 75
+  VTERM_ATTR_BASELINE,   // number: 73, 74, 75
 
   VTERM_N_ATTRS
 } VTermAttr;
@@ -264,6 +279,14 @@ enum {
   VTERM_N_PROP_MOUSES
 };
 
+typedef enum {
+  VTERM_SELECTION_CLIPBOARD = (1<<0),
+  VTERM_SELECTION_PRIMARY   = (1<<1),
+  VTERM_SELECTION_SECONDARY = (1<<2),
+  VTERM_SELECTION_SELECT    = (1<<3),
+  VTERM_SELECTION_CUT0      = (1<<4), /* also CUT1 .. CUT7 by bitshifting */
+} VTermSelectionMask;
+
 typedef struct {
   const uint32_t *chars;
   int             width;
@@ -275,7 +298,18 @@ typedef struct {
 typedef struct {
   unsigned int    doublewidth:1;     /* DECDWL or DECDHL line */
   unsigned int    doubleheight:2;    /* DECDHL line (1=top 2=bottom) */
+  unsigned int    continuation:1;    /* Line is a flow continuation of the previous */
 } VTermLineInfo;
+
+/* Copies of VTermState fields that the 'resize' callback might have reason to
+ * edit. 'resize' callback gets total control of these fields and may
+ * free-and-reallocate them if required. They will be copied back from the
+ * struct after the callback has returned.
+ */
+typedef struct {
+  VTermPos pos;                /* current cursor position */
+  VTermLineInfo *lineinfos[2]; /* [1] may be NULL */
+} VTermStateFields;
 
 typedef struct {
   /* libvterm relies on this memory to be zeroed out before it is returned
@@ -286,8 +320,26 @@ typedef struct {
 
 void vterm_check_version(int major, int minor);
 
+struct VTermBuilder {
+  int ver; /* currently unused but reserved for some sort of ABI version flag */
+
+  int rows, cols;
+
+  const VTermAllocatorFunctions *allocator;
+  void *allocdata;
+
+  /* Override default sizes for various structures */
+  size_t outbuffer_len;  /* default: 4096 */
+  size_t tmpbuffer_len;  /* default: 4096 */
+};
+
+VTerm *vterm_build(const struct VTermBuilder *builder);
+
+/* A convenient shortcut for default cases */
 VTerm *vterm_new(int rows, int cols);
+/* This shortcuts are generally discouraged in favour of just using vterm_build() */
 VTerm *vterm_new_with_allocator(int rows, int cols, VTermAllocatorFunctions *funcs, void *allocdata);
+
 void   vterm_free(VTerm* vt);
 
 void vterm_get_size(const VTerm *vt, int *rowsp, int *colsp);
@@ -350,8 +402,11 @@ typedef struct {
   int (*control)(unsigned char control, void *user);
   int (*escape)(const char *bytes, size_t len, void *user);
   int (*csi)(const char *leader, const long args[], int argcount, const char *intermed, char command, void *user);
-  int (*osc)(const char *command, size_t cmdlen, void *user);
-  int (*dcs)(const char *command, size_t cmdlen, void *user);
+  int (*osc)(int command, VTermStringFragment frag, void *user);
+  int (*dcs)(const char *command, size_t commandlen, VTermStringFragment frag, void *user);
+  int (*apc)(VTermStringFragment frag, void *user);
+  int (*pm)(VTermStringFragment frag, void *user);
+  int (*sos)(VTermStringFragment frag, void *user);
   int (*resize)(int rows, int cols, void *user);
 } VTermParserCallbacks;
 
@@ -372,17 +427,32 @@ typedef struct {
   int (*setpenattr)(VTermAttr attr, VTermValue *val, void *user);
   int (*settermprop)(VTermProp prop, VTermValue *val, void *user);
   int (*bell)(void *user);
-  int (*resize)(int rows, int cols, VTermPos *delta, void *user);
+  int (*resize)(int rows, int cols, VTermStateFields *fields, void *user);
   int (*setlineinfo)(int row, const VTermLineInfo *newinfo, const VTermLineInfo *oldinfo, void *user);
+  int (*sb_clear)(void *user);
 } VTermStateCallbacks;
+
+typedef struct {
+  int (*control)(unsigned char control, void *user);
+  int (*csi)(const char *leader, const long args[], int argcount, const char *intermed, char command, void *user);
+  int (*osc)(int command, VTermStringFragment frag, void *user);
+  int (*dcs)(const char *command, size_t commandlen, VTermStringFragment frag, void *user);
+  int (*apc)(VTermStringFragment frag, void *user);
+  int (*pm)(VTermStringFragment frag, void *user);
+  int (*sos)(VTermStringFragment frag, void *user);
+} VTermStateFallbacks;
+
+typedef struct {
+  int (*set)(VTermSelectionMask mask, VTermStringFragment frag, void *user);
+  int (*query)(VTermSelectionMask mask, void *user);
+} VTermSelectionCallbacks;
 
 VTermState *vterm_obtain_state(VTerm *vt);
 
 void  vterm_state_set_callbacks(VTermState *state, const VTermStateCallbacks *callbacks, void *user);
 void *vterm_state_get_cbdata(VTermState *state);
 
-// Only invokes control, csi, osc, dcs
-void  vterm_state_set_unrecognised_fallbacks(VTermState *state, const VTermParserCallbacks *fallbacks, void *user);
+void  vterm_state_set_unrecognised_fallbacks(VTermState *state, const VTermStateFallbacks *fallbacks, void *user);
 void *vterm_state_get_unrecognised_fbdata(VTermState *state);
 
 void vterm_state_reset(VTermState *state, int hard);
@@ -410,6 +480,11 @@ const VTermLineInfo *vterm_state_get_lineinfo(const VTermState *state, int row);
  */
 void vterm_state_convert_color_to_rgb(const VTermState *state, VTermColor *col);
 
+void vterm_state_set_selection_callbacks(VTermState *state, const VTermSelectionCallbacks *callbacks, void *user,
+    char *buffer, size_t buflen);
+
+void vterm_state_send_selection(VTermState *state, VTermSelectionMask mask, VTermStringFragment frag);
+
 // ------------
 // Screen layer
 // ------------
@@ -420,10 +495,13 @@ typedef struct {
     unsigned int italic    : 1;
     unsigned int blink     : 1;
     unsigned int reverse   : 1;
+    unsigned int conceal   : 1;
     unsigned int strike    : 1;
     unsigned int font      : 4; /* 0 to 9 */
     unsigned int dwl       : 1; /* On a DECDWL or DECDHL line */
     unsigned int dhl       : 2; /* On a DECDHL line (1=top 2=bottom) */
+    unsigned int small     : 1;
+    unsigned int baseline  : 2;
 } VTermScreenCellAttrs;
 
 enum {
@@ -433,8 +511,13 @@ enum {
   VTERM_UNDERLINE_CURLY,
 };
 
+enum {
+  VTERM_BASELINE_NORMAL,
+  VTERM_BASELINE_RAISE,
+  VTERM_BASELINE_LOWER,
+};
+
 typedef struct {
-#define VTERM_MAX_CHARS_PER_CELL 6
   uint32_t chars[VTERM_MAX_CHARS_PER_CELL];
   char     width;
   VTermScreenCellAttrs attrs;
@@ -450,6 +533,7 @@ typedef struct {
   int (*resize)(int rows, int cols, void *user);
   int (*sb_pushline)(int cols, const VTermScreenCell *cells, void *user);
   int (*sb_popline)(int cols, VTermScreenCell *cells, void *user);
+  int (*sb_clear)(void* user);
 } VTermScreenCallbacks;
 
 VTermScreen *vterm_obtain_screen(VTerm *vt);
@@ -457,9 +541,10 @@ VTermScreen *vterm_obtain_screen(VTerm *vt);
 void  vterm_screen_set_callbacks(VTermScreen *screen, const VTermScreenCallbacks *callbacks, void *user);
 void *vterm_screen_get_cbdata(VTermScreen *screen);
 
-// Only invokes control, csi, osc, dcs
-void  vterm_screen_set_unrecognised_fallbacks(VTermScreen *screen, const VTermParserCallbacks *fallbacks, void *user);
+void  vterm_screen_set_unrecognised_fallbacks(VTermScreen *screen, const VTermStateFallbacks *fallbacks, void *user);
 void *vterm_screen_get_unrecognised_fbdata(VTermScreen *screen);
+
+void vterm_screen_set_reflow(VTermScreen *screen, bool reflow);
 
 void vterm_screen_enable_altscreen(VTermScreen *screen, int altscreen);
 
@@ -491,8 +576,11 @@ typedef enum {
   VTERM_ATTR_FONT_MASK       = 1 << 6,
   VTERM_ATTR_FOREGROUND_MASK = 1 << 7,
   VTERM_ATTR_BACKGROUND_MASK = 1 << 8,
+  VTERM_ATTR_CONCEAL_MASK    = 1 << 9,
+  VTERM_ATTR_SMALL_MASK      = 1 << 10,
+  VTERM_ATTR_BASELINE_MASK   = 1 << 11,
 
-  VTERM_ALL_ATTRS_MASK = (1 << 9) - 1
+  VTERM_ALL_ATTRS_MASK = (1 << 12) - 1
 } VTermAttrMask;
 
 int vterm_screen_get_attrs_extent(const VTermScreen *screen, VTermRect *extent, VTermPos pos, VTermAttrMask attrs);
