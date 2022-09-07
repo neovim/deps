@@ -36,7 +36,7 @@ jobs:
           cd "$NEOVIM_DIR"
           mkdir deps
           cd deps
-          cmake -G Ninja -DUSE_BUNDLED_BUSTED=OFF "${NEOVIM_DIR}/third-party/"
+          cmake -G Ninja -DUSE_BUNDLED_BUSTED=OFF "${NEOVIM_DIR}/cmake.deps/"
           ninja
 
       - name: Cleanup src/
