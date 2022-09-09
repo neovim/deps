@@ -92,11 +92,27 @@
           "named": true
         },
         {
+          "type": "edit_statement",
+          "named": true
+        },
+        {
+          "type": "enew_statement",
+          "named": true
+        },
+        {
+          "type": "ex_statement",
+          "named": true
+        },
+        {
           "type": "execute_statement",
           "named": true
         },
         {
           "type": "filetype_statement",
+          "named": true
+        },
+        {
+          "type": "find_statement",
           "named": true
         },
         {
@@ -236,6 +252,14 @@
           "named": true
         },
         {
+          "type": "view_statement",
+          "named": true
+        },
+        {
+          "type": "visual_statement",
+          "named": true
+        },
+        {
           "type": "while_loop",
           "named": true
         },
@@ -279,11 +303,6 @@
         }
       ]
     }
-  },
-  {
-    "type": "at",
-    "named": true,
-    "fields": {}
   },
   {
     "type": "au_event_list",
@@ -431,11 +450,27 @@
             "named": true
           },
           {
+            "type": "edit_statement",
+            "named": true
+          },
+          {
+            "type": "enew_statement",
+            "named": true
+          },
+          {
+            "type": "ex_statement",
+            "named": true
+          },
+          {
             "type": "execute_statement",
             "named": true
           },
           {
             "type": "filetype_statement",
+            "named": true
+          },
+          {
+            "type": "find_statement",
             "named": true
           },
           {
@@ -572,6 +607,14 @@
           },
           {
             "type": "vertical_statement",
+            "named": true
+          },
+          {
+            "type": "view_statement",
+            "named": true
+          },
+          {
+            "type": "visual_statement",
             "named": true
           },
           {
@@ -956,11 +999,27 @@
           "named": true
         },
         {
+          "type": "edit_statement",
+          "named": true
+        },
+        {
+          "type": "enew_statement",
+          "named": true
+        },
+        {
+          "type": "ex_statement",
+          "named": true
+        },
+        {
           "type": "execute_statement",
           "named": true
         },
         {
           "type": "filetype_statement",
+          "named": true
+        },
+        {
+          "type": "find_statement",
           "named": true
         },
         {
@@ -1097,6 +1156,14 @@
         },
         {
           "type": "vertical_statement",
+          "named": true
+        },
+        {
+          "type": "view_statement",
+          "named": true
+        },
+        {
+          "type": "visual_statement",
           "named": true
         },
         {
@@ -1419,11 +1486,27 @@
           "named": true
         },
         {
+          "type": "edit_statement",
+          "named": true
+        },
+        {
+          "type": "enew_statement",
+          "named": true
+        },
+        {
+          "type": "ex_statement",
+          "named": true
+        },
+        {
           "type": "execute_statement",
           "named": true
         },
         {
           "type": "filetype_statement",
+          "named": true
+        },
+        {
+          "type": "find_statement",
           "named": true
         },
         {
@@ -1560,6 +1643,14 @@
         },
         {
           "type": "vertical_statement",
+          "named": true
+        },
+        {
+          "type": "view_statement",
+          "named": true
+        },
+        {
+          "type": "visual_statement",
           "named": true
         },
         {
@@ -1666,11 +1757,27 @@
           "named": true
         },
         {
+          "type": "edit_statement",
+          "named": true
+        },
+        {
+          "type": "enew_statement",
+          "named": true
+        },
+        {
+          "type": "ex_statement",
+          "named": true
+        },
+        {
           "type": "execute_statement",
           "named": true
         },
         {
           "type": "filetype_statement",
+          "named": true
+        },
+        {
+          "type": "find_statement",
           "named": true
         },
         {
@@ -1807,6 +1914,14 @@
         },
         {
           "type": "vertical_statement",
+          "named": true
+        },
+        {
+          "type": "view_statement",
+          "named": true
+        },
+        {
+          "type": "visual_statement",
           "named": true
         },
         {
@@ -2073,6 +2188,11 @@
     }
   },
   {
+    "type": "color",
+    "named": true,
+    "fields": {}
+  },
+  {
     "type": "colorscheme_statement",
     "named": true,
     "fields": {},
@@ -2112,247 +2232,11 @@
       "required": false,
       "types": [
         {
-          "type": "aboveleft_statement",
-          "named": true
-        },
-        {
-          "type": "augroup_statement",
-          "named": true
-        },
-        {
-          "type": "autocmd_statement",
-          "named": true
-        },
-        {
           "type": "bang",
           "named": true
         },
         {
-          "type": "bang_filter_statement",
-          "named": true
-        },
-        {
-          "type": "belowright_statement",
-          "named": true
-        },
-        {
-          "type": "botright_statement",
-          "named": true
-        },
-        {
-          "type": "break_statement",
-          "named": true
-        },
-        {
-          "type": "call_statement",
-          "named": true
-        },
-        {
-          "type": "cnext_statement",
-          "named": true
-        },
-        {
-          "type": "colorscheme_statement",
-          "named": true
-        },
-        {
-          "type": "comclear_statement",
-          "named": true
-        },
-        {
           "type": "command_argument",
-          "named": true
-        },
-        {
-          "type": "command_statement",
-          "named": true
-        },
-        {
-          "type": "const_statement",
-          "named": true
-        },
-        {
-          "type": "continue_statement",
-          "named": true
-        },
-        {
-          "type": "cprevious_statement",
-          "named": true
-        },
-        {
-          "type": "delcommand_statement",
-          "named": true
-        },
-        {
-          "type": "echo_statement",
-          "named": true
-        },
-        {
-          "type": "echoerr_statement",
-          "named": true
-        },
-        {
-          "type": "echohl_statement",
-          "named": true
-        },
-        {
-          "type": "echomsg_statement",
-          "named": true
-        },
-        {
-          "type": "echon_statement",
-          "named": true
-        },
-        {
-          "type": "execute_statement",
-          "named": true
-        },
-        {
-          "type": "filetype_statement",
-          "named": true
-        },
-        {
-          "type": "for_loop",
-          "named": true
-        },
-        {
-          "type": "function_definition",
-          "named": true
-        },
-        {
-          "type": "global_statement",
-          "named": true
-        },
-        {
-          "type": "highlight_statement",
-          "named": true
-        },
-        {
-          "type": "if_statement",
-          "named": true
-        },
-        {
-          "type": "let_statement",
-          "named": true
-        },
-        {
-          "type": "lua_statement",
-          "named": true
-        },
-        {
-          "type": "map_statement",
-          "named": true
-        },
-        {
-          "type": "normal_statement",
-          "named": true
-        },
-        {
-          "type": "options_statement",
-          "named": true
-        },
-        {
-          "type": "perl_statement",
-          "named": true
-        },
-        {
-          "type": "python_statement",
-          "named": true
-        },
-        {
-          "type": "range_statement",
-          "named": true
-        },
-        {
-          "type": "register_statement",
-          "named": true
-        },
-        {
-          "type": "return_statement",
-          "named": true
-        },
-        {
-          "type": "ruby_statement",
-          "named": true
-        },
-        {
-          "type": "runtime_statement",
-          "named": true
-        },
-        {
-          "type": "scriptencoding_statement",
-          "named": true
-        },
-        {
-          "type": "set_statement",
-          "named": true
-        },
-        {
-          "type": "setfiletype_statement",
-          "named": true
-        },
-        {
-          "type": "setlocal_statement",
-          "named": true
-        },
-        {
-          "type": "sign_statement",
-          "named": true
-        },
-        {
-          "type": "silent_statement",
-          "named": true
-        },
-        {
-          "type": "source_statement",
-          "named": true
-        },
-        {
-          "type": "startinsert_statement",
-          "named": true
-        },
-        {
-          "type": "stopinsert_statement",
-          "named": true
-        },
-        {
-          "type": "syntax_statement",
-          "named": true
-        },
-        {
-          "type": "throw_statement",
-          "named": true
-        },
-        {
-          "type": "topleft_statement",
-          "named": true
-        },
-        {
-          "type": "try_statement",
-          "named": true
-        },
-        {
-          "type": "unknown_builtin_statement",
-          "named": true
-        },
-        {
-          "type": "unlet_statement",
-          "named": true
-        },
-        {
-          "type": "user_command",
-          "named": true
-        },
-        {
-          "type": "vertical_statement",
-          "named": true
-        },
-        {
-          "type": "while_loop",
-          "named": true
-        },
-        {
-          "type": "wincmd_statement",
           "named": true
         }
       ]
@@ -3463,6 +3347,37 @@
     }
   },
   {
+    "type": "edit_statement",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "bang",
+          "named": true
+        },
+        {
+          "type": "filename",
+          "named": true
+        },
+        {
+          "type": "integer_literal",
+          "named": true
+        },
+        {
+          "type": "plus_cmd",
+          "named": true
+        },
+        {
+          "type": "plus_plus_opt",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
     "type": "else_statement",
     "named": true,
     "fields": {},
@@ -3597,6 +3512,21 @@
     "fields": {}
   },
   {
+    "type": "enew_statement",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": false,
+      "required": false,
+      "types": [
+        {
+          "type": "bang",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
     "type": "env_variable",
     "named": true,
     "fields": {},
@@ -3606,6 +3536,29 @@
       "types": [
         {
           "type": "identifier",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "ex_statement",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "filename",
+          "named": true
+        },
+        {
+          "type": "plus_cmd",
+          "named": true
+        },
+        {
+          "type": "plus_plus_opt",
           "named": true
         }
       ]
@@ -3889,6 +3842,38 @@
         }
       ]
     }
+  },
+  {
+    "type": "find_statement",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "bang",
+          "named": true
+        },
+        {
+          "type": "filename",
+          "named": true
+        },
+        {
+          "type": "plus_cmd",
+          "named": true
+        },
+        {
+          "type": "plus_plus_opt",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "font",
+    "named": true,
+    "fields": {}
   },
   {
     "type": "for_loop",
@@ -4192,11 +4177,27 @@
           "named": true
         },
         {
+          "type": "edit_statement",
+          "named": true
+        },
+        {
+          "type": "enew_statement",
+          "named": true
+        },
+        {
+          "type": "ex_statement",
+          "named": true
+        },
+        {
           "type": "execute_statement",
           "named": true
         },
         {
           "type": "filetype_statement",
+          "named": true
+        },
+        {
+          "type": "find_statement",
           "named": true
         },
         {
@@ -4340,6 +4341,14 @@
           "named": true
         },
         {
+          "type": "view_statement",
+          "named": true
+        },
+        {
+          "type": "visual_statement",
+          "named": true
+        },
+        {
           "type": "while_loop",
           "named": true
         },
@@ -4434,6 +4443,10 @@
         "required": true,
         "types": [
           {
+            "type": "blend",
+            "named": false
+          },
+          {
             "type": "cterm",
             "named": false
           },
@@ -4472,6 +4485,10 @@
           {
             "type": "stop",
             "named": false
+          },
+          {
+            "type": "term",
+            "named": false
           }
         ]
       },
@@ -4479,10 +4496,6 @@
         "multiple": true,
         "required": false,
         "types": [
-          {
-            "type": "'",
-            "named": false
-          },
           {
             "type": ",",
             "named": false
@@ -4496,28 +4509,20 @@
             "named": false
           },
           {
-            "type": "NONE",
-            "named": false
-          },
-          {
-            "type": "background",
-            "named": false
-          },
-          {
-            "type": "bg",
-            "named": false
-          },
-          {
             "type": "bold",
             "named": false
           },
           {
-            "type": "fg",
-            "named": false
+            "type": "color",
+            "named": true
           },
           {
-            "type": "foreground",
-            "named": false
+            "type": "font",
+            "named": true
+          },
+          {
+            "type": "integer_literal",
+            "named": true
           },
           {
             "type": "inverse",
@@ -4548,6 +4553,18 @@
             "named": false
           },
           {
+            "type": "underdashed",
+            "named": false
+          },
+          {
+            "type": "underdotted",
+            "named": false
+          },
+          {
+            "type": "underdouble",
+            "named": false
+          },
+          {
             "type": "underline",
             "named": false
           }
@@ -4563,10 +4580,6 @@
       "multiple": true,
       "required": true,
       "types": [
-        {
-          "type": "at",
-          "named": true
-        },
         {
           "type": "hl_group",
           "named": true
@@ -5556,11 +5569,27 @@
           "named": true
         },
         {
+          "type": "edit_statement",
+          "named": true
+        },
+        {
+          "type": "enew_statement",
+          "named": true
+        },
+        {
+          "type": "ex_statement",
+          "named": true
+        },
+        {
           "type": "execute_statement",
           "named": true
         },
         {
           "type": "filetype_statement",
+          "named": true
+        },
+        {
+          "type": "find_statement",
           "named": true
         },
         {
@@ -5701,6 +5730,14 @@
         },
         {
           "type": "vertical_statement",
+          "named": true
+        },
+        {
+          "type": "view_statement",
+          "named": true
+        },
+        {
+          "type": "visual_statement",
           "named": true
         },
         {
@@ -6116,6 +6153,103 @@
           "named": true
         }
       ]
+    }
+  },
+  {
+    "type": "plus_cmd",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": false,
+      "required": false,
+      "types": [
+        {
+          "type": "command",
+          "named": true
+        },
+        {
+          "type": "integer_literal",
+          "named": true
+        },
+        {
+          "type": "pattern",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "plus_plus_opt",
+    "named": true,
+    "fields": {
+      "name": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "bad",
+            "named": false
+          },
+          {
+            "type": "bin",
+            "named": false
+          },
+          {
+            "type": "binary",
+            "named": false
+          },
+          {
+            "type": "edit",
+            "named": false
+          },
+          {
+            "type": "enc",
+            "named": false
+          },
+          {
+            "type": "encoding",
+            "named": false
+          },
+          {
+            "type": "ff",
+            "named": false
+          },
+          {
+            "type": "fileformat",
+            "named": false
+          },
+          {
+            "type": "nobin",
+            "named": false
+          },
+          {
+            "type": "nobinary",
+            "named": false
+          }
+        ]
+      },
+      "val": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "drop",
+            "named": false
+          },
+          {
+            "type": "encoding",
+            "named": true
+          },
+          {
+            "type": "file_format",
+            "named": true
+          },
+          {
+            "type": "keep",
+            "named": false
+          }
+        ]
+      }
     }
   },
   {
@@ -6638,11 +6772,27 @@
           "named": true
         },
         {
+          "type": "edit_statement",
+          "named": true
+        },
+        {
+          "type": "enew_statement",
+          "named": true
+        },
+        {
+          "type": "ex_statement",
+          "named": true
+        },
+        {
           "type": "execute_statement",
           "named": true
         },
         {
           "type": "filetype_statement",
+          "named": true
+        },
+        {
+          "type": "find_statement",
           "named": true
         },
         {
@@ -6779,6 +6929,14 @@
         },
         {
           "type": "vertical_statement",
+          "named": true
+        },
+        {
+          "type": "view_statement",
+          "named": true
+        },
+        {
+          "type": "visual_statement",
           "named": true
         },
         {
@@ -7167,11 +7325,27 @@
           "named": true
         },
         {
+          "type": "edit_statement",
+          "named": true
+        },
+        {
+          "type": "enew_statement",
+          "named": true
+        },
+        {
+          "type": "ex_statement",
+          "named": true
+        },
+        {
           "type": "execute_statement",
           "named": true
         },
         {
           "type": "filetype_statement",
+          "named": true
+        },
+        {
+          "type": "find_statement",
           "named": true
         },
         {
@@ -7308,6 +7482,14 @@
         },
         {
           "type": "vertical_statement",
+          "named": true
+        },
+        {
+          "type": "view_statement",
+          "named": true
+        },
+        {
+          "type": "visual_statement",
           "named": true
         },
         {
@@ -7968,10 +8150,6 @@
       "required": false,
       "types": [
         {
-          "type": "at",
-          "named": true
-        },
-        {
           "type": "filename",
           "named": true
         },
@@ -8495,11 +8673,27 @@
           "named": true
         },
         {
+          "type": "edit_statement",
+          "named": true
+        },
+        {
+          "type": "enew_statement",
+          "named": true
+        },
+        {
+          "type": "ex_statement",
+          "named": true
+        },
+        {
           "type": "execute_statement",
           "named": true
         },
         {
           "type": "filetype_statement",
+          "named": true
+        },
+        {
+          "type": "find_statement",
           "named": true
         },
         {
@@ -8636,6 +8830,14 @@
         },
         {
           "type": "vertical_statement",
+          "named": true
+        },
+        {
+          "type": "view_statement",
+          "named": true
+        },
+        {
+          "type": "visual_statement",
           "named": true
         },
         {
@@ -9009,11 +9211,27 @@
           "named": true
         },
         {
+          "type": "edit_statement",
+          "named": true
+        },
+        {
+          "type": "enew_statement",
+          "named": true
+        },
+        {
+          "type": "ex_statement",
+          "named": true
+        },
+        {
           "type": "execute_statement",
           "named": true
         },
         {
           "type": "filetype_statement",
+          "named": true
+        },
+        {
+          "type": "find_statement",
           "named": true
         },
         {
@@ -9153,11 +9371,73 @@
           "named": true
         },
         {
+          "type": "view_statement",
+          "named": true
+        },
+        {
+          "type": "visual_statement",
+          "named": true
+        },
+        {
           "type": "while_loop",
           "named": true
         },
         {
           "type": "wincmd_statement",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "view_statement",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "bang",
+          "named": true
+        },
+        {
+          "type": "filename",
+          "named": true
+        },
+        {
+          "type": "plus_cmd",
+          "named": true
+        },
+        {
+          "type": "plus_plus_opt",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "visual_statement",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "bang",
+          "named": true
+        },
+        {
+          "type": "filename",
+          "named": true
+        },
+        {
+          "type": "plus_cmd",
+          "named": true
+        },
+        {
+          "type": "plus_plus_opt",
           "named": true
         }
       ]
@@ -9374,6 +9654,10 @@
     "named": false
   },
   {
+    "type": "++",
+    "named": false
+  },
+  {
     "type": "++nested",
     "named": false
   },
@@ -9546,10 +9830,6 @@
     "named": false
   },
   {
-    "type": "NONE",
-    "named": false
-  },
-  {
     "type": "OPT",
     "named": false
   },
@@ -9662,6 +9942,10 @@
     "named": false
   },
   {
+    "type": "bad",
+    "named": false
+  },
+  {
     "type": "bang",
     "named": true
   },
@@ -9679,6 +9963,18 @@
   },
   {
     "type": "big5",
+    "named": false
+  },
+  {
+    "type": "bin",
+    "named": false
+  },
+  {
+    "type": "binary",
+    "named": false
+  },
+  {
+    "type": "blend",
     "named": false
   },
   {
@@ -9990,6 +10286,14 @@
     "named": false
   },
   {
+    "type": "dos",
+    "named": false
+  },
+  {
+    "type": "drop",
+    "named": false
+  },
+  {
     "type": "echo",
     "named": false
   },
@@ -10010,6 +10314,10 @@
     "named": false
   },
   {
+    "type": "edit",
+    "named": false
+  },
+  {
     "type": "else",
     "named": false
   },
@@ -10019,6 +10327,14 @@
   },
   {
     "type": "enable",
+    "named": false
+  },
+  {
+    "type": "enc",
+    "named": false
+  },
+  {
+    "type": "encoding",
     "named": false
   },
   {
@@ -10050,6 +10366,10 @@
     "named": false
   },
   {
+    "type": "enew",
+    "named": false
+  },
+  {
     "type": "environment",
     "named": false
   },
@@ -10078,6 +10398,10 @@
     "named": false
   },
   {
+    "type": "ex",
+    "named": false
+  },
+  {
     "type": "excludenl",
     "named": false
   },
@@ -10098,15 +10422,23 @@
     "named": true
   },
   {
+    "type": "ff",
+    "named": false
+  },
+  {
     "type": "fg",
     "named": false
   },
   {
     "type": "file",
-    "named": false
+    "named": true
   },
   {
     "type": "file",
+    "named": false
+  },
+  {
+    "type": "file_format",
     "named": true
   },
   {
@@ -10114,7 +10446,7 @@
     "named": false
   },
   {
-    "type": "filetype",
+    "type": "fileformat",
     "named": false
   },
   {
@@ -10122,7 +10454,15 @@
     "named": true
   },
   {
+    "type": "filetype",
+    "named": false
+  },
+  {
     "type": "finally",
+    "named": false
+  },
+  {
+    "type": "find",
     "named": false
   },
   {
@@ -10282,6 +10622,10 @@
     "named": false
   },
   {
+    "type": "keep",
+    "named": false
+  },
+  {
     "type": "keepend",
     "named": false
   },
@@ -10370,6 +10714,10 @@
     "named": false
   },
   {
+    "type": "mac",
+    "named": false
+  },
+  {
     "type": "macroman",
     "named": false
   },
@@ -10443,6 +10791,14 @@
   },
   {
     "type": "nnoremap",
+    "named": false
+  },
+  {
+    "type": "nobin",
+    "named": false
+  },
+  {
+    "type": "nobinary",
     "named": false
   },
   {
@@ -10714,6 +11070,10 @@
     "named": false
   },
   {
+    "type": "term",
+    "named": false
+  },
+  {
     "type": "text",
     "named": false
   },
@@ -10790,11 +11150,27 @@
     "named": false
   },
   {
+    "type": "underdashed",
+    "named": false
+  },
+  {
+    "type": "underdotted",
+    "named": false
+  },
+  {
+    "type": "underdouble",
+    "named": false
+  },
+  {
     "type": "underline",
     "named": false
   },
   {
     "type": "unicode",
+    "named": false
+  },
+  {
+    "type": "unix",
     "named": false
   },
   {
@@ -10854,7 +11230,15 @@
     "named": false
   },
   {
+    "type": "view",
+    "named": false
+  },
+  {
     "type": "vim",
+    "named": false
+  },
+  {
+    "type": "visual",
     "named": false
   },
   {

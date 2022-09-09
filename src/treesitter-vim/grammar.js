@@ -18,6 +18,70 @@ const MAP_OPTIONS = any_order(
   "<script>"
 );
 
+const FILE_FORMAT = ["dos", "unix", "mac"];
+
+const ENCODING = [
+  "latin1",
+  "iso",
+  "koi8",
+  "koi8",
+  "macroman",
+  "cp437",
+  "cp737",
+  "cp775",
+  "cp850",
+  "cp852",
+  "cp855",
+  "cp857",
+  "cp860",
+  "cp861",
+  "cp862",
+  "cp863",
+  "cp865",
+  "cp866",
+  "cp869",
+  "cp874",
+  "cp1250",
+  "cp1251",
+  "cp1253",
+  "cp1254",
+  "cp1255",
+  "cp1256",
+  "cp1257",
+  "cp1258",
+  "cp932",
+  "euc-jp",
+  "sjis",
+  "cp949",
+  "euc-kr",
+  "cp936",
+  "euc-cn",
+  "cp950",
+  "big5",
+  "euc-tw",
+  "utf-8",
+  "ucs-2",
+  "ucs-21e",
+  "utf-16",
+  "utf-16le",
+  "ucs-4",
+  "ucs-4le",
+  "ansi",
+  "japan",
+  "korea",
+  "prc",
+  "chinese",
+  "taiwan",
+  "utf8",
+  "unicode",
+  "ucs2be",
+  "ucs-2be",
+  "ucs-4be",
+  "utf-32",
+  "utf-32le",
+  "default",
+];
+
 const PREC = {
   TERNARY: 1, //=> expr ? expr : expr
   OR: 2, //=> or
@@ -131,6 +195,12 @@ module.exports = grammar({
           $.cnext_statement,
           $.cprevious_statement,
           $.unknown_builtin_statement,
+          $.edit_statement,
+          $.enew_statement,
+          $.find_statement,
+          $.ex_statement,
+          $.visual_statement,
+          $.view_statement,
           $.user_command
         )
       ),
@@ -167,68 +237,14 @@ module.exports = grammar({
     startinsert_statement: ($) => maybe_bang($, keyword($, "startinsert")),
     stopinsert_statement: ($) => keyword($, "stopinsert"),
 
-    encoding: ($) =>
-      choice(
-        "latin1",
-        "iso",
-        "koi8",
-        "koi8",
-        "macroman",
-        "cp437",
-        "cp737",
-        "cp775",
-        "cp850",
-        "cp852",
-        "cp855",
-        "cp857",
-        "cp860",
-        "cp861",
-        "cp862",
-        "cp863",
-        "cp865",
-        "cp866",
-        "cp869",
-        "cp874",
-        "cp1250",
-        "cp1251",
-        "cp1253",
-        "cp1254",
-        "cp1255",
-        "cp1256",
-        "cp1257",
-        "cp1258",
-        "cp932",
-        "euc-jp",
-        "sjis",
-        "cp949",
-        "euc-kr",
-        "cp936",
-        "euc-cn",
-        "cp950",
-        "big5",
-        "euc-tw",
-        "utf-8",
-        "ucs-2",
-        "ucs-21e",
-        "utf-16",
-        "utf-16le",
-        "ucs-4",
-        "ucs-4le",
-        "ansi",
-        "japan",
-        "korea",
-        "prc",
-        "chinese",
-        "taiwan",
-        "utf8",
-        "unicode",
-        "ucs2be",
-        "ucs-2be",
-        "ucs-4be",
-        "utf-32",
-        "utf-32le",
-        "default"
-      ),
+    file_format: ($) => choice(...FILE_FORMAT),
+    _immediate_file_format: ($) =>
+      alias(choice(...FILE_FORMAT.map(token.immediate)), $.file_format),
+
+    encoding: ($) => choice(...ENCODING),
+    _immediate_encoding: ($) =>
+      alias(choice(...ENCODING.map(token.immediate)), $.encoding),
+
     scriptencoding_statement: ($) =>
       command($, "scriptencoding", optional($.encoding)),
 
@@ -756,115 +772,14 @@ module.exports = grammar({
     keycode: ($) => seq("<", $._keycode_in, token.immediate(">")),
 
     _map_lhs: ($) => keys($, /\S/),
-    _map_rhs: ($) =>
-      choice(
-        keys($, /[^\s|]/, /[^|\n]/),
-        seq(
-          choice(":", alias(/<[Cc][Mm][Dd]>/, $.keycode)),
-          // :h map_bar
-          sep1($._statement, choice("\\|", alias(/<[Bb][Aa][Rr]>/, $.keycode))),
-          alias(/<[Cc][Rr]>/, $.keycode)
-        )
-      ),
-
-    // :h :highlight
-
-    hl_group: ($) => /[a-zA-Z0-9_]+/,
-
-    _hl_body_link: ($) =>
+    _map_rhs_statement: ($) =>
       seq(
-        optional(keyword($, "default")),
-        "link",
-        field("from", $.hl_group),
-        field("to", $.hl_group)
+        alias(/<[Cc][Mm][Dd]>/, $.keycode),
+        // :h map_bar
+        sep1($._statement, choice("\\|", alias(/<[Bb][Aa][Rr]>/, $.keycode))),
+        alias(/<[Cc][Rr]>/, $.keycode)
       ),
-
-    _hl_body_clear: ($) => seq("clear", optional($.hl_group)),
-
-    _hl_body_none: ($) => seq($.hl_group, "NONE"),
-
-    _hl_attr_list: ($) =>
-      commaSep1(
-        choice(
-          ...[
-            "bold",
-            "underline",
-            "undercurl",
-            "strikethrough",
-            "reverse",
-            "inverse",
-            "italic",
-            "standout",
-            "nocombine",
-            "NONE",
-          ].map(token.immediate)
-        )
-      ),
-
-    _hl_key_cterm: ($) => hl_key_val("cterm", $._hl_attr_list),
-
-    _hl_term_list: ($) =>
-      repeat1(choice(token.immediate(/\S+/), $._immediate_keycode)),
-    _hl_key_start_stop: ($) =>
-      hl_key_val(choice("start", "stop"), $._hl_term_list),
-
-    _hl_color_nr: ($) => token.immediate(/[0-9]+\*?/),
-    _hl_key_ctermfg_ctermbg: ($) =>
-      hl_key_val(
-        choice("ctermfg", "ctermbg"),
-        choice($._hl_color_name, $._hl_color_nr)
-      ),
-
-    _hl_key_gui: ($) => hl_key_val("gui", $._hl_attr_list),
-
-    _hl_quoted_name: ($) =>
-      seq(token.immediate("'"), token.immediate(/[^'\n]+/), "'"),
-
-    _hl_color_name: ($) =>
-      choice(
-        $._hl_quoted_name,
-        ...[
-          "NONE",
-          "bg",
-          "background",
-          "fg",
-          "foreground",
-          /#[0-9a-fA-F]{6}/,
-          /[a-zA-Z]+/,
-        ].map(token.immediate)
-      ),
-    _hl_key_gui_color: ($) =>
-      hl_key_val(choice("guifg", "guibg", "guisp"), $._hl_color_name),
-
-    _hl_key_font: ($) =>
-      hl_key_val(
-        "font",
-        choice(token.immediate(/[a-zA-Z0-9-]+/), $._hl_quoted_name)
-      ),
-
-    hl_attribute: ($) =>
-      choice(
-        $._hl_key_cterm,
-        $._hl_key_start_stop,
-        $._hl_key_ctermfg_ctermbg,
-        $._hl_key_gui,
-        $._hl_key_gui_color,
-        $._hl_key_font
-      ),
-
-    _hl_body_keys: ($) =>
-      seq(optional(keyword($, "default")), $.hl_group, repeat1($.hl_attribute)),
-
-    _hl_body: ($) =>
-      choice(
-        $._hl_body_clear,
-        $._hl_body_none,
-        $._hl_body_keys,
-        $._hl_body_link
-      ),
-
-    highlight_statement: ($) =>
-      seq(maybe_bang($, keyword($, "highlight")), optional($._hl_body)),
+    _map_rhs: ($) => choice(keys($, /[^\s|]/, /[^|\n]/), $._map_rhs_statement),
 
     // :h sign
 
@@ -1223,8 +1138,56 @@ module.exports = grammar({
     lambda_expression: ($) =>
       seq("{", commaSep($.identifier), "->", $._expression, "}"),
 
+    // :h ++opt
+    _plus_plus_opt_bad: ($) =>
+      choice(...[/./, "keep", "drop"].map(token.immediate)),
+    plus_plus_opt: ($) =>
+      seq(
+        "++",
+        choice(
+          key_val_arg(
+            choice(token.immediate("ff"), token.immediate("fileformat")),
+            $._immediate_file_format
+          ),
+          key_val_arg(
+            choice(token.immediate("enc"), token.immediate("encoding")),
+            $._immediate_encoding
+          ),
+          key_val_arg(
+            choice(token.immediate("bin"), token.immediate("binary"))
+          ),
+          key_val_arg(
+            choice(token.immediate("nobin"), token.immediate("nobinary"))
+          ),
+          key_val_arg(token.immediate("bad"), $._plus_plus_opt_bad),
+          key_val_arg(token.immediate("edit"))
+        )
+      ),
+
+    // :h +cmd
+    _plus_cmd_arg: ($) =>
+      repeat1(
+        choice(
+          seq(token.immediate("\\"), token.immediate(/./)), // escaped character
+          token.immediate(/[^ \n]/) // any character besides ' ' and newline
+        )
+      ),
+    _plus_cmd_number: ($) =>
+      prec(2, alias(token.immediate(/[0-9]+/), $.integer_literal)),
+    _plus_cmd_command: ($) => prec(1, alias($._plus_cmd_arg, $.command)),
+    _plus_cmd_pattern: ($) => seq("/", alias($._plus_cmd_arg, $.pattern)),
+    plus_cmd: ($) =>
+      seq(
+        "+",
+        optional(
+          choice($._plus_cmd_number, $._plus_cmd_pattern, $._plus_cmd_command)
+        )
+      ),
+
     ...require("./rules/command"),
+    ...require("./rules/highlight"),
     ...require("./rules/syntax"),
+    ...require("./rules/edit"),
   },
 });
 
@@ -1265,10 +1228,6 @@ function set_variant($, cmd) {
 
 function any_order(...args) {
   return repeat(choice(...args));
-}
-
-function hl_key_val(left, right) {
-  return seq(field("key", left), token.immediate("="), field("val", right));
 }
 
 function keys($, allowed_first, allowed_after = allowed_first) {

@@ -1,7 +1,7 @@
 function key_val_arg(arg, ...args) {
-  if (args.length > 0)
+  if (args.length > 0) {
     return seq(field("name", arg), token.immediate("="), field("val", ...args));
-  else return field("name", arg);
+  } else return field("name", arg);
 }
 
 function maybe_bang($, cmd_name) {
@@ -32,10 +32,6 @@ function sep1(rule, separator) {
   return seq(rule, repeat(seq(separator, rule)));
 }
 
-function maybe_at($, rule) {
-  return seq(optional($.at), rule);
-}
-
 function command($, cmd, ...args) {
   return seq(keyword($, cmd), ...args);
 }
@@ -52,7 +48,6 @@ module.exports = {
   commaSep,
   commaSep1,
   sep1,
-  maybe_at,
   command,
   bang_command,
 };
