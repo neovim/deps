@@ -3,7 +3,7 @@
 # No other meaning or use of this file is supported.
 
 method=custom
-command=/usr/local/bin/cmake;-DPREFIX=/home/runner/work/deps/deps/neovim/deps/build;-DDOWNLOAD_DIR=/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter-help;-DURL=https://github.com/neovim/tree-sitter-vimdoc/archive/2ba61cf9e7236d0ae3ce5c526bbd689ace3ff3bd.tar.gz;-DEXPECTED_SHA256=ce89e486c2cc52c0d82edf0600d0f67af9ae9e4b438673224633d0c9f47c62be;-DTARGET=treesitter-help;-DUSE_EXISTING_SRC_DIR=OFF;-P;/home/runner/work/deps/deps/neovim/cmake.deps/cmake/DownloadAndExtractFile.cmake
+command=/usr/local/bin/cmake;-DPREFIX=/home/runner/work/deps/deps/neovim/deps/build;-DDOWNLOAD_DIR=/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter-help;-DURL=https://github.com/neovim/tree-sitter-vimdoc/archive/v1.1.0.tar.gz;-DEXPECTED_SHA256=4c0ef80c6dc09acab362478950ec6be58a4ab1cbf2d95754b8fbb566e4c647a1;-DTARGET=treesitter-help;-DUSE_EXISTING_SRC_DIR=OFF;-P;/home/runner/work/deps/deps/neovim/cmake.deps/cmake/DownloadAndExtractFile.cmake
 source_dir=/home/runner/work/deps/deps/neovim/deps/build/src/treesitter-help
 work_dir=/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter-help
 
