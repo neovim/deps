@@ -79,14 +79,6 @@
 # define UV__PATH_MAX 8192
 #endif
 
-#if defined(__ANDROID__)
-int uv__pthread_sigmask(int how, const sigset_t* set, sigset_t* oset);
-# ifdef pthread_sigmask
-# undef pthread_sigmask
-# endif
-# define pthread_sigmask(how, set, oldset) uv__pthread_sigmask(how, set, oldset)
-#endif
-
 #define ACCESS_ONCE(type, var)                                                \
   (*(volatile type*) &(var))
 
@@ -258,7 +250,6 @@ int uv__signal_loop_fork(uv_loop_t* loop);
 /* platform specific */
 uint64_t uv__hrtime(uv_clocktype_t type);
 int uv__kqueue_init(uv_loop_t* loop);
-int uv__epoll_init(uv_loop_t* loop);
 int uv__platform_loop_init(uv_loop_t* loop);
 void uv__platform_loop_delete(uv_loop_t* loop);
 void uv__platform_invalidate_fd(uv_loop_t* loop, int fd);

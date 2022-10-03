@@ -1,9 +1,0 @@
-# This is a generated file and its contents are an internal implementation detail.
-# The download step will be re-executed if anything in this file changes.
-# No other meaning or use of this file is supported.
-
-method=custom
-command=/usr/local/bin/cmake;-DPREFIX=/home/runner/work/deps/deps/neovim/deps/build;-DDOWNLOAD_DIR=/home/runner/work/deps/deps/neovim/deps/build/downloads/libuv;-DURL=https://github.com/libuv/libuv/archive/v1.44.2.tar.gz;-DEXPECTED_SHA256=e6e2ba8b4c349a4182a33370bb9be5e23c51b32efb9b9e209d0e8556b73a48da;-DTARGET=libuv;-DUSE_EXISTING_SRC_DIR=OFF;-P;/home/runner/work/deps/deps/neovim/cmake.deps/cmake/DownloadAndExtractFile.cmake
-source_dir=/home/runner/work/deps/deps/neovim/deps/build/src/libuv
-work_dir=/home/runner/work/deps/deps/neovim/deps/build/downloads/libuv
-

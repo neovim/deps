@@ -1,0 +1,12 @@
+# This is a generated file and its contents are an internal implementation detail.
+# The download step will be re-executed if anything in this file changes.
+# No other meaning or use of this file is supported.
+
+method=url
+command=/usr/local/bin/cmake;-P;/home/runner/work/deps/deps/neovim/deps/build/src/tree-sitter-stamp/download-tree-sitter.cmake;COMMAND;/usr/local/bin/cmake;-P;/home/runner/work/deps/deps/neovim/deps/build/src/tree-sitter-stamp/verify-tree-sitter.cmake;COMMAND;/usr/local/bin/cmake;-P;/home/runner/work/deps/deps/neovim/deps/build/src/tree-sitter-stamp/extract-tree-sitter.cmake
+source_dir=/home/runner/work/deps/deps/neovim/deps/build/src/tree-sitter
+work_dir=/home/runner/work/deps/deps/neovim/deps/build/src
+url(s)=https://github.com/tree-sitter/tree-sitter/archive/v0.20.7.tar.gz
+hash=SHA256=b355e968ec2d0241bbd96748e00a9038f83968f85d822ecb9940cbe4c42e182e
+no_extract=
+

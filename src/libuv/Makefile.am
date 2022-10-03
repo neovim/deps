@@ -96,7 +96,6 @@ else  # WINNT
 uvinclude_HEADERS += include/uv/unix.h
 AM_CPPFLAGS += -I$(top_srcdir)/src/unix
 libuv_la_SOURCES += src/unix/async.c \
-                   src/unix/atomic-ops.h \
                    src/unix/core.c \
                    src/unix/dl.c \
                    src/unix/fs.c \
@@ -110,7 +109,6 @@ libuv_la_SOURCES += src/unix/async.c \
                    src/unix/process.c \
                    src/unix/random-devurandom.c \
                    src/unix/signal.c \
-                   src/unix/spinlock.h \
                    src/unix/stream.c \
                    src/unix/tcp.c \
                    src/unix/thread.c \
@@ -122,6 +120,7 @@ endif  # WINNT
 EXTRA_DIST = test/fixtures/empty_file \
              test/fixtures/load_error.node \
              test/fixtures/lorem_ipsum.txt \
+             test/fixtures/one_file/one_file \
              include \
              docs \
              img \
@@ -393,7 +392,6 @@ endif
 
 if ANDROID
 libuv_la_CFLAGS += -D_GNU_SOURCE
-libuv_la_SOURCES += src/unix/pthread-fixes.c
 endif
 
 if CYGWIN
@@ -481,8 +479,7 @@ libuv_la_SOURCES += src/unix/linux-core.c \
                     src/unix/procfs-exepath.c \
                     src/unix/proctitle.c \
                     src/unix/random-getrandom.c \
-                    src/unix/random-sysctl-linux.c \
-                    src/unix/epoll.c
+                    src/unix/random-sysctl-linux.c
 test_run_tests_LDFLAGS += -lutil
 endif
 
@@ -546,8 +543,7 @@ libuv_la_CFLAGS += -D_UNIX03_THREADS \
                    -qXPLINK \
                    -qFLOAT=IEEE
 libuv_la_LDFLAGS += -qXPLINK
-libuv_la_SOURCES += src/unix/pthread-fixes.c \
-                    src/unix/os390.c \
+libuv_la_SOURCES += src/unix/os390.c \
                     src/unix/os390-syscalls.c \
                     src/unix/proctitle.c
 endif

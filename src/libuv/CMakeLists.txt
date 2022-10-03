@@ -1,8 +1,12 @@
 cmake_minimum_required(VERSION 3.4)
-project(libuv LANGUAGES C)
 
 cmake_policy(SET CMP0057 NEW) # Enable IN_LIST operator
 cmake_policy(SET CMP0064 NEW) # Support if (TEST) operator
+if(POLICY CMP0091)
+  cmake_policy(SET CMP0091 NEW) # Enable MSVC_RUNTIME_LIBRARY setting
+endif()
+
+project(libuv LANGUAGES C)
 
 list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
 
@@ -17,14 +21,14 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS ON)
 set(CMAKE_C_STANDARD 90)
 
+option(LIBUV_BUILD_SHARED "Build shared lib" ON)
+
 cmake_dependent_option(LIBUV_BUILD_TESTS
   "Build the unit tests when BUILD_TESTING is enabled and we are the root project" ON
-  "BUILD_TESTING;CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR" OFF)
+  "BUILD_TESTING;LIBUV_BUILD_SHARED;CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR" OFF)
 cmake_dependent_option(LIBUV_BUILD_BENCH
   "Build the benchmarks when building unit tests and we are the root project" ON
   "LIBUV_BUILD_TESTS" OFF)
-
-option(LIBUV_BUILD_SHARED "Build shared lib" ON)
 
 # Qemu Build
 option(QEMU "build for qemu" OFF)
@@ -222,11 +226,9 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Android")
        src/unix/linux-inotify.c
        src/unix/linux-syscalls.c
        src/unix/procfs-exepath.c
-       src/unix/pthread-fixes.c
        src/unix/random-getentropy.c
        src/unix/random-getrandom.c
-       src/unix/random-sysctl-linux.c
-       src/unix/epoll.c)
+       src/unix/random-sysctl-linux.c)
 endif()
 
 if(APPLE OR CMAKE_SYSTEM_NAME MATCHES "Android|Linux")
@@ -286,8 +288,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
        src/unix/linux-syscalls.c
        src/unix/procfs-exepath.c
        src/unix/random-getrandom.c
-       src/unix/random-sysctl-linux.c
-       src/unix/epoll.c)
+       src/unix/random-sysctl-linux.c)
 endif()
 
 if(CMAKE_SYSTEM_NAME STREQUAL "NetBSD")
@@ -318,7 +319,6 @@ if(CMAKE_SYSTEM_NAME STREQUAL "OS390")
   list(APPEND uv_defines _XOPEN_SOURCE=600)
   list(APPEND uv_defines _XOPEN_SOURCE_EXTENDED)
   list(APPEND uv_sources
-       src/unix/pthread-fixes.c
        src/unix/os390.c
        src/unix/os390-syscalls.c
        src/unix/os390-proctitle.c)

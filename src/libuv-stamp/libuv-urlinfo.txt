@@ -1,0 +1,12 @@
+# This is a generated file and its contents are an internal implementation detail.
+# The download step will be re-executed if anything in this file changes.
+# No other meaning or use of this file is supported.
+
+method=url
+command=/usr/local/bin/cmake;-P;/home/runner/work/deps/deps/neovim/deps/build/src/libuv-stamp/download-libuv.cmake;COMMAND;/usr/local/bin/cmake;-P;/home/runner/work/deps/deps/neovim/deps/build/src/libuv-stamp/verify-libuv.cmake;COMMAND;/usr/local/bin/cmake;-P;/home/runner/work/deps/deps/neovim/deps/build/src/libuv-stamp/extract-libuv.cmake
+source_dir=/home/runner/work/deps/deps/neovim/deps/build/src/libuv
+work_dir=/home/runner/work/deps/deps/neovim/deps/build/src
+url(s)=https://github.com/libuv/libuv/archive/f610339f74f7f0fcd183533d2c965ce1468b44c6.tar.gz
+hash=SHA256=d5f22303ba44ac60d3232b1977b404d23a349ae4e8cb83f00e7122fafe38d8c9
+no_extract=
+
