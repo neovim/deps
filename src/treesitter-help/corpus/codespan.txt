@@ -4,6 +4,7 @@ simple codespan
 
 a `foobar` b `:echo`
 
+
 --------------------------------------------------------------------------------
 
 (help_file
@@ -22,6 +23,7 @@ codespan in text
 
 Hello `world`, I am `markup language`. But `this is
 an error`.
+
 
 --------------------------------------------------------------------------------
 
@@ -46,12 +48,12 @@ an error`.
       (word))))
 
 ================================================================================
-NOT a codespan
+NOT codespan
 ================================================================================
-						*'* *'a* *`* *`a*
-'{a-z}  `{a-z}		Jump to the mark.
-						*g'* *g'a* *g`* *g`a*
+				*'* *'a* *`* *`a*
+				*g'* *g'a* *g`* *g`a*
 g'{mark}  g`{mark}
+
 
 --------------------------------------------------------------------------------
 
@@ -66,14 +68,6 @@ g'{mark}  g`{mark}
         (word))
       (tag
         (word)))
-    (ERROR)
-    (line
-      (argument
-        (word))
-      (word)
-      (word)
-      (word)
-      (word))
     (line
       (tag
         (word))
@@ -85,8 +79,4 @@ g'{mark}  g`{mark}
         (word)))
     (line
       (word)
-      (argument
-        (word))
-      (word)
-      (argument
-        (word)))))
+        (word))))
