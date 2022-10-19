@@ -7,8 +7,8 @@
         {
           "type": "REPEAT",
           "content": {
-            "type": "PATTERN",
-            "value": "[\\t ]*\\n"
+            "type": "SYMBOL",
+            "name": "_blank"
           }
         },
         {
@@ -168,8 +168,8 @@
       "type": "CHOICE",
       "members": [
         {
-          "type": "PATTERN",
-          "value": "'[\\t ]"
+          "type": "STRING",
+          "value": "'"
         },
         {
           "type": "SEQ",
@@ -182,15 +182,23 @@
               "type": "IMMEDIATE_TOKEN",
               "content": {
                 "type": "PATTERN",
-                "value": "[^'\\n\\t ]*[^'a-z\\n\\t ][^'\\n\\t ]*"
+                "value": "[a-z]*[^'a-z\\n\\t ][a-z]*"
               }
             },
             {
-              "type": "IMMEDIATE_TOKEN",
-              "content": {
-                "type": "STRING",
-                "value": "'"
-              }
+              "type": "CHOICE",
+              "members": [
+                {
+                  "type": "IMMEDIATE_TOKEN",
+                  "content": {
+                    "type": "STRING",
+                    "value": "'"
+                  }
+                },
+                {
+                  "type": "BLANK"
+                }
+              ]
             }
           ]
         },
@@ -219,24 +227,15 @@
         },
         {
           "type": "PATTERN",
-          "value": "\\|[\\t ]"
+          "value": "\\|\\|+"
         },
         {
-          "type": "SEQ",
-          "members": [
-            {
-              "type": "STRING",
-              "value": "|"
-            },
-            {
-              "type": "PATTERN",
-              "value": "[^|\\n\\t ]+"
-            }
-          ]
+          "type": "STRING",
+          "value": "|"
         },
         {
           "type": "PATTERN",
-          "value": "\\|\\|*"
+          "value": "[-•]\\t"
         },
         {
           "type": "STRING",
@@ -261,6 +260,10 @@
         {
           "type": "PATTERN",
           "value": "\\w+\\("
+        },
+        {
+          "type": "STRING",
+          "value": "~"
         }
       ]
     },
@@ -448,8 +451,8 @@
       "type": "FIELD",
       "name": "blank",
       "content": {
-        "type": "PATTERN",
-        "value": "[\\t ]*\\n"
+        "type": "STRING",
+        "value": "\n"
       }
     },
     "line": {
