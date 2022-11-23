@@ -100,6 +100,10 @@
           "named": true
         },
         {
+          "type": "eval_statement",
+          "named": true
+        },
+        {
           "type": "ex_statement",
           "named": true
         },
@@ -458,6 +462,10 @@
             "named": true
           },
           {
+            "type": "eval_statement",
+            "named": true
+          },
+          {
             "type": "ex_statement",
             "named": true
           },
@@ -650,6 +658,11 @@
         }
       ]
     }
+  },
+  {
+    "type": "bang",
+    "named": true,
+    "fields": {}
   },
   {
     "type": "bang_filter_statement",
@@ -1004,6 +1017,10 @@
         },
         {
           "type": "enew_statement",
+          "named": true
+        },
+        {
+          "type": "eval_statement",
           "named": true
         },
         {
@@ -1494,6 +1511,10 @@
           "named": true
         },
         {
+          "type": "eval_statement",
+          "named": true
+        },
+        {
           "type": "ex_statement",
           "named": true
         },
@@ -1762,6 +1783,10 @@
         },
         {
           "type": "enew_statement",
+          "named": true
+        },
+        {
+          "type": "eval_statement",
           "named": true
         },
         {
@@ -3542,6 +3567,101 @@
     }
   },
   {
+    "type": "eval_statement",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": false,
+      "required": true,
+      "types": [
+        {
+          "type": "argument",
+          "named": true
+        },
+        {
+          "type": "binary_operation",
+          "named": true
+        },
+        {
+          "type": "call_expression",
+          "named": true
+        },
+        {
+          "type": "dictionnary",
+          "named": true
+        },
+        {
+          "type": "env_variable",
+          "named": true
+        },
+        {
+          "type": "field_expression",
+          "named": true
+        },
+        {
+          "type": "float_literal",
+          "named": true
+        },
+        {
+          "type": "identifier",
+          "named": true
+        },
+        {
+          "type": "index_expression",
+          "named": true
+        },
+        {
+          "type": "integer_literal",
+          "named": true
+        },
+        {
+          "type": "lambda_expression",
+          "named": true
+        },
+        {
+          "type": "list",
+          "named": true
+        },
+        {
+          "type": "literal_dictionary",
+          "named": true
+        },
+        {
+          "type": "option",
+          "named": true
+        },
+        {
+          "type": "register",
+          "named": true
+        },
+        {
+          "type": "scope_dict",
+          "named": true
+        },
+        {
+          "type": "scoped_identifier",
+          "named": true
+        },
+        {
+          "type": "slice_expression",
+          "named": true
+        },
+        {
+          "type": "string_literal",
+          "named": true
+        },
+        {
+          "type": "ternary_expression",
+          "named": true
+        },
+        {
+          "type": "unary_operation",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
     "type": "ex_statement",
     "named": true,
     "fields": {},
@@ -3796,16 +3916,33 @@
   {
     "type": "filetype_statement",
     "named": true,
-    "fields": {},
-    "children": {
-      "multiple": false,
-      "required": false,
-      "types": [
-        {
-          "type": "state",
-          "named": true
-        }
-      ]
+    "fields": {
+      "sub": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "detect",
+            "named": false
+          },
+          {
+            "type": "indent",
+            "named": false
+          },
+          {
+            "type": "off",
+            "named": false
+          },
+          {
+            "type": "on",
+            "named": false
+          },
+          {
+            "type": "plugin",
+            "named": false
+          }
+        ]
+      }
     }
   },
   {
@@ -4182,6 +4319,10 @@
         },
         {
           "type": "enew_statement",
+          "named": true
+        },
+        {
+          "type": "eval_statement",
           "named": true
         },
         {
@@ -5577,6 +5718,10 @@
           "named": true
         },
         {
+          "type": "eval_statement",
+          "named": true
+        },
+        {
           "type": "ex_statement",
           "named": true
         },
@@ -6780,6 +6925,10 @@
           "named": true
         },
         {
+          "type": "eval_statement",
+          "named": true
+        },
+        {
           "type": "ex_statement",
           "named": true
         },
@@ -7333,6 +7482,10 @@
           "named": true
         },
         {
+          "type": "eval_statement",
+          "named": true
+        },
+        {
           "type": "ex_statement",
           "named": true
         },
@@ -7853,11 +8006,6 @@
         }
       ]
     }
-  },
-  {
-    "type": "state",
-    "named": true,
-    "fields": {}
   },
   {
     "type": "stopinsert_statement",
@@ -8681,6 +8829,10 @@
           "named": true
         },
         {
+          "type": "eval_statement",
+          "named": true
+        },
+        {
           "type": "ex_statement",
           "named": true
         },
@@ -9216,6 +9368,10 @@
         },
         {
           "type": "enew_statement",
+          "named": true
+        },
+        {
+          "type": "eval_statement",
           "named": true
         },
         {
@@ -9946,10 +10102,6 @@
     "named": false
   },
   {
-    "type": "bang",
-    "named": true
-  },
-  {
     "type": "behave",
     "named": false
   },
@@ -10431,6 +10583,10 @@
   },
   {
     "type": "file",
+    "named": false
+  },
+  {
+    "type": "file",
     "named": true
   },
   {
@@ -10447,6 +10603,10 @@
   },
   {
     "type": "fileformat",
+    "named": false
+  },
+  {
+    "type": "filetype",
     "named": false
   },
   {
@@ -10631,11 +10791,11 @@
   },
   {
     "type": "keyword",
-    "named": false
+    "named": true
   },
   {
     "type": "keyword",
-    "named": true
+    "named": false
   },
   {
     "type": "koi8",
@@ -10664,6 +10824,10 @@
   {
     "type": "line",
     "named": false
+  },
+  {
+    "type": "line_continuation_comment",
+    "named": true
   },
   {
     "type": "linebreaks",

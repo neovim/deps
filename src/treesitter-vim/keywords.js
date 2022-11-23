@@ -219,12 +219,12 @@ const KEYWORDS = {
     opt: "remap",
     ignore_comments_after: true,
   },
-  VNOREMAP: {
+  NNOREMAP: {
     mandat: "nn",
     opt: "oremap",
     ignore_comments_after: true,
   },
-  NNOREMAP: {
+  VNOREMAP: {
     mandat: "vn",
     opt: "oremap",
     ignore_comments_after: true,
@@ -462,6 +462,11 @@ const KEYWORDS = {
   VIEW: {
     mandat: "vie",
     opt: "w",
+    ignore_comments_after: false,
+  },
+  EVAL: {
+    mandat: "ev",
+    opt: "al",
     ignore_comments_after: false,
   },
 };

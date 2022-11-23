@@ -120,10 +120,11 @@ module.exports = grammar({
       $.scope,
       $.string_literal,
       $.comment,
+      $.line_continuation_comment,
       $._bang_filter,
     ].concat(require("./keywords").keywords($)),
 
-  extras: ($) => [$._line_continuation, /[\t ]/],
+  extras: ($) => [$._line_continuation, $.line_continuation_comment, /[\t ]/],
 
   rules: {
     script_file: ($) => optional($._separated_statements),
@@ -201,6 +202,7 @@ module.exports = grammar({
           $.ex_statement,
           $.visual_statement,
           $.view_statement,
+          $.eval_statement,
           $.user_command
         )
       ),
@@ -280,17 +282,22 @@ module.exports = grammar({
       ),
 
     _filetype_state: ($) => choice("on", "off"),
+    _filetype_enable: ($) => sub_cmd($._filetype_state),
+    _filetype_detect: ($) => sub_cmd("detect"),
+    _filetype_plugin: ($) =>
+      sub_cmd("plugin", optional("indent"), $._filetype_state),
+    _filetype_indent: ($) =>
+      sub_cmd("indent", optional("plugin"), $._filetype_state),
     filetype_statement: ($) =>
-      seq(
-        keyword($, "filetype"),
+      command(
+        $,
+        "filetype",
         optional(
           choice(
-            seq(
-              optional("plugin"),
-              optional("indent"),
-              alias($._filetype_state, $.state)
-            ),
-            "detect"
+            $._filetype_enable,
+            $._filetype_detect,
+            $._filetype_plugin,
+            $._filetype_indent
           )
         )
       ),
@@ -522,7 +529,11 @@ module.exports = grammar({
 
     no_option: ($) => seq($._no, $.option_name),
 
-    inv_option: ($) => seq($._inv, $.option_name),
+    inv_option: ($) =>
+      choice(
+        seq($._inv, $.option_name),
+        seq($.option_name, token.immediate("!"))
+      ),
 
     default_option: ($) =>
       seq($.option_name, "&", optional(choice("vi", "vim"))),
@@ -1041,6 +1052,8 @@ module.exports = grammar({
           ")"
         )
       ),
+
+    eval_statement: ($) => command($, "eval", $._expression),
 
     // Use default :h isfname
     filename: ($) =>
