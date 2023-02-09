@@ -1,9 +1,10 @@
 cmake_minimum_required(VERSION 3.4)
 
-cmake_policy(SET CMP0057 NEW) # Enable IN_LIST operator
-cmake_policy(SET CMP0064 NEW) # Support if (TEST) operator
 if(POLICY CMP0091)
   cmake_policy(SET CMP0091 NEW) # Enable MSVC_RUNTIME_LIBRARY setting
+endif()
+if(POLICY CMP0092)
+  cmake_policy(SET CMP0092 NEW) # disable /W3 warning, if possible
 endif()
 
 project(libuv LANGUAGES C)
@@ -33,28 +34,61 @@ cmake_dependent_option(LIBUV_BUILD_BENCH
 # Qemu Build
 option(QEMU "build for qemu" OFF)
 if(QEMU)
-  add_definitions(-D__QEMU__=1)
+  list(APPEND uv_defines __QEMU__=1)
 endif()
 
+# Note: these are mutually exclusive.
 option(ASAN "Enable AddressSanitizer (ASan)" OFF)
+option(MSAN "Enable MemorySanitizer (MSan)" OFF)
 option(TSAN "Enable ThreadSanitizer (TSan)" OFF)
+option(UBSAN "Enable UndefinedBehaviorSanitizer (UBSan)" OFF)
 
-if((ASAN OR TSAN) AND NOT (CMAKE_C_COMPILER_ID MATCHES "AppleClang|GNU|Clang"))
-  message(SEND_ERROR "Sanitizer support requires clang or gcc. Try again with -DCMAKE_C_COMPILER.")
+if(MSAN AND NOT CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang")
+  message(SEND_ERROR "MemorySanitizer requires clang. Try again with -DCMAKE_C_COMPILER=clang")
 endif()
 
 if(ASAN)
-  add_definitions(-D__ASAN__=1)
-  set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fno-omit-frame-pointer -fsanitize=address")
-  set (CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -fno-omit-frame-pointer -fsanitize=address")
-  set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fno-omit-frame-pointer -fsanitize=address")
+  list(APPEND uv_defines __ASAN__=1)
+  if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|GNU|Clang")
+    set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fno-omit-frame-pointer -fsanitize=address")
+    set (CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -fno-omit-frame-pointer -fsanitize=address")
+    set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fno-omit-frame-pointer -fsanitize=address")
+  elseif(MSVC)
+    set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /fsanitize=address")
+  else()
+    message(SEND_ERROR "AddressSanitizer support requires clang, gcc, or msvc. Try again with -DCMAKE_C_COMPILER.")
+  endif()
+endif()
+
+if(MSAN)
+  list(APPEND uv_defines __MSAN__=1)
+  set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fno-omit-frame-pointer -fsanitize=memory")
+  set (CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -fno-omit-frame-pointer -fsanitize=memory")
+  set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fno-omit-frame-pointer -fsanitize=memory")
 endif()
 
 if(TSAN)
-  add_definitions(-D__TSAN__=1)
-  set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fno-omit-frame-pointer -fsanitize=thread")
-  set (CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -fno-omit-frame-pointer -fsanitize=thread")
-  set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fno-omit-frame-pointer -fsanitize=thread")
+  list(APPEND uv_defines __TSAN__=1)
+  if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|GNU|Clang")
+    set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fno-omit-frame-pointer -fsanitize=thread")
+    set (CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -fno-omit-frame-pointer -fsanitize=thread")
+    set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fno-omit-frame-pointer -fsanitize=thread")
+  else()
+    message(SEND_ERROR "ThreadSanitizer support requires clang or gcc. Try again with -DCMAKE_C_COMPILER.")
+  endif()
+endif()
+
+if(UBSAN)
+  list(APPEND uv_defines __UBSAN__=1)
+  if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|GNU|Clang")
+    set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fno-omit-frame-pointer -fsanitize=undefined")
+    set (CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -fno-omit-frame-pointer -fsanitize=undefined")
+    set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fno-omit-frame-pointer -fsanitize=undefined")
+  elseif(MSVC)
+    set (CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /fsanitize=undefined")
+  else()
+    message(SEND_ERROR "UndefinedBehaviorSanitizer support requires clang, gcc, or msvc. Try again with -DCMAKE_C_COMPILER.")
+  endif()
 endif()
 
 # Compiler check
@@ -222,9 +256,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Android")
   list(APPEND uv_defines _GNU_SOURCE)
   list(APPEND uv_libraries dl)
   list(APPEND uv_sources
-       src/unix/linux-core.c
-       src/unix/linux-inotify.c
-       src/unix/linux-syscalls.c
+       src/unix/linux.c
        src/unix/procfs-exepath.c
        src/unix/random-getentropy.c
        src/unix/random-getrandom.c
@@ -274,18 +306,11 @@ if(CMAKE_SYSTEM_NAME STREQUAL "GNU")
        src/unix/hurd.c)
 endif()
 
-if(CMAKE_SYSTEM_NAME STREQUAL "kFreeBSD")
-  list(APPEND uv_defines _GNU_SOURCE)
-  list(APPEND uv_libraries dl freebsd-glue)
-endif()
-
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
   list(APPEND uv_defines _GNU_SOURCE _POSIX_C_SOURCE=200112)
   list(APPEND uv_libraries dl rt)
   list(APPEND uv_sources
-       src/unix/linux-core.c
-       src/unix/linux-inotify.c
-       src/unix/linux-syscalls.c
+       src/unix/linux.c
        src/unix/procfs-exepath.c
        src/unix/random-getrandom.c
        src/unix/random-sysctl-linux.c)
@@ -356,6 +381,10 @@ if(CMAKE_SYSTEM_NAME STREQUAL "OS400")
 endif()
 
 if(CMAKE_SYSTEM_NAME STREQUAL "SunOS")
+  if(CMAKE_SYSTEM_VERSION STREQUAL "5.10")
+    list(APPEND uv_defines SUNOS_NO_IFADDRS)
+    list(APPEND uv_libraries rt)
+  endif()
   list(APPEND uv_defines __EXTENSIONS__ _XOPEN_SOURCE=500 _REENTRANT)
   list(APPEND uv_libraries kstat nsl sendfile socket)
   list(APPEND uv_sources
@@ -390,6 +419,20 @@ if(APPLE OR CMAKE_SYSTEM_NAME MATCHES "DragonFly|FreeBSD|Linux|NetBSD|OpenBSD")
   list(APPEND uv_test_libraries util)
 endif()
 
+if(CYGWIN OR MSYS)
+  list(APPEND uv_defines _GNU_SOURCE)
+  list(APPEND uv_sources
+       src/unix/cygwin.c
+       src/unix/bsd-ifaddrs.c
+       src/unix/no-fsevents.c
+       src/unix/no-proctitle.c
+       src/unix/posix-hrtime.c
+       src/unix/posix-poll.c
+       src/unix/procfs-exepath.c
+       src/unix/sysinfo-loadavg.c
+       src/unix/sysinfo-memory.c)
+endif()
+
 if(LIBUV_BUILD_SHARED)
   add_library(uv SHARED ${uv_sources})
   target_compile_definitions(uv
@@ -410,6 +453,7 @@ if(LIBUV_BUILD_SHARED)
     set_target_properties(uv PROPERTIES LINKER_LANGUAGE CXX)
   endif()
   target_link_libraries(uv ${uv_libraries})
+  set_target_properties(uv PROPERTIES OUTPUT_NAME "uv")
 endif()
 
 add_library(uv_a STATIC ${uv_sources})
@@ -426,6 +470,10 @@ if(CMAKE_SYSTEM_NAME STREQUAL "OS390")
   set_target_properties(uv_a PROPERTIES LINKER_LANGUAGE CXX)
 endif()
 target_link_libraries(uv_a ${uv_libraries})
+set_target_properties(uv_a PROPERTIES OUTPUT_NAME "uv")
+if(MSVC)
+  set_target_properties(uv_a PROPERTIES PREFIX "lib")
+endif()
 
 if(LIBUV_BUILD_TESTS)
   # Small hack: use ${uv_test_sources} now to get the runner skeleton,
@@ -538,6 +586,7 @@ if(LIBUV_BUILD_TESTS)
        test/test-pipe-server-close.c
        test/test-pipe-set-fchmod.c
        test/test-pipe-set-non-blocking.c
+       test/test-pipe-try-write.c
        test/test-platform-output.c
        test/test-poll-close-doesnt-corrupt-stack.c
        test/test-poll-close.c
@@ -588,6 +637,7 @@ if(LIBUV_BUILD_TESTS)
        test/test-tcp-rst.c
        test/test-tcp-shutdown-after-write.c
        test/test-tcp-try-write.c
+       test/test-tcp-write-in-a-row.c
        test/test-tcp-try-write-error.c
        test/test-tcp-unexpected-read.c
        test/test-tcp-write-after-connect.c
@@ -596,6 +646,7 @@ if(LIBUV_BUILD_TESTS)
        test/test-tcp-write-to-half-open-connection.c
        test/test-tcp-writealot.c
        test/test-test-macros.c
+       test/test-thread-affinity.c
        test/test-thread-equal.c
        test/test-thread.c
        test/test-threadpool-cancel.c
@@ -628,6 +679,7 @@ if(LIBUV_BUILD_TESTS)
        test/test-udp-sendmmsg-error.c
        test/test-udp-send-unreachable.c
        test/test-udp-try-send.c
+       test/test-udp-recv-in-a-row.c
        test/test-uname.c
        test/test-walk-handles.c
        test/test-watcher-cross-stop.c)
@@ -679,11 +731,14 @@ configure_file(libuv-static.pc.in libuv-static.pc @ONLY)
 
 install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 install(FILES LICENSE DESTINATION ${CMAKE_INSTALL_DOCDIR})
+install(FILES LICENSE-extra DESTINATION ${CMAKE_INSTALL_DOCDIR})
 install(FILES ${PROJECT_BINARY_DIR}/libuv-static.pc
         DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig)
 install(TARGETS uv_a EXPORT libuvConfig
         ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
-install(EXPORT libuvConfig DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/libuv)
+install(EXPORT libuvConfig
+	DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/libuv
+	NAMESPACE libuv::)
 
 if(LIBUV_BUILD_SHARED)
   # The version in the filename is mirroring the behaviour of autotools.

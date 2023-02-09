@@ -81,7 +81,7 @@ int uv__tcsetattr(int fd, int how, const struct termios *term) {
 
 static int uv__tty_is_slave(const int fd) {
   int result;
-#if defined(__linux__) || defined(__FreeBSD__) || defined(__FreeBSD_kernel__)
+#if defined(__linux__) || defined(__FreeBSD__)
   int dummy;
 
   result = ioctl(fd, TIOCGPTN, &dummy) != 0;
@@ -113,7 +113,7 @@ static int uv__tty_is_slave(const int fd) {
   }
 
   /* Lookup stat structure behind the file descriptor. */
-  if (fstat(fd, &sb) != 0)
+  if (uv__fstat(fd, &sb) != 0)
     abort();
 
   /* Assert character device. */
@@ -365,7 +365,7 @@ uv_handle_type uv_guess_handle(uv_file file) {
   if (isatty(file))
     return UV_TTY;
 
-  if (fstat(file, &s)) {
+  if (uv__fstat(file, &s)) {
 #if defined(__PASE__)
     /* On ibmi receiving RST from TCP instead of FIN immediately puts fd into
      * an error state. fstat will return EINVAL, getsockname will also return

@@ -70,6 +70,11 @@ typedef struct pollfd {
 # define S_IFLNK 0xA000
 #endif
 
+// Define missing in Windows Kit Include\{VERSION}\ucrt\sys\stat.h
+#if defined(_CRT_INTERNAL_NONSTDC_NAMES) && _CRT_INTERNAL_NONSTDC_NAMES && !defined(S_IFIFO)
+# define S_IFIFO _S_IFIFO
+#endif
+
 /* Additional signals supported by uv_signal and or uv_kill. The CRT defines
  * the following signals already:
  *
@@ -343,9 +348,9 @@ typedef struct {
   uv_idle_t* next_idle_handle;                                                \
   /* This handle holds the peer sockets for the fast variant of uv_poll_t */  \
   SOCKET poll_peer_sockets[UV_MSAFD_PROVIDER_COUNT];                          \
-  /* Counter to keep track of active tcp streams */                           \
+  /* No longer used. */                                                       \
   unsigned int active_tcp_streams;                                            \
-  /* Counter to keep track of active udp streams */                           \
+  /* No longer used. */                                                       \
   unsigned int active_udp_streams;                                            \
   /* Counter to started timer */                                              \
   uint64_t timer_counter;                                                     \
@@ -377,6 +382,7 @@ typedef struct {
       ULONG_PTR result; /* overlapped.Internal is reused to hold the result */\
       HANDLE pipeHandle;                                                      \
       DWORD duplex_flags;                                                     \
+      WCHAR* name;                                                             \
     } connect;                                                                \
   } u;                                                                        \
   struct uv_req_s* next_req;
@@ -600,7 +606,7 @@ typedef struct {
   struct uv_process_exit_s {                                                  \
     UV_REQ_FIELDS                                                             \
   } exit_req;                                                                 \
-  BYTE* child_stdio_buffer;                                                   \
+  void* unused; /* TODO: retained for ABI compat; remove this in v2.x. */     \
   int exit_signal;                                                            \
   HANDLE wait_handle;                                                         \
   HANDLE process_handle;                                                      \

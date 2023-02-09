@@ -250,6 +250,9 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
                   ARRAY_SIZE(events),
                   timeout == -1 ? NULL : &spec);
 
+    if (nfds == -1)
+      assert(errno == EINTR);
+
     if (pset != NULL)
       pthread_sigmask(SIG_UNBLOCK, pset, NULL);
 
@@ -257,36 +260,26 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
      * timeout == 0 (i.e. non-blocking poll) but there is no guarantee that the
      * operating system didn't reschedule our process while in the syscall.
      */
-    SAVE_ERRNO(uv__update_time(loop));
+    uv__update_time(loop);
 
-    if (nfds == 0) {
-      if (reset_timeout != 0) {
-        timeout = user_timeout;
-        reset_timeout = 0;
-        if (timeout == -1)
-          continue;
-        if (timeout > 0)
-          goto update_timeout;
+    if (nfds == 0 || nfds == -1) {
+      /* If kqueue is empty or interrupted, we might still have children ready
+       * to reap immediately. */
+      if (loop->flags & UV_LOOP_REAP_CHILDREN) {
+        loop->flags &= ~UV_LOOP_REAP_CHILDREN;
+        uv__wait_children(loop);
+        assert((reset_timeout == 0 ? timeout : user_timeout) == 0);
+        return; /* Equivalent to fall-through behavior. */
       }
-
-      assert(timeout != -1);
-      return;
-    }
-
-    if (nfds == -1) {
-      if (errno != EINTR)
-        abort();
 
       if (reset_timeout != 0) {
         timeout = user_timeout;
         reset_timeout = 0;
-      }
-
-      if (timeout == 0)
+      } else if (nfds == 0) {
+        /* Reached the user timeout value. */
+        assert(timeout != -1);
         return;
-
-      if (timeout == -1)
-        continue;
+      }
 
       /* Interrupted by a signal. Update timeout and poll again. */
       goto update_timeout;
@@ -386,9 +379,11 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
       uv__wait_children(loop);
     }
 
+    uv__metrics_inc_events(loop, nevents);
     if (reset_timeout != 0) {
       timeout = user_timeout;
       reset_timeout = 0;
+      uv__metrics_inc_events_waiting(loop, nevents);
     }
 
     if (have_signals != 0) {
@@ -411,13 +406,13 @@ void uv__io_poll(uv_loop_t* loop, int timeout) {
       return;
     }
 
+update_timeout:
     if (timeout == 0)
       return;
 
     if (timeout == -1)
       continue;
 
-update_timeout:
     assert(timeout > 0);
 
     diff = loop->time - base;
@@ -529,7 +524,7 @@ int uv_fs_event_start(uv_fs_event_t* handle,
   handle->realpath_len = 0;
   handle->cf_flags = flags;
 
-  if (fstat(fd, &statbuf))
+  if (uv__fstat(fd, &statbuf))
     goto fallback;
   /* FSEvents works only with directories */
   if (!(statbuf.st_mode & S_IFDIR))

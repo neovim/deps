@@ -126,6 +126,7 @@ EXTRA_DIST = test/fixtures/empty_file \
              img \
              CONTRIBUTING.md \
              LICENSE \
+             LICENSE-extra \
              README.md
 
 
@@ -222,6 +223,7 @@ test_run_tests_SOURCES = test/blackhole-server.c \
                          test/test-pipe-close-stdout-read-stdin.c \
                          test/test-pipe-set-non-blocking.c \
                          test/test-pipe-set-fchmod.c \
+                         test/test-pipe-try-write.c \
                          test/test-platform-output.c \
                          test/test-poll.c \
                          test/test-poll-close.c \
@@ -277,11 +279,13 @@ test_run_tests_SOURCES = test/blackhole-server.c \
                          test/test-tcp-writealot.c \
                          test/test-tcp-write-fail.c \
                          test/test-tcp-try-write.c \
+                         test/test-tcp-write-in-a-row.c \
                          test/test-tcp-try-write-error.c \
                          test/test-tcp-write-queue-order.c \
                          test/test-test-macros.c \
                          test/test-thread-equal.c \
                          test/test-thread.c \
+                         test/test-thread-affinity.c \
                          test/test-threadpool-cancel.c \
                          test/test-threadpool.c \
                          test/test-timer-again.c \
@@ -312,6 +316,7 @@ test_run_tests_SOURCES = test/blackhole-server.c \
                          test/test-udp-sendmmsg-error.c \
                          test/test-udp-send-unreachable.c \
                          test/test-udp-try-send.c \
+                         test/test-udp-recv-in-a-row.c \
                          test/test-uname.c \
                          test/test-walk-handles.c \
                          test/test-watcher-cross-stop.c
@@ -465,17 +470,10 @@ libuv_la_SOURCES += src/unix/bsd-ifaddrs.c \
                     src/unix/hurd.c
 endif
 
-if KFREEBSD
-libuv_la_CFLAGS += -D_GNU_SOURCE
-endif
-
 if LINUX
 uvinclude_HEADERS += include/uv/linux.h
 libuv_la_CFLAGS += -D_GNU_SOURCE
-libuv_la_SOURCES += src/unix/linux-core.c \
-                    src/unix/linux-inotify.c \
-                    src/unix/linux-syscalls.c \
-                    src/unix/linux-syscalls.h \
+libuv_la_SOURCES += src/unix/linux.c \
                     src/unix/procfs-exepath.c \
                     src/unix/proctitle.c \
                     src/unix/random-getrandom.c \

@@ -48,12 +48,18 @@ extern int snprintf(char*, size_t, const char*, ...);
 #endif
 
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
+#define ARRAY_END(a)  ((a) + ARRAY_SIZE(a))
 
 #define container_of(ptr, type, member) \
   ((type *) ((char *) (ptr) - offsetof(type, member)))
 
+/* C11 defines static_assert to be a macro which calls _Static_assert. */
+#if defined(static_assert)
+#define STATIC_ASSERT(expr) static_assert(expr, #expr)
+#else
 #define STATIC_ASSERT(expr)                                                   \
   void uv__static_assert(int static_assert_failed[1 - 2 * !(expr)])
+#endif
 
 #if defined(__GNUC__) && (__GNUC__ > 4 || __GNUC__ == 4 && __GNUC_MINOR__ >= 7)
 #define uv__load_relaxed(p) __atomic_load_n(p, __ATOMIC_RELAXED)
@@ -349,6 +355,21 @@ void uv__threadpool_cleanup(void);
 #define uv__get_loop_metrics(loop)                                            \
   (&uv__get_internal_fields(loop)->loop_metrics)
 
+#define uv__metrics_inc_loop_count(loop)                                      \
+  do {                                                                        \
+    uv__get_loop_metrics(loop)->metrics.loop_count++;                         \
+  } while (0)
+
+#define uv__metrics_inc_events(loop, e)                                       \
+  do {                                                                        \
+    uv__get_loop_metrics(loop)->metrics.events += (e);                        \
+  } while (0)
+
+#define uv__metrics_inc_events_waiting(loop, e)                               \
+  do {                                                                        \
+    uv__get_loop_metrics(loop)->metrics.events_waiting += (e);                \
+  } while (0)
+
 /* Allocator prototypes */
 void *uv__calloc(size_t count, size_t size);
 char *uv__strdup(const char* s);
@@ -362,6 +383,7 @@ typedef struct uv__loop_metrics_s uv__loop_metrics_t;
 typedef struct uv__loop_internal_fields_s uv__loop_internal_fields_t;
 
 struct uv__loop_metrics_s {
+  uv_metrics_t metrics;
   uint64_t provider_entry_time;
   uint64_t provider_idle_time;
   uv_mutex_t lock;

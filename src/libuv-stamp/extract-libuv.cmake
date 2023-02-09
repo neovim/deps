@@ -5,7 +5,7 @@ cmake_minimum_required(VERSION 3.5)
 
 # Make file names absolute:
 #
-get_filename_component(filename "/home/runner/work/deps/deps/neovim/deps/build/downloads/libuv/f610339f74f7f0fcd183533d2c965ce1468b44c6.tar.gz" ABSOLUTE)
+get_filename_component(filename "/home/runner/work/deps/deps/neovim/deps/build/downloads/libuv/62c2374a8c005ce9e42088965f8f8af2532c177b.tar.gz" ABSOLUTE)
 get_filename_component(directory "/home/runner/work/deps/deps/neovim/deps/build/src/libuv" ABSOLUTE)
 
 message(STATUS "extracting...
