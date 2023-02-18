@@ -3,6 +3,8 @@ use clap::{App, AppSettings, Arg, SubCommand};
 use glob::glob;
 use std::path::{Path, PathBuf};
 use std::{env, fs, u64};
+use tree_sitter::Point;
+use tree_sitter_cli::parse::ParseOutput;
 use tree_sitter_cli::{
     generate, highlight, logger, parse, playground, query, tags, test, test_highlight, test_tags,
     util, wasm,
@@ -136,7 +138,8 @@ fn run() -> Result<()> {
                 .arg(&debug_arg)
                 .arg(&debug_build_arg)
                 .arg(&debug_graph_arg)
-                .arg(Arg::with_name("debug-xml").long("xml").short("x"))
+                .arg(Arg::with_name("output-dot").long("dot"))
+                .arg(Arg::with_name("output-xml").long("xml").short("x"))
                 .arg(
                     Arg::with_name("stat")
                         .help("Show parsing statistic")
@@ -171,12 +174,20 @@ fn run() -> Result<()> {
                         .index(1)
                         .required(true),
                 )
+                .arg(&time_arg)
+                .arg(&quiet_arg)
                 .arg(&paths_file_arg)
                 .arg(&paths_arg.clone().index(2))
                 .arg(
                     Arg::with_name("byte-range")
                         .help("The range of byte offsets in which the query will be executed")
                         .long("byte-range")
+                        .takes_value(true),
+                )
+                .arg(
+                    Arg::with_name("row-range")
+                        .help("The range of rows in which the query will be executed")
+                        .long("row-range")
                         .takes_value(true),
                 )
                 .arg(&scope_arg)
@@ -377,8 +388,17 @@ fn run() -> Result<()> {
             let debug = matches.is_present("debug");
             let debug_graph = matches.is_present("debug-graph");
             let debug_build = matches.is_present("debug-build");
-            let debug_xml = matches.is_present("debug-xml");
-            let quiet = matches.is_present("quiet");
+
+            let output = if matches.is_present("output-dot") {
+                ParseOutput::Dot
+            } else if matches.is_present("output-xml") {
+                ParseOutput::Xml
+            } else if matches.is_present("quiet") {
+                ParseOutput::Quiet
+            } else {
+                ParseOutput::Normal
+            };
+
             let time = matches.is_present("time");
             let edits = matches
                 .values_of("edits")
@@ -416,12 +436,11 @@ fn run() -> Result<()> {
                     path,
                     &edits,
                     max_path_length,
-                    quiet,
+                    output,
                     time,
                     timeout,
                     debug,
                     debug_graph,
-                    debug_xml,
                     Some(&cancellation_flag),
                 )?;
 
@@ -446,6 +465,8 @@ fn run() -> Result<()> {
 
         ("query", Some(matches)) => {
             let ordered_captures = matches.values_of("captures").is_some();
+            let quiet = matches.values_of("quiet").is_some();
+            let time = matches.values_of("time").is_some();
             let paths = collect_paths(matches.value_of("paths-file"), matches.values_of("paths"))?;
             let loader_config = config.get()?;
             loader.find_all_languages(&loader_config)?;
@@ -455,9 +476,17 @@ fn run() -> Result<()> {
                 matches.value_of("scope"),
             )?;
             let query_path = Path::new(matches.value_of("query-path").unwrap());
-            let range = matches.value_of("byte-range").map(|br| {
-                let r: Vec<&str> = br.split(":").collect();
-                r[0].parse().unwrap()..r[1].parse().unwrap()
+            let byte_range = matches.value_of("byte-range").and_then(|arg| {
+                let mut parts = arg.split(":");
+                let start = parts.next()?.parse().ok()?;
+                let end = parts.next().unwrap().parse().ok()?;
+                Some(start..end)
+            });
+            let point_range = matches.value_of("row-range").and_then(|arg| {
+                let mut parts = arg.split(":");
+                let start = parts.next()?.parse().ok()?;
+                let end = parts.next().unwrap().parse().ok()?;
+                Some(Point::new(start, 0)..Point::new(end, 0))
             });
             let should_test = matches.is_present("test");
             query::query_files_at_paths(
@@ -465,8 +494,11 @@ fn run() -> Result<()> {
                 paths,
                 query_path,
                 ordered_captures,
-                range,
+                byte_range,
+                point_range,
                 should_test,
+                quiet,
+                time,
             )?;
         }
 
