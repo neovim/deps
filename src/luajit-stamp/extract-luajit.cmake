@@ -5,7 +5,7 @@ cmake_minimum_required(VERSION 3.5)
 
 # Make file names absolute:
 #
-get_filename_component(filename "/home/runner/work/deps/deps/neovim/deps/build/downloads/luajit/d0e88930ddde28ff662503f9f20facf34f7265aa.tar.gz" ABSOLUTE)
+get_filename_component(filename "/home/runner/work/deps/deps/neovim/deps/build/downloads/luajit/505e2c03de35e2718eef0d2d3660712e06dadf1f.tar.gz" ABSOLUTE)
 get_filename_component(directory "/home/runner/work/deps/deps/neovim/deps/build/src/luajit" ABSOLUTE)
 
 message(STATUS "extracting...
