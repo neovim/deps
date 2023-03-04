@@ -1,0 +1,5 @@
+.local
+.tests
+node_modules
+build/
+/.build/

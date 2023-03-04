@@ -1,0 +1,12 @@
+# This is a generated file and its contents are an internal implementation detail.
+# The download step will be re-executed if anything in this file changes.
+# No other meaning or use of this file is supported.
+
+method=url
+command=/usr/local/bin/cmake;-P;/home/runner/work/deps/deps/neovim/deps/build/src/treesitter-query-stamp/download-treesitter-query.cmake;COMMAND;/usr/local/bin/cmake;-P;/home/runner/work/deps/deps/neovim/deps/build/src/treesitter-query-stamp/verify-treesitter-query.cmake;COMMAND;/usr/local/bin/cmake;-P;/home/runner/work/deps/deps/neovim/deps/build/src/treesitter-query-stamp/extract-treesitter-query.cmake
+source_dir=/home/runner/work/deps/deps/neovim/deps/build/src/treesitter-query
+work_dir=/home/runner/work/deps/deps/neovim/deps/build/src
+url(s)=https://github.com/nvim-treesitter/tree-sitter-query/archive/0717de07078a20a8608c98ad5f26c208949d0e15.tar.gz
+hash=SHA256=2f2c79a59e3ff550aef849925e589d69b8a146b3af935504366cc973399d26e1
+no_extract=
+

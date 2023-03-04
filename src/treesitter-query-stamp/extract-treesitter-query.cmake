@@ -5,8 +5,8 @@ cmake_minimum_required(VERSION 3.5)
 
 # Make file names absolute:
 #
-get_filename_component(filename "/home/runner/work/deps/deps/neovim/deps/build/downloads/luv/e5da6417db06a09d75bb5315662a2cf3e48a4a89.tar.gz" ABSOLUTE)
-get_filename_component(directory "/home/runner/work/deps/deps/neovim/deps/build/src/luv" ABSOLUTE)
+get_filename_component(filename "/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter-query/0717de07078a20a8608c98ad5f26c208949d0e15.tar.gz" ABSOLUTE)
+get_filename_component(directory "/home/runner/work/deps/deps/neovim/deps/build/src/treesitter-query" ABSOLUTE)
 
 message(STATUS "extracting...
      src='${filename}'
@@ -20,10 +20,10 @@ endif()
 # Prepare a space for extracting:
 #
 set(i 1234)
-while(EXISTS "${directory}/../ex-luv-static${i}")
+while(EXISTS "${directory}/../ex-treesitter-query${i}")
   math(EXPR i "${i} + 1")
 endwhile()
-set(ut_dir "${directory}/../ex-luv-static${i}")
+set(ut_dir "${directory}/../ex-treesitter-query${i}")
 file(MAKE_DIRECTORY "${ut_dir}")
 
 # Extract it:
