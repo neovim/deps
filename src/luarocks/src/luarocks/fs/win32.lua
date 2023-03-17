@@ -154,10 +154,9 @@ function win32.wrap_script(script, target, deps_mode, name, version, ...)
    assert(type(name) == "string" or not name)
    assert(type(version) == "string" or not version)
 
-   local batname = target .. ".bat"
-   local wrapper = io.open(batname, "wb")
+   local wrapper = io.open(target, "wb")
    if not wrapper then
-      return nil, "Could not open "..batname.." for writing."
+      return nil, "Could not open "..target.." for writing."
    end
 
    local lpath, lcpath = path.package_paths(deps_mode)
@@ -168,7 +167,8 @@ function win32.wrap_script(script, target, deps_mode, name, version, ...)
    }
 
    local remove_interpreter = false
-   if target == "luarocks" or target == "luarocks-admin" then
+   local base = dir.base_name(target):gsub("%..*$", "")
+   if base == "luarocks" or base == "luarocks-admin" then
       if cfg.is_binary then
          remove_interpreter = true
       end
@@ -361,6 +361,17 @@ end
 
 function win32.system_cache_dir()
    return dir.path(fs.system_temp_dir(), "cache")
+end
+
+function win32.search_in_path(program)
+   for d in (os.getenv("PATH") or ""):gmatch("([^;]+)") do
+      local fd = io.open(dir.path(d, program .. ".exe"), "r")
+      if fd then
+         fd:close()
+         return true, d
+      end
+   end
+   return false
 end
 
 return win32

@@ -1,6 +1,7 @@
 local test_env = {}
 
 local lfs = require("lfs")
+local versions = require("spec.util.versions")
 
 local help_message = [[
 LuaRocks test-suite
@@ -17,7 +18,7 @@ ARGUMENTS
                           default: "minimal").
    noreset                Don't reset environment after each test
    clean                  Remove existing testing environment.
-   travis                 Add if running on TravisCI.
+   ci                     Add if running on Unix CI.
    appveyor               Add if running on Appveyor.
    os=<type>              Set OS ("linux", "osx", or "windows").
    lua_dir=<path>         Path of Lua installation (default "/usr/local")
@@ -34,14 +35,6 @@ local function title(str)
    print(("-"):rep(#str))
    print(str)
    print(("-"):rep(#str))
-end
-
-function test_env.exists(path)
-   return lfs.attributes(path, "mode") ~= nil
-end
-
-function test_env.file_if_exists(path)
-   return lfs.attributes(path, "mode") and path
 end
 
 --- Quote argument for shell processing. Fixes paths on Windows.
@@ -66,6 +59,62 @@ local function Q(arg)
    end
 end
 
+local function V(str)
+   return (str:gsub("${([^}]-)}", function(name)
+      name = name:lower()
+      local prefix, suffix = name:match("^(.*)_(.)$")
+      if suffix then
+         name = prefix
+         local d = assert(versions[name])
+         local v, r = d:match("^([^-]*)%-(%d*)$")
+         if suffix == "d" then
+            return d
+         elseif suffix == "v" then
+            return v
+         elseif suffix == "r" then
+            return v
+         else
+            print("Test error: invalid suffix " .. suffix .. " in variable " .. name)
+            os.exit(1)
+         end
+      else
+         if not versions[name] then
+            print("Test error: no version definition for " .. name)
+            os.exit(1)
+         end
+         return versions[name]
+      end
+   end))
+end
+
+local os_remove = os.remove
+os.remove = function(f) -- luacheck: ignore
+   return os_remove(V(f))
+end
+
+local os_rename = os.rename
+os.rename = function(a, b) -- luacheck: ignore
+   return os_rename(V(a), V(b))
+end
+
+local lfs_chdir = lfs.chdir
+lfs.chdir = function(d) -- luacheck: ignore
+   return lfs_chdir(V(d))
+end
+
+local lfs_attributes = lfs.attributes
+lfs.attributes = function(f, ...) -- luacheck: ignore
+   return lfs_attributes(V(f), ...)
+end
+
+function test_env.exists(path)
+   return lfs.attributes(path, "mode") ~= nil
+end
+
+function test_env.file_if_exists(path)
+   return lfs.attributes(path, "mode") and path
+end
+
 function test_env.quiet(command)
    if not test_env.VERBOSE then
       if test_env.TEST_TARGET_OS == "windows" then
@@ -79,6 +128,9 @@ function test_env.quiet(command)
 end
 
 function test_env.copy(source, destination)
+   source = V(source)
+   destination = V(destination)
+
    local r_source, err = io.open(source, "r")
    local r_destination, err = io.open(destination, "w")
 
@@ -238,8 +290,8 @@ function test_env.set_args()
          test_env.TEST_ENV_CLEAN = true
       elseif argument == "verbose" then
          test_env.VERBOSE = true
-      elseif argument == "travis" then
-         test_env.TRAVIS = true
+      elseif argument == "ci" then
+         test_env.CI = true
       elseif argument == "appveyor" then
          test_env.APPVEYOR = true
       elseif argument:find("^os=") then
@@ -273,13 +325,13 @@ function test_env.set_args()
          local system = execute_output("uname -s")
          if system == "Linux" then
             test_env.TEST_TARGET_OS = "linux"
-            if test_env.TRAVIS then
+            if test_env.CI then
                test_env.OPENSSL_INCDIR = "/usr/include"
                test_env.OPENSSL_LIBDIR = "/usr/lib/x86_64-linux-gnu"
             end
          elseif system == "Darwin" then
             test_env.TEST_TARGET_OS = "osx"
-            if test_env.TRAVIS then
+            if test_env.CI then
                test_env.OPENSSL_INCDIR = "/usr/local/opt/openssl/include"
                test_env.OPENSSL_LIBDIR = "/usr/local/opt/openssl/lib"
             end
@@ -303,6 +355,9 @@ function test_env.set_args()
 end
 
 function test_env.copy_dir(source_path, target_path)
+   source_path = V(source_path)
+   target_path = V(target_path)
+
    local testing_paths = test_env.testing_paths
    if test_env.TEST_TARGET_OS == "windows" then
       execute_bool(testing_paths.win_tools .. "/cp -R ".. source_path .. "/. " .. target_path)
@@ -314,6 +369,8 @@ end
 --- Remove directory recursively
 -- @param path string: directory path to delete
 function test_env.remove_dir(path)
+   path = V(path)
+
    if test_env.exists(path) then
       for file in lfs.dir(path) do
          if file ~= "." and file ~= ".." then
@@ -334,6 +391,8 @@ end
 -- @param path string: path to directory
 -- @param pattern string: pattern matching basenames of subdirectories to be removed
 function test_env.remove_subdirs(path, pattern)
+   path = V(path)
+
    if test_env.exists(path) then
       for file in lfs.dir(path) do
          if file ~= "." and file ~= ".." then
@@ -352,6 +411,8 @@ end
 -- @param pattern string: pattern matching basenames of files to be deleted
 -- @return result_check boolean: true if one or more files deleted
 function test_env.remove_files(path, pattern)
+   path = V(path)
+
    local result_check = false
    if test_env.exists(path) then
       for file in lfs.dir(path) do
@@ -378,12 +439,14 @@ local function download_rocks(urls, save_path)
    local to_download = {}
    local fixtures = {}
    for _, url in ipairs(urls) do
+      url = V(url)
+
       if url:match("^spec/fixtures") then
          table.insert(fixtures, (url:gsub("^spec/fixtures", test_env.testing_paths.fixtures_dir)))
       else
          -- check if already downloaded
          if not test_env.exists(save_path .. "/" .. url) then
-            table.insert(to_download, luarocks_repo .. url)
+            table.insert(to_download, ((luarocks_repo .. url):gsub("org//", "org/")))
          end
       end
    end
@@ -399,7 +462,10 @@ local function download_rocks(urls, save_path)
       else
          cmd = "wget -cP " .. save_path
       end
-      assert(execute_bool(cmd.." "..table.concat(to_download, " ")))
+      local ok = execute_bool(cmd.." "..table.concat(to_download, " "))
+      if not ok then
+         os.exit(1)
+      end
    end
 
    return (#fixtures > 0) or (#to_download > 0)
@@ -409,6 +475,8 @@ end
 -- @param pathname string: path to file.
 -- @param str string: content of the file.
 function test_env.write_file(pathname, str, finally)
+   pathname = V(pathname)
+
    local file = assert(io.open(pathname, "w"))
    file:write(str)
    file:close()
@@ -487,6 +555,7 @@ local function make_run_function(cmd_name, exec_function, with_coverage, do_prin
    end
 
    return function(cmd, new_vars)
+      cmd = V(cmd)
       local temp_vars = {}
       for k, v in pairs(test_env.env_variables) do
          temp_vars[k] = v
@@ -519,7 +588,11 @@ local function move_file(src, dst)
    if test_env.TEST_TARGET_OS == "windows" then
       execute_bool(test_env.testing_paths.win_tools .. "/mv " .. src .. " " .. dst)
    else
-      execute_bool("mv " .. src .. " " .. dst)
+      local ok = execute_bool("mv " .. src .. " " .. dst)
+      if not ok then
+         print(debug.traceback())
+         os.exit(1)
+      end
    end
 end
 
@@ -541,9 +614,9 @@ local function build_environment(rocks, env_variables)
    test_env.run.luarocks_admin_nocov("make_manifest " .. Q(testing_paths.testing_cache))
 
    for _, rock in ipairs(rocks) do
-      if not test_env.run.luarocks_nocov("install --only-server=" .. testing_paths.testing_cache .. " --tree=" .. testing_paths.testing_sys_tree .. " " .. Q(rock), env_variables) then
-         test_env.run.luarocks_nocov("build --tree=" .. Q(testing_paths.testing_sys_tree) .. " " .. Q(rock), env_variables)
-         test_env.run.luarocks_nocov("pack --tree=" .. Q(testing_paths.testing_sys_tree) .. " " .. Q(rock), env_variables)
+      if not test_env.run.luarocks_nocov(test_env.quiet("install --only-server=" .. testing_paths.testing_cache .. " --tree=" .. testing_paths.testing_sys_tree .. " " .. Q(rock), env_variables)) then
+         assert(test_env.run.luarocks_nocov("build --tree=" .. Q(testing_paths.testing_sys_tree) .. " " .. Q(rock), env_variables))
+         assert(test_env.run.luarocks_nocov("pack --tree=" .. Q(testing_paths.testing_sys_tree) .. " " .. Q(rock), env_variables))
          move_file(rock .. "-*.rock", testing_paths.testing_cache)
       end
    end
@@ -581,15 +654,20 @@ local function create_paths(luaversion_full)
       testing_paths.lua_interpreter = test_env.LUA_INTERPRETER or "lua"
    end
 
-   local bindirs = {
-      testing_paths.luadir .. "/bin",
-      testing_paths.luadir,
-   }
-   for _, bindir in ipairs(bindirs) do
-      local lua = bindir .. "/" .. testing_paths.lua_interpreter
-      if test_env.exists(lua) then
-         testing_paths.lua_bindir = bindir
-         testing_paths.lua = lua
+   local locations
+   if testing_paths.lua_interpreter:match("[/\\]") then
+      locations = { testing_paths.lua_interpreter }
+   else
+      locations = {
+         testing_paths.luadir .. "/bin/" .. testing_paths.lua_interpreter,
+         testing_paths.luadir .. "/" .. testing_paths.lua_interpreter,
+      }
+   end
+
+   for _, location in ipairs(locations) do
+      if test_env.exists(location) then
+         testing_paths.lua_bindir = location:match("(.*)[/\\][^/\\]*$")
+         testing_paths.lua = location
          break
       end
    end
@@ -643,7 +721,7 @@ end
 function test_env.setup_specs(extra_rocks)
    -- if global variable about successful creation of testing environment doesn't exist, build environment
    if not test_env.setup_done then
-      if test_env.TRAVIS then
+      if test_env.CI then
          if not test_env.exists(os.getenv("HOME") .. "/.ssh/id_rsa.pub") then
             execute_bool("ssh-keygen -t rsa -P \"\" -f ~/.ssh/id_rsa")
             execute_bool("cat ~/.ssh/id_rsa.pub >> ~/.ssh/authorized_keys")
@@ -685,6 +763,8 @@ end
 -- Return `true` if the rock is already installed or has been installed successfully,
 -- `false` if installation failed.
 function test_env.need_rock(rock)
+   rock = V(rock)
+
    print("Check if " .. rock .. " is installed")
    if test_env.run.luarocks_noprint_nocov(test_env.quiet("show " .. rock)) then
       return true
@@ -836,28 +916,40 @@ local function setup_luarocks()
    print("LuaRocks set up correctly!")
 end
 
+local function mock_api_call(path)
+   if test_env.TEST_TARGET_OS == "windows" then
+      return test_env.execute(Q(test_env.testing_paths.win_tools .. "/wget") .. " --quiet --timeout=5 --tries=1 localhost:8080" .. path)
+   else
+      return test_env.execute("curl -s localhost:8080" .. path)
+   end
+end
+
 function test_env.mock_server_init()
    local testing_paths = test_env.testing_paths
    assert(test_env.need_rock("restserver-xavante"))
-   local final_command
-   local sleep_command
+
    if test_env.TEST_TARGET_OS == "windows" then
-      final_command = test_env.execute_helper("start /b \"\" " .. Q(testing_paths.lua) .. " " .. Q(testing_paths.util_dir .. "/mock-server.lua") .. " " .. Q(testing_paths.fixtures_dir), true, test_env.env_variables)
-      sleep_command = "timeout 1 > NUL"
+      os.execute(test_env.execute_helper("start /b \"\" " .. Q(testing_paths.lua) .. " " .. Q(testing_paths.util_dir .. "/mock-server.lua") .. " " .. Q(testing_paths.fixtures_dir), true, test_env.env_variables))
    else
-      final_command = test_env.execute_helper(testing_paths.lua .. " " .. testing_paths.util_dir .. "/mock-server.lua " .. testing_paths.fixtures_dir .. " &", true, test_env.env_variables)
-      sleep_command = "sleep 1"
+      os.execute(test_env.execute_helper(testing_paths.lua .. " " .. testing_paths.util_dir .. "/mock-server.lua " .. testing_paths.fixtures_dir .. " &", true, test_env.env_variables))
    end
-   os.execute(final_command)
-   os.execute(sleep_command)
+
+   for _ = 1, 10 do
+      if mock_api_call("/api/tool_version") then
+         break
+      end
+
+      if test_env.TEST_TARGET_OS == "windows" then
+         os.execute("timeout 1 > NUL")
+      else
+         os.execute("sleep 1")
+      end
+   end
+
 end
 
 function test_env.mock_server_done()
-   if test_env.TEST_TARGET_OS == "windows" then
-      os.execute(Q(test_env.testing_paths.win_tools .. "/wget") .. " --quiet --timeout=5 --tries=1 localhost:8080/shutdown")
-   else
-      os.execute("curl localhost:8080/shutdown")
-   end
+   mock_api_call("/shutdown")
 end
 
 local function find_binary_rock(src_rock, dir)
@@ -875,20 +967,23 @@ local function prepare_mock_server_binary_rocks()
 
    local rocks = {
       -- rocks needed for mock-server
-      "luasocket-3.0rc1-2.src.rock",
+      "luasocket-${LUASOCKET}.src.rock",
       "coxpcall-1.16.0-1.src.rock",
-      "copas-2.0.1-1.src.rock",
-      "luafilesystem-1.7.0-2.src.rock",
+      "binaryheap-${BINARYHEAP}.src.rock",
+      "timerwheel-${TIMERWHEEL}.src.rock",
+      "copas-${COPAS}.src.rock",
+      "luafilesystem-${LUAFILESYSTEM}.src.rock",
       "xavante-2.4.0-1.src.rock",
       "wsapi-1.6.1-1.src.rock",
       "rings-1.3.0-1.src.rock",
       "wsapi-xavante-1.6.1-1.src.rock",
-      "dkjson-2.5-2.src.rock",
+      "dkjson-${DKJSON}.src.rock",
       "restserver-0.1-1.src.rock",
       "restserver-xavante-0.2-1.src.rock",
    }
    local make_manifest = download_rocks(rocks, testing_paths.testing_server)
    for _, rock in ipairs(rocks) do
+      rock = V(rock)
       local rockname = rock:gsub("%-[^-]+%-%d+%.[%a.]+$", "")
       if not find_binary_rock(rock, testing_paths.testing_server) then
          test_env.run.luarocks_nocov("build " .. Q(testing_paths.testing_server .. "/" .. rock) .. " --tree=" .. testing_paths.testing_cache)
@@ -924,36 +1019,42 @@ function test_env.main()
    local rocks = {} -- names of rocks, required for building environment
    local urls = {}  -- names of rock and rockspec files to be downloaded
 
+   local env_vars = {
+      LUAROCKS_CONFIG = test_env.testing_paths.testrun_dir .. "/testing_config.lua"
+   }
+
    if test_env.TYPE_TEST_ENV == "full" then
-      table.insert(urls, "/luafilesystem-1.6.3-1.src.rock")
-      table.insert(urls, "/luasocket-3.0rc1-1.src.rock")
-      table.insert(urls, "/luasocket-3.0rc1-1.rockspec")
+      table.insert(urls, "/luafilesystem-${LUAFILESYSTEM}.src.rock")
+      table.insert(urls, "/luasocket-${LUASOCKET}.src.rock")
+      table.insert(urls, "/luasocket-${LUASOCKET}.rockspec")
+      table.insert(urls, "/luasec-${LUASEC}.src.rock")
       table.insert(urls, "/md5-1.2-1.src.rock")
-      --table.insert(urls, "/lzlib-0.4.1.53-1.src.rock")
-      table.insert(urls, "/lua-zlib-1.2-0.src.rock")
-      table.insert(urls, "/lua-bz2-0.1.0-1.src.rock")
-      rocks = {"luafilesystem", "luasocket", "md5", "lua-zlib", "lua-bz2"}
+      table.insert(urls, "/manifests/hisham/lua-zlib-1.2-0.src.rock")
+      table.insert(urls, "/manifests/hisham/lua-bz2-0.2.1.1-1.src.rock")
+      rocks = {"luafilesystem", "luasocket", "luasec", "md5", "lua-zlib", "lua-bz2"}
       if test_env.TEST_TARGET_OS ~= "windows" then
-         table.insert(urls, "/luaposix-33.2.1-1.src.rock")
+         if test_env.lua_version == "5.1" then
+            table.insert(urls, "/bit32-${BIT32}.src.rock")
+            table.insert(rocks, "bit32")
+         end
+         table.insert(urls, "/luaposix-${LUAPOSIX}.src.rock")
          table.insert(rocks, "luaposix")
       end
+      assert(test_env.run.luarocks_nocov("config variables.OPENSSL_INCDIR " .. Q(test_env.OPENSSL_INCDIR), env_vars))
+      assert(test_env.run.luarocks_nocov("config variables.OPENSSL_LIBDIR " .. Q(test_env.OPENSSL_LIBDIR), env_vars))
    end
 
    -- luacov is needed for both minimal or full environment
-   table.insert(urls, "/luacov-0.15.0-1.rockspec")
-   table.insert(urls, "/luacov-0.15.0-1.src.rock")
-   table.insert(urls, "/cluacov-0.1.1-1.rockspec")
-   table.insert(urls, "/cluacov-0.1.1-1.src.rock")
+   table.insert(urls, "/luacov-${LUACOV}.rockspec")
+   table.insert(urls, "/luacov-${LUACOV}.src.rock")
+   table.insert(urls, "/cluacov-${CLUACOV}.rockspec")
+   table.insert(urls, "/cluacov-${CLUACOV}.src.rock")
    table.insert(rocks, "luacov")
    table.insert(rocks, "cluacov")
 
    -- Download rocks needed for LuaRocks testing environment
    lfs.mkdir(testing_paths.testing_server)
    download_rocks(urls, testing_paths.testing_server)
-
-   local env_vars = {
-      LUAROCKS_CONFIG = test_env.testing_paths.testrun_dir .. "/testing_config.lua"
-   }
 
    build_environment(rocks, env_vars)
 
@@ -965,5 +1066,6 @@ test_env.set_args()
 test_env.testing_paths = create_paths(test_env.LUA_V or test_env.LUAJIT_V)
 test_env.env_variables = create_env(test_env.testing_paths)
 test_env.run = make_run_functions()
+test_env.V = V
 
 return test_env

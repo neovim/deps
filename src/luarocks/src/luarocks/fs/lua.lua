@@ -114,19 +114,29 @@ end
 -- The tool is executed using a flag, usually just to ask its version.
 -- @param tool_cmd string: The command to be used to check the tool's presence (e.g. hg in case of Mercurial)
 -- @param tool_name string: The actual name of the tool (e.g. Mercurial)
--- @param arg string: The flag to pass to the tool. '--version' by default.
-function fs_lua.is_tool_available(tool_cmd, tool_name, arg)
+function fs_lua.is_tool_available(tool_cmd, tool_name)
    assert(type(tool_cmd) == "string")
    assert(type(tool_name) == "string")
-
-   arg = arg or "--version"
-   assert(type(arg) == "string")
 
    local ok
    if tool_available_cache[tool_name] ~= nil then
       ok = tool_available_cache[tool_name]
    else
-      ok = fs.execute_quiet(tool_cmd, arg)
+      local tool_cmd_no_args = tool_cmd:gsub(" [^\"]*$", "")
+
+      -- if it looks like the tool has a pathname, try that first
+      if tool_cmd_no_args:match("[/\\]") then
+         local fd = io.open(tool_cmd_no_args, "r")
+         if fd then
+            fd:close()
+            ok = true
+         end
+      end
+
+      if not ok then
+         ok = fs.search_in_path(tool_cmd_no_args)
+      end
+
       tool_available_cache[tool_name] = (ok == true)
    end
 
@@ -1035,7 +1045,7 @@ function fs_lua.current_user()
 end
 
 function fs_lua.is_superuser()
-   return false
+   return posix.geteuid() == 0
 end
 
 -- This call is not available on all systems, see #677

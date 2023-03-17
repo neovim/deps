@@ -157,6 +157,10 @@ function builtin.run(rockspec, no_install)
    local variables = rockspec.variables
    local checked_lua_h = false
 
+   for _, var in ipairs{ "CC", "CFLAGS", "LDFLAGS" } do
+      variables[var] = variables[var] or os.getenv(var) or ""
+   end
+
    local function add_flags(extras, flag, flags)
       if flags then
          if type(flags) ~= "table" then
@@ -176,13 +180,21 @@ function builtin.run(rockspec, no_install)
          add_flags(extras, "-I%s", incdirs)
          return execute(variables.CC.." "..variables.CFLAGS, "-c", "-o", object, "-I"..variables.LUA_INCDIR, source, unpack(extras))
       end
-      compile_library = function(library, objects, libraries, libdirs)
+      compile_library = function(library, objects, libraries, libdirs, name)
          local extras = { unpack(objects) }
          add_flags(extras, "-L%s", libdirs)
          add_flags(extras, "-l%s", libraries)
          extras[#extras+1] = dir.path(variables.LUA_LIBDIR, variables.LUALIB)
-         extras[#extras+1] = "-l" .. (variables.MSVCRT or "m")
-         local ok = execute(variables.LD.." "..variables.LIBFLAG, "-o", library, unpack(extras))
+
+         if variables.CC == "clang" or variables.CC == "clang-cl" then
+            local exported_name = name:gsub("%.", "_")
+            exported_name = exported_name:match('^[^%-]+%-(.+)$') or exported_name
+            extras[#extras+1] = string.format("-Wl,-export:luaopen_%s", exported_name)
+         else
+            extras[#extras+1] = "-l" .. (variables.MSVCRT or "m")
+         end
+
+         local ok = execute(variables.LD.." "..variables.LDFLAGS.." "..variables.LIBFLAG, "-o", library, unpack(extras))
          return ok
       end
       --[[ TODO disable static libs until we fix the conflict in the manifest, which will take extending the manifest format.
@@ -250,7 +262,7 @@ function builtin.run(rockspec, no_install)
             extras[#extras+1] = "-L"..variables.LUA_LIBDIR
             extras[#extras+1] = "-llua"
          end
-         return execute(variables.LD.." "..variables.LIBFLAG, "-o", library, unpack(extras))
+         return execute(variables.LD.." "..variables.LDFLAGS.." "..variables.LIBFLAG, "-o", library, unpack(extras))
       end
       compile_static_library = function(library, objects, libraries, libdirs, name)  -- luacheck: ignore 211
          local ok = execute(variables.AR, "rc", library, unpack(objects))

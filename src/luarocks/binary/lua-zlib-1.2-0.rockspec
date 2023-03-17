@@ -1,7 +1,7 @@
 package = "lua-zlib"
 version = "1.2-0"
 source = {
-   url = "git://github.com/brimworks/lua-zlib.git",
+   url = "git+https://github.com/brimworks/lua-zlib.git",
    tag = "v1.2",
 }
 description = {
@@ -16,7 +16,7 @@ description = {
    license = "MIT"
 }
 dependencies = {
-   "lua >= 5.1, <= 5.3"
+   "lua >= 5.1, <= 5.4"
 }
 external_dependencies = {
     ZLIB = {

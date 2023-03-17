@@ -20,9 +20,7 @@ local vers = require("luarocks.core.vers")
 
 --------------------------------------------------------------------------------
 
-local program_version = "3.8.0"
-local program_series = "3.8"
-local major_version = (program_version:match("([^.]%.[^.])")) or program_series
+local program_version = "3.9.2"
 
 local is_windows = package.config:sub(1,1) == "\\"
 
@@ -37,6 +35,7 @@ local platform_order = {
    "netbsd",
    "openbsd",
    "freebsd",
+   "dragonfly",
    "linux",
    "macosx",
    "cygwin",
@@ -45,6 +44,7 @@ local platform_order = {
    -- Windows
    "windows",
    "win32",
+   "mingw",
    "mingw32",
    "msys2_mingw_w64",
 }
@@ -77,11 +77,16 @@ local load_config_file
 do
    -- Create global environment for the config files;
    local function env_for_config_file(cfg, platforms)
+      local platforms_copy = {}
+      for k,v in pairs(platforms) do
+         platforms_copy[k] = v
+      end
+
       local e
       e = {
          home = cfg.home,
          lua_version = cfg.lua_version,
-         platforms = util.make_shallow_copy(platforms),
+         platforms = platforms_copy,
          processor = cfg.target_cpu,   -- remains for compat reasons
          target_cpu = cfg.target_cpu,  -- replaces `processor`
          os_getenv = os.getenv,
@@ -145,6 +150,7 @@ end
 local platform_sets = {
    freebsd = { unix = true, bsd = true, freebsd = true },
    openbsd = { unix = true, bsd = true, openbsd = true },
+   dragonfly = { unix = true, bsd = true, dragonfly = true },
    solaris = { unix = true, solaris = true },
    windows = { windows = true, win32 = true },
    cygwin = { unix = true, cygwin = true },
@@ -195,7 +201,6 @@ local function make_defaults(lua_version, target_cpu, platforms, home)
            "https://luarocks.org",
            "https://raw.githubusercontent.com/rocks-moonscript-org/moonrocks-mirror/master/",
            "https://luafr.org/luarocks/",
-           "http://luarocks.logiceditor.com/rocks",
          }
       },
       disabled_servers = {},
@@ -210,11 +215,11 @@ local function make_defaults(lua_version, target_cpu, platforms, home)
       connection_timeout = 30,  -- 0 = no timeout
 
       variables = {
-         MAKE = "make",
-         CC = "cc",
-         LD = "ld",
-         AR = "ar",
-         RANLIB = "ranlib",
+         MAKE = os.getenv("MAKE") or "make",
+         CC = os.getenv("CC") or "cc",
+         LD = os.getenv("CC") or "ld",
+         AR = os.getenv("AR") or "ar",
+         RANLIB = os.getenv("RANLIB") or "ranlib",
 
          CVS = "cvs",
          GIT = "git",
@@ -281,14 +286,16 @@ local function make_defaults(lua_version, target_cpu, platforms, home)
       defaults.external_deps_dirs = { "c:/external/", "c:/windows/system32" }
 
       defaults.makefile = "Makefile.win"
-      defaults.variables.MAKE = "nmake"
-      defaults.variables.CC = "cl"
-      defaults.variables.RC = "rc"
-      defaults.variables.LD = "link"
-      defaults.variables.MT = "mt"
-      defaults.variables.AR = "lib"
+      defaults.variables.PWD = "echo %cd%"
+      defaults.variables.MAKE = os.getenv("MAKE") or "nmake"
+      defaults.variables.CC = os.getenv("CC") or "cl"
+      defaults.variables.RC = os.getenv("WINDRES") or "rc"
+      defaults.variables.LD = os.getenv("LINK") or "link"
+      defaults.variables.MT = os.getenv("MT") or "mt"
+      defaults.variables.AR = os.getenv("AR") or "lib"
       defaults.variables.LUALIB = "lua"..lua_version..".lib"
-      defaults.variables.CFLAGS = "/nologo /MD /O2"
+      defaults.variables.CFLAGS = os.getenv("CFLAGS") or "/nologo /MD /O2"
+      defaults.variables.LDFLAGS = os.getenv("LDFLAGS")
       defaults.variables.LIBFLAG = "/nologo /dll"
 
       defaults.external_deps_patterns = {
@@ -323,13 +330,19 @@ local function make_defaults(lua_version, target_cpu, platforms, home)
       defaults.static_lib_extension = "a"
       defaults.external_deps_dirs = { "c:/external/", "c:/mingw", "c:/windows/system32" }
       defaults.cmake_generator = "MinGW Makefiles"
-      defaults.variables.MAKE = "mingw32-make"
-      defaults.variables.CC = "mingw32-gcc"
-      defaults.variables.RC = "windres"
-      defaults.variables.LD = "mingw32-gcc"
-      defaults.variables.AR = "ar"
-      defaults.variables.RANLIB = "ranlib"
-      defaults.variables.CFLAGS = "-O2"
+      defaults.variables.MAKE = os.getenv("MAKE") or "mingw32-make"
+      if target_cpu == "x86_64" then
+         defaults.variables.CC = os.getenv("CC") or "x86_64-w64-mingw32-gcc"
+         defaults.variables.LD = os.getenv("CC") or "x86_64-w64-mingw32-gcc"
+      else
+         defaults.variables.CC = os.getenv("CC") or "mingw32-gcc"
+         defaults.variables.LD = os.getenv("CC") or "mingw32-gcc"
+      end
+      defaults.variables.AR = os.getenv("AR") or "ar"
+      defaults.variables.RC = os.getenv("WINDRES") or "windres"
+      defaults.variables.RANLIB = os.getenv("RANLIB") or "ranlib"
+      defaults.variables.CFLAGS = os.getenv("CFLAGS") or "-O2"
+      defaults.variables.LDFLAGS = os.getenv("LDFLAGS")
       defaults.variables.LIBFLAG = "-shared"
       defaults.makefile = "Makefile"
       defaults.external_deps_patterns = {
@@ -353,10 +366,19 @@ local function make_defaults(lua_version, target_cpu, platforms, home)
       defaults.external_lib_extension = "so"
       defaults.obj_extension = "o"
       defaults.external_deps_dirs = { "/usr/local", "/usr", "/" }
-      defaults.variables.CFLAGS = "-O2"
+
+      defaults.variables.CFLAGS = os.getenv("CFLAGS") or "-O2"
+      -- we pass -fPIC via CFLAGS because of old Makefile-based Lua projects
+      -- which didn't have -fPIC in their Makefiles but which honor CFLAGS
+      if not defaults.variables.CFLAGS:match("-fPIC") then
+         defaults.variables.CFLAGS = defaults.variables.CFLAGS.." -fPIC"
+      end
+
+      defaults.variables.LDFLAGS = os.getenv("LDFLAGS")
+
       defaults.cmake_generator = "Unix Makefiles"
-      defaults.variables.CC = "gcc"
-      defaults.variables.LD = "gcc"
+      defaults.variables.CC = os.getenv("CC") or "gcc"
+      defaults.variables.LD = os.getenv("CC") or "gcc"
       defaults.gcc_rpath = true
       defaults.variables.LIBFLAG = "-shared"
       defaults.variables.TEST = "test"
@@ -375,9 +397,6 @@ local function make_defaults(lua_version, target_cpu, platforms, home)
       defaults.wrapper_suffix = ""
       local xdg_cache_home = os.getenv("XDG_CACHE_HOME") or home.."/.cache"
       defaults.local_cache = xdg_cache_home.."/luarocks"
-      if not defaults.variables.CFLAGS:match("-fPIC") then
-         defaults.variables.CFLAGS = defaults.variables.CFLAGS.." -fPIC"
-      end
       defaults.web_browser = "xdg-open"
    end
 
@@ -385,8 +404,8 @@ local function make_defaults(lua_version, target_cpu, platforms, home)
       defaults.lib_extension = "so" -- can be overridden in the config file for mingw builds
       defaults.arch = "cygwin-"..target_cpu
       defaults.cmake_generator = "Unix Makefiles"
-      defaults.variables.CC = "echo -llua | xargs gcc"
-      defaults.variables.LD = "echo -llua | xargs gcc"
+      defaults.variables.CC = "echo -llua | xargs " .. (os.getenv("CC") or "gcc")
+      defaults.variables.LD = "echo -llua | xargs " .. (os.getenv("CC") or "gcc")
       defaults.variables.LIBFLAG = "-shared"
       defaults.link_lua_explicitly = true
    end
@@ -417,25 +436,33 @@ local function make_defaults(lua_version, target_cpu, platforms, home)
          defaults.makefile = "Makefile"
          defaults.cmake_generator = "MSYS Makefiles"
          defaults.local_cache = home.."/.cache/luarocks"
-         defaults.variables.MAKE = "make"
-         defaults.variables.CC = "gcc"
-         defaults.variables.RC = "windres"
-         defaults.variables.LD = "gcc"
-         defaults.variables.MT = nil
-         defaults.variables.AR = "ar"
-         defaults.variables.RANLIB = "ranlib"
+         defaults.variables.MAKE = os.getenv("MAKE") or "make"
+         defaults.variables.CC = os.getenv("CC") or "gcc"
+         defaults.variables.RC = os.getenv("WINDRES") or "windres"
+         defaults.variables.LD = os.getenv("CC") or "gcc"
+         defaults.variables.MT = os.getenv("MT") or nil
+         defaults.variables.AR = os.getenv("AR") or "ar"
+         defaults.variables.RANLIB = os.getenv("RANLIB") or "ranlib"
          defaults.variables.LUALIB = "liblua"..lua_version..".dll.a"
-         defaults.variables.CFLAGS = "-O2 -fPIC"
+
+         defaults.variables.CFLAGS = os.getenv("CFLAGS") or "-O2 -fPIC"
+         if not defaults.variables.CFLAGS:match("-fPIC") then
+            defaults.variables.CFLAGS = defaults.variables.CFLAGS.." -fPIC"
+         end
+
          defaults.variables.LIBFLAG = "-shared"
       end
    end
 
    if platforms.bsd then
       defaults.variables.MAKE = "gmake"
+      defaults.gcc_rpath = false
+      defaults.variables.CC = os.getenv("CC") or "cc"
+      defaults.variables.LD = os.getenv("CC") or defaults.variables.CC
    end
 
    if platforms.macosx then
-      defaults.variables.MAKE = "make"
+      defaults.variables.MAKE = os.getenv("MAKE") or "make"
       defaults.external_lib_extension = "dylib"
       defaults.arch = "macosx-"..target_cpu
       defaults.variables.LIBFLAG = "-bundle -undefined dynamic_lookup -all_load"
@@ -444,7 +471,9 @@ local function make_defaults(lua_version, target_cpu, platforms, home)
          version = "10.3"
       end
       version = vers.parse_version(version)
-      if version >= vers.parse_version("10.10") then
+      if version >= vers.parse_version("11.0") then
+         version = vers.parse_version("11.0")
+      elseif version >= vers.parse_version("10.10") then
          version = vers.parse_version("10.8")
       elseif version >= vers.parse_version("10.5") then
          version = vers.parse_version("10.5")
@@ -454,6 +483,21 @@ local function make_defaults(lua_version, target_cpu, platforms, home)
       defaults.variables.CC = "env MACOSX_DEPLOYMENT_TARGET="..tostring(version).." gcc"
       defaults.variables.LD = "env MACOSX_DEPLOYMENT_TARGET="..tostring(version).." gcc"
       defaults.web_browser = "open"
+
+      -- XCode SDK
+      local sdk_path = util.popen_read("xcrun --show-sdk-path 2>/dev/null")
+      if sdk_path then
+         table.insert(defaults.external_deps_dirs, sdk_path .. "/usr")
+         table.insert(defaults.external_deps_patterns.lib, 1, "lib?.tbd")
+         table.insert(defaults.runtime_external_deps_patterns.lib, 1, "lib?.tbd")
+      end
+
+      -- Homebrew
+      table.insert(defaults.external_deps_dirs, "/usr/local/opt")
+      defaults.external_deps_subdirs.lib = { "", "lib", }
+      defaults.runtime_external_deps_subdirs.lib = { "", "lib", }
+      table.insert(defaults.external_deps_patterns.lib, 1, "/?/lib/lib?.dylib")
+      table.insert(defaults.runtime_external_deps_patterns.lib, 1, "/?/lib/lib?.dylib")
    end
 
    if platforms.linux then
@@ -471,29 +515,14 @@ local function make_defaults(lua_version, target_cpu, platforms, home)
 
    if platforms.freebsd then
       defaults.arch = "freebsd-"..target_cpu
-      defaults.gcc_rpath = false
-      defaults.variables.CC = os.getenv("CC") or "cc"
-      defaults.variables.CFLAGS = os.getenv("CFLAGS") or defaults.variables.CFLAGS
-      defaults.variables.LD = defaults.variables.CC
-      defaults.variables.LIBFLAG = (os.getenv("LDFLAGS") or "").." -shared"
-   end
-
-   if platforms.openbsd then
+   elseif platforms.dragonfly then
+      defaults.arch = "dragonfly-"..target_cpu
+   elseif platforms.openbsd then
       defaults.arch = "openbsd-"..target_cpu
-      defaults.gcc_rpath = false
-      defaults.variables.CC = os.getenv("CC") or "cc"
-      defaults.variables.CFLAGS = os.getenv("CFLAGS") or defaults.variables.CFLAGS
-      defaults.variables.LD = defaults.variables.CC
-      defaults.variables.LIBFLAG = (os.getenv("LDFLAGS") or "").." -shared"
-   end
-
-   if platforms.netbsd then
+   elseif platforms.netbsd then
       defaults.arch = "netbsd-"..target_cpu
-   end
-
-   if platforms.solaris then
+   elseif platforms.solaris then
       defaults.arch = "solaris-"..target_cpu
-      --defaults.platforms = {"unix", "solaris"}
       defaults.variables.MAKE = "gmake"
    end
 
@@ -558,6 +587,10 @@ local cfg = {}
 function cfg.init(detected, warning)
    detected = detected or {}
 
+   local exit_ok = true
+   local exit_err = nil
+   local exit_what = nil
+
    local hc_ok, hardcoded = pcall(require, "luarocks.core.hardcoded")
    if not hc_ok then
       hardcoded = {}
@@ -574,8 +607,6 @@ function cfg.init(detected, warning)
    end
 
    cfg.program_version = program_version
-   cfg.program_series = program_series
-   cfg.major_version = major_version
 
    if hardcoded.IS_BINARY then
       cfg.is_binary = true
@@ -666,7 +697,7 @@ function cfg.init(detected, warning)
    sys_config_file = (cfg.sysconfdir .. "/" .. config_file_name):gsub("\\", "/")
    local sys_config_ok, err = load_config_file(cfg, platforms, sys_config_file)
    if err then
-      return nil, err, "config"
+      exit_ok, exit_err, exit_what = nil, err, "config"
    end
 
    -- Load user configuration file (if allowed)
@@ -683,7 +714,7 @@ function cfg.init(detected, warning)
       if env_value then
          local env_ok, err = load_config_file(cfg, platforms, env_value)
          if err then
-            return nil, err, "config"
+            exit_ok, exit_err, exit_what = nil, err, "config"
          elseif warning and not env_ok then
             warning("Warning: could not load configuration file `"..env_value.."` given in environment variable "..env_var.."\n")
          end
@@ -700,7 +731,7 @@ function cfg.init(detected, warning)
          home_config_file = (cfg.homeconfdir .. "/" .. config_file_name):gsub("\\", "/")
          home_config_ok, err = load_config_file(cfg, platforms, home_config_file)
          if err then
-            return nil, err, "config"
+            exit_ok, exit_err, exit_what = nil, err, "config"
          end
       end
 
@@ -710,7 +741,7 @@ function cfg.init(detected, warning)
          home_config_file = (cfg.homeconfdir .. "/" .. config_file_name):gsub("\\", "/")
          home_config_ok, err = load_config_file(cfg, platforms, home_config_file)
          if err then
-            return nil, err, "config"
+            exit_ok, exit_err, exit_what = nil, err, "config"
          end
       end
 
@@ -719,7 +750,7 @@ function cfg.init(detected, warning)
          project_config_file = cfg.project_dir .. "/.luarocks/" .. config_file_name
          project_config_ok, err = load_config_file(cfg, platforms, project_config_file)
          if err then
-            return nil, err, "config"
+            exit_ok, exit_err, exit_what = nil, err, "config"
          end
       end
    end
@@ -754,7 +785,7 @@ function cfg.init(detected, warning)
    local defaults = make_defaults(cfg.lua_version, processor, platforms, cfg.home)
 
    if platforms.windows and hardcoded.WIN_TOOLS then
-      local tools = { "SEVENZ", "CP", "FIND", "LS", "MD5SUM", "PWD", "RMDIR", "WGET", "MKDIR" }
+      local tools = { "SEVENZ", "CP", "FIND", "LS", "MD5SUM", "WGET", }
       for _, tool in ipairs(tools) do
          defaults.variables[tool] = '"' .. hardcoded.WIN_TOOLS .. "/" .. defaults.variables[tool] .. '.exe"'
       end
@@ -872,7 +903,7 @@ function cfg.init(detected, warning)
       return table.concat(platform_keys, ", ")
    end
 
-   return true
+   return exit_ok, exit_err, exit_what
 end
 
 return cfg

@@ -90,7 +90,8 @@ function unix.wrap_script(script, target, deps_mode, name, version, ...)
    }
 
    local remove_interpreter = false
-   if target == "luarocks" or target == "luarocks-admin" then
+   local base = dir.base_name(target):gsub("%..*$", "")
+   if base == "luarocks" or base == "luarocks-admin" then
       if cfg.is_binary then
          remove_interpreter = true
       end
@@ -175,14 +176,6 @@ function unix.tmpname()
    return os.tmpname()
 end
 
-function unix.current_user()
-   return os.getenv("USER")
-end
-
-function unix.is_superuser()
-   return os.getenv("USER") == "root"
-end
-
 function unix.export_cmd(var, val)
    return ("export %s='%s'"):format(var, val)
 end
@@ -231,6 +224,17 @@ function unix.system_cache_dir()
       return "/var/cache"
    end
    return dir.path(fs.system_temp_dir(), "cache")
+end
+
+function unix.search_in_path(program)
+   for d in (os.getenv("PATH") or ""):gmatch("([^:]+)") do
+      local fd = io.open(dir.path(d, program), "r")
+      if fd then
+         fd:close()
+         return true, d
+      end
+   end
+   return false
 end
 
 return unix

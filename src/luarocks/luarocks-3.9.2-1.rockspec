@@ -1,9 +1,9 @@
 rockspec_format = "3.0"
 package = "luarocks"
-version = "3.8.0-1"
+version = "3.9.2-1"
 source = {
    url = "git+https://github.com/luarocks/luarocks",
-   tag = "v3.8.0"
+   tag = "v3.9.2"
 }
 description = {
    summary = "A package manager for Lua modules.",
@@ -14,7 +14,7 @@ description = {
       so that when one rock is requested all rocks it depends on are
       installed as well, and at run time, so that when a module is
       required, the correct version is loaded. LuaRocks supports both
-      local and remote repositories, and multiple local rocks trees. 
+      local and remote repositories, and multiple local rocks trees.
    ]],
    homepage = "http://www.luarocks.org",
    issues_url = "https://github.com/luarocks/luarocks/issues",
@@ -29,10 +29,10 @@ test = {
    type = "busted",
    platforms = {
       windows = {
-         flags = { "--exclude-tags=ssh,git,unix" }
+         flags = { "--exclude-tags=ssh,git,unix", "-Xhelper", "lua_dir=$(LUA_DIR)", "-Xhelper", "lua_interpreter=$(LUA)" }
       },
       unix = {
-         flags = { "--exclude-tags=ssh,git" }
+         flags = { "--exclude-tags=ssh,git", "-Xhelper", "lua_dir=$(LUA_DIR)", "-Xhelper", "lua_interpreter=$(LUA)" }
       }
    }
 }

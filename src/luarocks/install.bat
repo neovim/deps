@@ -6,7 +6,7 @@ local vars = {}
 
 
 vars.PREFIX = nil
-vars.VERSION = "3.8"
+vars.VERSION = "3.9"
 vars.SYSCONFDIR = nil
 vars.CONFBACKUPDIR = nil
 vars.SYSCONFFILENAME = nil
@@ -80,7 +80,7 @@ local function exists(filename)
 end
 
 local function mkdir (dir)
-	return exec([[.\win32\tools\mkdir -p "]]..dir..[[" >NUL]])
+	return exec([[MKDIR "]]..dir..[[" >NUL]])
 end
 
 -- does the current user have admin privileges ( = elevated)

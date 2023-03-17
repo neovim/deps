@@ -293,7 +293,11 @@ do
       end
 
       detect_config_via_args = function(args)
-         local project_dir, given = find_project_dir(args.project_tree)
+         local project_dir, given
+         if not args.no_project then
+            project_dir, given = find_project_dir(args.project_tree)
+         end
+
          local detected = detect_lua_via_args(args, project_dir)
          if args.lua_version then
             detected.given_lua_version = args.lua_version
@@ -346,9 +350,9 @@ local function get_config_text(cfg)  -- luacheck: ignore 431
 
    local libdir_ok = deps.check_lua_libdir(cfg.variables)
    local incdir_ok = deps.check_lua_incdir(cfg.variables)
-   local bindir_ok = fs.exists(cfg.variables.LUA_BINDIR)
-   local luadir_ok = fs.exists(cfg.variables.LUA_DIR)
-   local lua_ok = fs.exists(cfg.variables.LUA)
+   local bindir_ok = cfg.variables.LUA_BINDIR and fs.exists(cfg.variables.LUA_BINDIR)
+   local luadir_ok = cfg.variables.LUA_DIR and fs.exists(cfg.variables.LUA_DIR)
+   local lua_ok = cfg.variables.LUA and fs.exists(cfg.variables.LUA)
 
    local buf = "Configuration:\n"
    buf = buf.."   Lua:\n"
@@ -463,11 +467,13 @@ Enabling completion for Fish:
       :argname("<prefix>")
    parser:option("--lua-version", "Which Lua version to use.")
       :argname("<ver>")
+      :convert(function(s) return (s:match("^%d+%.%d+$")) end)
    parser:option("--tree", "Which tree to operate on.")
       :hidden_name("--to")
    parser:flag("--local", "Use the tree in the user's home directory.\n"..
       "To enable it, see '"..program.." help path'.")
    parser:flag("--global", "Use the system tree when `local_by_default` is `true`.")
+   parser:flag("--no-project", "Do not use project tree even if running from a project folder.")
    parser:flag("--verbose", "Display verbose output of commands executed.")
    parser:option("--timeout", "Timeout on network operations, in seconds.\n"..
       "0 means no timeout (wait forever). Default is "..

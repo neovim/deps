@@ -8,8 +8,8 @@ test_env.unload_luarocks()
 
 local extra_rocks = {
    "/luassert-1.7.0-1.src.rock",
-   "/luasocket-3.0rc1-2.src.rock",
-   "/luasocket-3.0rc1-2.rockspec",
+   "/luasocket-${LUASOCKET}.src.rock",
+   "/luasocket-${LUASOCKET}.rockspec",
    "/say-1.2-1.src.rock",
    "/say-1.0-1.src.rock"
 }
@@ -30,7 +30,7 @@ describe("luarocks pack #integration", function()
    end)
 
    it("invalid rockspec", function()
-      assert.is_false(run.luarocks_bool("pack " .. testing_paths.fixtures_dir .. "/invalid_validate-args-1.5.4-1.rockspec"))
+      assert.is_false(run.luarocks_bool("pack " .. testing_paths.fixtures_dir .. "/invalid_say-1.3-1.rockspec"))
    end)
 
    it("not installed rock", function()

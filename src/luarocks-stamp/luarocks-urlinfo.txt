@@ -6,7 +6,7 @@ method=url
 command=/usr/local/bin/cmake;-P;/home/runner/work/deps/deps/neovim/deps/build/src/luarocks-stamp/download-luarocks.cmake;COMMAND;/usr/local/bin/cmake;-P;/home/runner/work/deps/deps/neovim/deps/build/src/luarocks-stamp/verify-luarocks.cmake;COMMAND;/usr/local/bin/cmake;-P;/home/runner/work/deps/deps/neovim/deps/build/src/luarocks-stamp/extract-luarocks.cmake
 source_dir=/home/runner/work/deps/deps/neovim/deps/build/src/luarocks
 work_dir=/home/runner/work/deps/deps/neovim/deps/build/src
-url(s)=https://github.com/luarocks/luarocks/archive/v3.8.0.tar.gz
-hash=SHA256=ab6612ca9ab87c6984871d2712d05525775e8b50172701a0a1cabddf76de2be7
+url(s)=https://github.com/luarocks/luarocks/archive/v3.9.2.tar.gz
+hash=SHA256=a0b36cd68586cd79966d0106bb2e5a4f5523327867995fd66bee4237062b3e3b
 no_extract=
 

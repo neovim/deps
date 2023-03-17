@@ -1,3 +1,58 @@
+## What's new in LuaRocks 3.9.1
+
+* Fixed error message when Lua library is not found
+* Fixed build of Windows binary
+* A couple of minor feature additions:
+  * API: `loader.which` has a new mode for searching `package.path/cpath`
+    * Adds a new second argument, `where`, a string which indicates places
+      to search for the module. If `where` contains `"l"`, it will search
+      using the LuaRocks loader; if it contains `"p"`, it will look in the
+      filesystem using `package.path` and `package.cpath`. You can use both
+      at the same time.
+  * `--no-project` flag can be used to override `.luarocks` project directory
+    detection
+
+## What's new in LuaRocks 3.9.0
+
+* `builtin` build mode now always respects CC, CFLAGS and LDFLAGS
+* Check that lua.h version matches the desired Lua version
+* Check that the version of the Lua C library matches the desired Lua version
+* Fixed deployment of non-wrapped binaries
+* Fixed crash when `--lua-version` option is malformed
+* Fixed help message for `--pin` option
+* Unix: use native methods and don't always rely on $USER to determine user
+* Windows: use native CLI tooling more
+* macOS: support .tbd extension when checking for libraries
+* macOS: add XCode SDK path to search paths
+* macOS: add best-effort heuristic for library search using Homebrew paths
+* macOS: avoid quoting issues with LIBFLAG
+* macOS: deployment target is now 11.0 on macOS 11+
+* added DragonFly BSD support
+* LuaRocks test suite now runs on Lua 5.4 and LuaJIT
+* Internal dependencies of standalone LuaRocks executable were bumped
+
+## What's new in LuaRocks 3.8.0
+
+* Support GitHub's protocol security changes transparently.
+  * The raw git:// protocol will stop working on GitHub. LuaRocks already
+    supports git+https:// as an alternative, but to avoid having to update
+    every rockspec in the repository that uses git://github.com, which would
+    require a large coordinated effort, LuaRocks now auto-converts github.com
+    and www.github.com URLs that use git:// to git+https://
+* `luarocks test` has a new flag `--prepare` that checks, downloads and
+  installs the tool requirements and rockspec dependencies but does not
+  run the test suite for the rockspec being tested.
+* Code tweaks so that LuaRocks can run on a Lua interpreter built without
+  the `debug` library.
+* `luarocks upload` supports uploading pre-packaged `.src.rock` files.
+* Configuration fixes for OpenBSD.
+* Respect the existing value for the `variables.LUALIB` configuration
+  variable if given explicitly by the user in the config file, rather
+  than trying to override it with auto-detection.
+* Windows fixes for setting file permissions:
+  * Revert the use of `Everyone` back to `*S-1-1-0`
+  * Quote the use of the `%USERNAME%` variable to support names with spaces
+
 ## What's new in LuaRocks 3.7.0
 
 * Improved connectivity resiliency
