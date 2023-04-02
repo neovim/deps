@@ -22,16 +22,16 @@ function(check_file_hash has_hash hash_is_good)
   set("${has_hash}" TRUE PARENT_SCOPE)
 
   message(STATUS "verifying file...
-       file='/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter-help/v1.3.0.tar.gz'")
+       file='/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter-vimdoc/b2ec4ec5f7be24cb6f7ccffafd7204477fe5784a.tar.gz'")
 
-  file("SHA256" "/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter-help/v1.3.0.tar.gz" actual_value)
+  file("SHA256" "/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter-vimdoc/b2ec4ec5f7be24cb6f7ccffafd7204477fe5784a.tar.gz" actual_value)
 
-  if(NOT "${actual_value}" STREQUAL "f33f6d49c7d71feb2fd68ef2b2684da150f9f8e486ad9726213631d673942331")
+  if(NOT "${actual_value}" STREQUAL "0689a57d455243de6c6a6c8737a8ce137e225eb8f32676a7037f7dd13dfaec5d")
     set("${hash_is_good}" FALSE PARENT_SCOPE)
     message(STATUS "SHA256 hash of
-    /home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter-help/v1.3.0.tar.gz
+    /home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter-vimdoc/b2ec4ec5f7be24cb6f7ccffafd7204477fe5784a.tar.gz
   does not match expected value
-    expected: 'f33f6d49c7d71feb2fd68ef2b2684da150f9f8e486ad9726213631d673942331'
+    expected: '0689a57d455243de6c6a6c8737a8ce137e225eb8f32676a7037f7dd13dfaec5d'
       actual: '${actual_value}'")
   else()
     set("${hash_is_good}" TRUE PARENT_SCOPE)
@@ -71,40 +71,40 @@ function(sleep_before_download attempt)
   execute_process(COMMAND "${CMAKE_COMMAND}" -E sleep "${sleep_seconds}")
 endfunction()
 
-if("/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter-help/v1.3.0.tar.gz" STREQUAL "")
+if("/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter-vimdoc/b2ec4ec5f7be24cb6f7ccffafd7204477fe5784a.tar.gz" STREQUAL "")
   message(FATAL_ERROR "LOCAL can't be empty")
 endif()
 
-if("https://github.com/neovim/tree-sitter-vimdoc/archive/v1.3.0.tar.gz" STREQUAL "")
+if("https://github.com/neovim/tree-sitter-vimdoc/archive/b2ec4ec5f7be24cb6f7ccffafd7204477fe5784a.tar.gz" STREQUAL "")
   message(FATAL_ERROR "REMOTE can't be empty")
 endif()
 
-if(EXISTS "/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter-help/v1.3.0.tar.gz")
+if(EXISTS "/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter-vimdoc/b2ec4ec5f7be24cb6f7ccffafd7204477fe5784a.tar.gz")
   check_file_hash(has_hash hash_is_good)
   if(has_hash)
     if(hash_is_good)
       message(STATUS "File already exists and hash match (skip download):
-  file='/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter-help/v1.3.0.tar.gz'
-  SHA256='f33f6d49c7d71feb2fd68ef2b2684da150f9f8e486ad9726213631d673942331'"
+  file='/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter-vimdoc/b2ec4ec5f7be24cb6f7ccffafd7204477fe5784a.tar.gz'
+  SHA256='0689a57d455243de6c6a6c8737a8ce137e225eb8f32676a7037f7dd13dfaec5d'"
       )
       return()
     else()
       message(STATUS "File already exists but hash mismatch. Removing...")
-      file(REMOVE "/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter-help/v1.3.0.tar.gz")
+      file(REMOVE "/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter-vimdoc/b2ec4ec5f7be24cb6f7ccffafd7204477fe5784a.tar.gz")
     endif()
   else()
     message(STATUS "File already exists but no hash specified (use URL_HASH):
-  file='/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter-help/v1.3.0.tar.gz'
+  file='/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter-vimdoc/b2ec4ec5f7be24cb6f7ccffafd7204477fe5784a.tar.gz'
 Old file will be removed and new file downloaded from URL."
     )
-    file(REMOVE "/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter-help/v1.3.0.tar.gz")
+    file(REMOVE "/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter-vimdoc/b2ec4ec5f7be24cb6f7ccffafd7204477fe5784a.tar.gz")
   endif()
 endif()
 
 set(retry_number 5)
 
 message(STATUS "Downloading...
-   dst='/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter-help/v1.3.0.tar.gz'
+   dst='/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter-vimdoc/b2ec4ec5f7be24cb6f7ccffafd7204477fe5784a.tar.gz'
    timeout='none'
    inactivity timeout='none'"
 )
@@ -115,7 +115,7 @@ foreach(i RANGE ${retry_number})
   if(status_code IN_LIST download_retry_codes)
     sleep_before_download(${i})
   endif()
-  foreach(url https://github.com/neovim/tree-sitter-vimdoc/archive/v1.3.0.tar.gz)
+  foreach(url https://github.com/neovim/tree-sitter-vimdoc/archive/b2ec4ec5f7be24cb6f7ccffafd7204477fe5784a.tar.gz)
     if(NOT url IN_LIST skip_url_list)
       message(STATUS "Using src='${url}'")
 
@@ -126,7 +126,7 @@ foreach(i RANGE ${retry_number})
 
       file(
         DOWNLOAD
-        "${url}" "/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter-help/v1.3.0.tar.gz"
+        "${url}" "/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter-vimdoc/b2ec4ec5f7be24cb6f7ccffafd7204477fe5784a.tar.gz"
         
         # no TIMEOUT
         # no INACTIVITY_TIMEOUT
@@ -143,7 +143,7 @@ foreach(i RANGE ${retry_number})
         check_file_hash(has_hash hash_is_good)
         if(has_hash AND NOT hash_is_good)
           message(STATUS "Hash mismatch, removing...")
-          file(REMOVE "/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter-help/v1.3.0.tar.gz")
+          file(REMOVE "/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter-vimdoc/b2ec4ec5f7be24cb6f7ccffafd7204477fe5784a.tar.gz")
         else()
           message(STATUS "Downloading... done")
           return()

@@ -5,8 +5,8 @@ cmake_minimum_required(VERSION 3.5)
 
 # Make file names absolute:
 #
-get_filename_component(filename "/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter-help/v1.3.0.tar.gz" ABSOLUTE)
-get_filename_component(directory "/home/runner/work/deps/deps/neovim/deps/build/src/treesitter-help" ABSOLUTE)
+get_filename_component(filename "/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter-vimdoc/b2ec4ec5f7be24cb6f7ccffafd7204477fe5784a.tar.gz" ABSOLUTE)
+get_filename_component(directory "/home/runner/work/deps/deps/neovim/deps/build/src/treesitter-vimdoc" ABSOLUTE)
 
 message(STATUS "extracting...
      src='${filename}'
@@ -20,10 +20,10 @@ endif()
 # Prepare a space for extracting:
 #
 set(i 1234)
-while(EXISTS "${directory}/../ex-treesitter-help${i}")
+while(EXISTS "${directory}/../ex-treesitter-vimdoc${i}")
   math(EXPR i "${i} + 1")
 endwhile()
-set(ut_dir "${directory}/../ex-treesitter-help${i}")
+set(ut_dir "${directory}/../ex-treesitter-vimdoc${i}")
 file(MAKE_DIRECTORY "${ut_dir}")
 
 # Extract it:

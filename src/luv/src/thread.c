@@ -22,6 +22,11 @@ typedef struct {
   int len;
   int argc;
   luv_thread_arg_t args;
+
+  // private fields, avoid thread be released before it done
+  lua_State *L;
+  int ref;
+  uv_async_t notify;
 } luv_thread_t;
 
 static lua_State* luv_thread_acquire_vm(void) {
@@ -65,7 +70,7 @@ static int luv_thread_arg_set(lua_State* L, luv_thread_arg_t* args, int idx, int
   idx = idx > 0 ? idx : 1;
   i = idx;
   args->flags = flags;
-  while (i <= top && i <= LUV_THREAD_MAXNUM_ARG + idx)
+  while (i <= top && i < LUV_THREAD_MAXNUM_ARG + idx)
   {
     luv_val_t *arg = args->argv + i - idx;
     arg->type = lua_type(L, i);
@@ -253,8 +258,6 @@ static luv_thread_t* luv_check_thread(lua_State* L, int index) {
 static int luv_thread_gc(lua_State* L) {
   luv_thread_t* tid = luv_check_thread(L, 1);
   free(tid->code);
-  tid->code = NULL;
-  tid->len = 0;
   luv_thread_arg_clear(L, &tid->args, LUVF_THREAD_SIDE_MAIN);
   return 0;
 }
@@ -288,7 +291,22 @@ static void luv_thread_cb(void* varg) {
     lua_pop(L, 1);
   }
 
+  uv_async_send(&thd->notify);
   release_vm_cb(L);
+}
+
+static void luv_thread_notify_close_cb(uv_handle_t *handle) {
+  luv_thread_t *thread = handle->data;
+  if (thread->handle != 0)
+    uv_thread_join(&thread->handle);
+
+  luaL_unref(thread->L, LUA_REGISTRYINDEX, thread->ref);
+  thread->ref = LUA_NOREF;
+  thread->L = NULL;
+}
+
+static void luv_thread_exit_cb(uv_async_t* handle) {
+  uv_close((uv_handle_t*)handle, luv_thread_notify_close_cb);
 }
 
 static int luv_new_thread(lua_State* L) {
@@ -297,6 +315,8 @@ static int luv_new_thread(lua_State* L) {
   char* code;
   luv_thread_t* thread;
   int cbidx = 1;
+  luv_ctx_t* ctx = luv_context(L);
+
 #if LUV_UV_VERSION_GEQ(1, 26, 0)
   uv_thread_options_t options;
   options.flags = UV_THREAD_NO_FLAGS;
@@ -339,12 +359,23 @@ static int luv_new_thread(lua_State* L) {
   }
   thread->len = len;
 
+  thread->notify.data = thread;
+  thread->ref = LUA_NOREF;
+  thread->L = L;
+  ret = uv_async_init(ctx->loop, &thread->notify, luv_thread_exit_cb);
+  if (ret < 0)
+    return luv_error(L, ret);
+
+  lua_pushvalue(L, -1);
+  thread->ref = luaL_ref(L, LUA_REGISTRYINDEX);
+
 #if LUV_UV_VERSION_GEQ(1, 26, 0)
   ret = uv_thread_create_ex(&thread->handle, &options, luv_thread_cb, thread);
 #else
   ret = uv_thread_create(&thread->handle, luv_thread_cb, thread);
 #endif
   if (ret < 0) {
+    uv_close((uv_handle_t*)&thread->notify, luv_thread_notify_close_cb);
     return luv_error(L, ret);
   }
 
@@ -355,6 +386,7 @@ static int luv_thread_join(lua_State* L) {
   luv_thread_t* tid = luv_check_thread(L, 1);
   int ret = uv_thread_join(&tid->handle);
   if (ret < 0) return luv_error(L, ret);
+  tid->handle = 0;
   lua_pushboolean(L, 1);
   return 1;
 }
