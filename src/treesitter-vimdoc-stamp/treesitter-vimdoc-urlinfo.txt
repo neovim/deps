@@ -6,7 +6,7 @@ method=url
 command=/usr/local/bin/cmake;-P;/home/runner/work/deps/deps/neovim/deps/build/src/treesitter-vimdoc-stamp/download-treesitter-vimdoc.cmake;COMMAND;/usr/local/bin/cmake;-P;/home/runner/work/deps/deps/neovim/deps/build/src/treesitter-vimdoc-stamp/verify-treesitter-vimdoc.cmake;COMMAND;/usr/local/bin/cmake;-P;/home/runner/work/deps/deps/neovim/deps/build/src/treesitter-vimdoc-stamp/extract-treesitter-vimdoc.cmake
 source_dir=/home/runner/work/deps/deps/neovim/deps/build/src/treesitter-vimdoc
 work_dir=/home/runner/work/deps/deps/neovim/deps/build/src
-url(s)=https://github.com/neovim/tree-sitter-vimdoc/archive/b2ec4ec5f7be24cb6f7ccffafd7204477fe5784a.tar.gz
-hash=SHA256=0689a57d455243de6c6a6c8737a8ce137e225eb8f32676a7037f7dd13dfaec5d
+url(s)=https://github.com/neovim/tree-sitter-vimdoc/archive/v2.0.0.tar.gz
+hash=SHA256=1ff8f4afd3a9599dd4c3ce87c155660b078c1229704d1a254433e33794b8f274
 no_extract=
 
