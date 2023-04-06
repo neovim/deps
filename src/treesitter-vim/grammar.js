@@ -103,6 +103,8 @@ module.exports = grammar({
     [$.binary_operation, $.unary_operation, $.field_expression],
     [$.binary_operation, $.field_expression],
     [$.list, $._pattern_atom],
+    [$._ident, $.lambda_expression],
+    [$._ident, $._immediate_lambda_expression],
   ],
 
   externals: ($) =>
@@ -273,8 +275,9 @@ module.exports = grammar({
       bang_range_command($, "source", optional(field("file", $.filename))),
 
     global_statement: ($) =>
-      seq(
-        maybe_bang($, keyword($, "global")),
+      bang_range_command(
+        $,
+        "global",
         $._separator_first,
         $.pattern,
         $._separator,
@@ -392,30 +395,6 @@ module.exports = grammar({
 
     throw_statement: ($) => command($, "throw", $._expression),
 
-    autocmd_statement: ($) =>
-      seq(
-        maybe_bang($, keyword($, "autocmd")),
-        optional(alias($.identifier, $.augroup_name)),
-        optional(
-          seq(
-            $.au_event_list,
-            commaSep1(alias(/[^ \t\n,]+/, $.pattern)),
-            optional("++once"),
-            optional("++nested"),
-            field("command", $._statement)
-          )
-        )
-      ),
-
-    augroup_statement: ($) =>
-      seq(
-        maybe_bang($, keyword($, "augroup")),
-        alias($.identifier, $.augroup_name)
-      ),
-
-    au_event: ($) => /[A-Z][a-zA-Z]+/,
-    au_event_list: ($) => commaSep1($.au_event),
-
     // :h filter
     _bang_filter_bangs: ($) => seq($.bang, optional($.bang)),
     _bang_filter_command_argument: ($) =>
@@ -470,7 +449,24 @@ module.exports = grammar({
           )
         )
       ),
-    _ident: ($) => choice($.scoped_identifier, $.identifier, $.argument),
+    _immediate_identifier: ($) =>
+      seq(
+        choice(
+          token.immediate(/[a-zA-Z_]+/),
+          alias($._immediate_curly_braces_name_expression, $.curly_braces_name)
+        ),
+        repeat(
+          choice(
+            token.immediate(/(\w|#)+/),
+            alias(
+              $._immediate_curly_braces_name_expression,
+              $.curly_braces_name
+            )
+          )
+        )
+      ),
+    _ident: ($) =>
+      prec.dynamic(1, choice($.scoped_identifier, $.identifier, $.argument)),
 
     keyword: ($) => /[a-zA-Z_](\w|#)*/,
 
@@ -566,7 +562,8 @@ module.exports = grammar({
     unlet_statement: ($) =>
       seq(maybe_bang($, keyword($, "unlet")), repeat1($._expression)),
 
-    call_statement: ($) => seq(keyword($, "call"), $.call_expression),
+    call_statement: ($) =>
+      range_command($, "call", choice($.call_expression, $.method_expression)),
 
     echo_statement: ($) => echo_variant($, "echo"),
     echon_statement: ($) => echo_variant($, "echon"),
@@ -933,7 +930,8 @@ module.exports = grammar({
         seq("(", $._expression, ")"),
         $.unary_operation,
         $.field_expression,
-        $.call_expression
+        $.call_expression,
+        $.method_expression
       ),
 
     ternary_expression: ($) =>
@@ -1056,6 +1054,30 @@ module.exports = grammar({
 
     eval_statement: ($) => command($, "eval", $._expression),
 
+    _method_call_expression: ($) =>
+      seq(
+        field(
+          "function",
+          choice(
+            alias($._immediate_identifier, $.identifier),
+            alias($._immediate_lambda_expression, $.lambda_expression)
+          )
+        ),
+        token.immediate("("),
+        optional(commaSep1($._expression)),
+        ")"
+      ),
+
+    method_expression: ($) =>
+      prec(
+        PREC.CALL,
+        seq(
+          field("value", $._expression),
+          "->",
+          alias($._method_call_expression, $.call_expression)
+        )
+      ),
+
     // Use default :h isfname
     filename: ($) =>
       seq(
@@ -1151,6 +1173,14 @@ module.exports = grammar({
     // :h lambda
     lambda_expression: ($) =>
       seq("{", commaSep($.identifier), "->", $._expression, "}"),
+    _immediate_lambda_expression: ($) =>
+      seq(
+        token.immediate("{"),
+        commaSep($.identifier),
+        "->",
+        $._expression,
+        "}"
+      ),
 
     // :h ++opt
     _plus_plus_opt_bad: ($) =>
@@ -1198,6 +1228,7 @@ module.exports = grammar({
         )
       ),
 
+    ...require("./rules/autocmd"),
     ...require("./rules/command"),
     ...require("./rules/highlight"),
     ...require("./rules/syntax"),
