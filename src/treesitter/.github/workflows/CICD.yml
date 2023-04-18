@@ -4,12 +4,17 @@ on:
   workflow_dispatch:
   pull_request:
   push:
-    branches:
-      - master
-      - check/*
+    branches-ignore:
+      - release/v*
 
 concurrency:
-  group: '${{ github.workflow }} @ ${{ github.event.pull_request.head.label || github.head_ref || github.ref }}'
+  group: >
+    ${{ github.workflow }} @ ${{
+      github.ref == 'refs/heads/master' && github.ref_name || ''
+    }}${{
+      github.ref == 'refs/heads/master' && github.sha
+      || github.event.pull_request.head.label || github.head_ref || github.ref
+    }}
   cancel-in-progress: true
 
 jobs:
@@ -46,6 +51,11 @@ jobs:
     with:
       package: tree-sitter-cli
 
+  sanitize:
+    name: Sanitize
+    needs: [init, fast_checks]
+    uses: ./.github/workflows/sanitize.yml
+
   build:
     name: Build & Test
     needs: [init, fast_checks]
@@ -55,7 +65,7 @@ jobs:
 
   release:
     name: Release
-    needs: [init, fast_checks, full_checks, min_version, build]
+    needs: [init, fast_checks, full_checks, min_version, build, sanitize]
     if: >
       github.event.pull_request.head.repo.full_name == github.repository &&
       startsWith(github.head_ref, 'release/v')

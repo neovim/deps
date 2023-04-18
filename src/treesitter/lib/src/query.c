@@ -305,6 +305,7 @@ struct TSQueryCursor {
   Array(QueryState) finished_states;
   CaptureListPool capture_list_pool;
   uint32_t depth;
+  uint32_t max_start_depth;
   uint32_t start_byte;
   uint32_t end_byte;
   TSPoint start_point;
@@ -331,7 +332,7 @@ static bool stream_advance(Stream *self) {
   if (self->input < self->end) {
     uint32_t size = ts_decode_utf8(
       (const uint8_t *)self->input,
-      self->end - self->input,
+      (uint32_t)(self->end - self->input),
       &self->next
     );
     if (size > 0) {
@@ -398,7 +399,7 @@ static void stream_scan_identifier(Stream *stream) {
 }
 
 static uint32_t stream_offset(Stream *self) {
-  return self->input - self->start;
+  return (uint32_t)(self->input - self->start);
 }
 
 /******************
@@ -938,6 +939,9 @@ static inline int analysis_state__compare(
 }
 
 static inline AnalysisStateEntry *analysis_state__top(AnalysisState *self) {
+  if (self->depth == 0) {
+    return &self->stack[0];
+  }
   return &self->stack[self->depth - 1];
 }
 
@@ -2064,7 +2068,7 @@ static TSQueryError ts_query__parse_predicate(
   if (!stream_is_ident_start(stream)) return TSQueryErrorSyntax;
   const char *predicate_name = stream->input;
   stream_scan_identifier(stream);
-  uint32_t length = stream->input - predicate_name;
+  uint32_t length = (uint32_t)(stream->input - predicate_name);
   uint16_t id = symbol_table_insert_name(
     &self->predicate_values,
     predicate_name,
@@ -2095,7 +2099,7 @@ static TSQueryError ts_query__parse_predicate(
       if (!stream_is_ident_start(stream)) return TSQueryErrorSyntax;
       const char *capture_name = stream->input;
       stream_scan_identifier(stream);
-      uint32_t length = stream->input - capture_name;
+      uint32_t length = (uint32_t)(stream->input - capture_name);
 
       // Add the capture id to the first step of the pattern
       int capture_id = symbol_table_id_for_name(
@@ -2133,7 +2137,7 @@ static TSQueryError ts_query__parse_predicate(
     else if (stream_is_ident_start(stream)) {
       const char *symbol_start = stream->input;
       stream_scan_identifier(stream);
-      uint32_t length = stream->input - symbol_start;
+      uint32_t length = (uint32_t)(stream->input - symbol_start);
       uint16_t id = symbol_table_insert_name(
         &self->predicate_values,
         symbol_start,
@@ -2302,7 +2306,7 @@ static TSQueryError ts_query__parse_pattern(
       if (stream_is_ident_start(stream)) {
         const char *node_name = stream->input;
         stream_scan_identifier(stream);
-        uint32_t length = stream->input - node_name;
+        uint32_t length = (uint32_t)(stream->input - node_name);
 
         // TODO - remove.
         // For temporary backward compatibility, handle predicates without the leading '#' sign.
@@ -2353,7 +2357,7 @@ static TSQueryError ts_query__parse_pattern(
 
         const char *node_name = stream->input;
         stream_scan_identifier(stream);
-        uint32_t length = stream->input - node_name;
+        uint32_t length = (uint32_t)(stream->input - node_name);
 
         step->symbol = ts_language_symbol_for_name(
           self->language,
@@ -2386,7 +2390,7 @@ static TSQueryError ts_query__parse_pattern(
           }
           const char *field_name = stream->input;
           stream_scan_identifier(stream);
-          uint32_t length = stream->input - field_name;
+          uint32_t length = (uint32_t)(stream->input - field_name);
           stream_skip_whitespace(stream);
 
           TSFieldId field_id = ts_language_field_id_for_name(
@@ -2497,7 +2501,7 @@ static TSQueryError ts_query__parse_pattern(
     // Parse the field name
     const char *field_name = stream->input;
     stream_scan_identifier(stream);
-    uint32_t length = stream->input - field_name;
+    uint32_t length = (uint32_t)(stream->input - field_name);
     stream_skip_whitespace(stream);
 
     if (stream->next != ':') {
@@ -2616,7 +2620,7 @@ static TSQueryError ts_query__parse_pattern(
       if (!stream_is_ident_start(stream)) return TSQueryErrorSyntax;
       const char *capture_name = stream->input;
       stream_scan_identifier(stream);
-      uint32_t length = stream->input - capture_name;
+      uint32_t length = (uint32_t)(stream->input - capture_name);
       stream_skip_whitespace(stream);
 
       // Add the capture id to the first step of the pattern
@@ -2973,6 +2977,7 @@ TSQueryCursor *ts_query_cursor_new(void) {
     .end_byte = UINT32_MAX,
     .start_point = {0, 0},
     .end_point = POINT_MAX,
+    .max_start_depth = UINT32_MAX,
   };
   array_reserve(&self->states, 8);
   array_reserve(&self->finished_states, 8);
@@ -3323,7 +3328,7 @@ static QueryState *ts_query_cursor__copy_state(
   QueryState **state_ref
 ) {
   const QueryState *state = *state_ref;
-  uint32_t state_index = state - self->states.contents;
+  uint32_t state_index = (uint32_t)(state - self->states.contents);
   QueryState copy = *state;
   copy.capture_list_id = NONE;
 
@@ -3343,9 +3348,15 @@ static QueryState *ts_query_cursor__copy_state(
   return &self->states.contents[state_index + 1];
 }
 
-static inline bool ts_query_cursor__should_descend_outside_of_range(
-  TSQueryCursor *self
+static inline bool ts_query_cursor__should_descend(
+  TSQueryCursor *self,
+  bool node_intersects_range
 ) {
+
+  if (node_intersects_range && self->depth < self->max_start_depth) {
+    return true;
+  }
+
   // If there are in-progress matches whose remaining steps occur
   // deeper in the tree, then descend.
   for (unsigned i = 0; i < self->states.size; i++) {
@@ -3357,6 +3368,10 @@ static inline bool ts_query_cursor__should_descend_outside_of_range(
     ) {
       return true;
     }
+  }
+
+  if (self->depth >= self->max_start_depth) {
+    return false;
   }
 
   // If the current node is hidden, then a non-rooted pattern might match
@@ -3552,12 +3567,14 @@ static inline bool ts_query_cursor__advance(
             // If this node matches the first step of the pattern, then add a new
             // state at the start of this pattern.
             QueryStep *step = &self->query->steps.contents[pattern->step_index];
+            uint32_t start_depth = self->depth - step->depth;
             if (
               (pattern->is_rooted ?
                 node_intersects_range :
                 (parent_intersects_range && !parent_is_error)) &&
               (!step->field || field_id == step->field) &&
-              (!step->supertype_symbol || supertype_count > 0)
+              (!step->supertype_symbol || supertype_count > 0) &&
+              (start_depth <= self->max_start_depth)
             ) {
               ts_query_cursor__add_state(self, pattern);
             }
@@ -3570,6 +3587,7 @@ static inline bool ts_query_cursor__advance(
           PatternEntry *pattern = &self->query->pattern_map.contents[i];
 
           QueryStep *step = &self->query->steps.contents[pattern->step_index];
+          uint32_t start_depth = self->depth - step->depth;
           do {
             // If this node matches the first step of the pattern, then add a new
             // state at the start of this pattern.
@@ -3577,7 +3595,8 @@ static inline bool ts_query_cursor__advance(
               (pattern->is_rooted ?
                 node_intersects_range :
                 (parent_intersects_range && !parent_is_error)) &&
-              (!step->field || field_id == step->field)
+              (!step->field || field_id == step->field) &&
+              (start_depth <= self->max_start_depth)
             ) {
               ts_query_cursor__add_state(self, pattern);
             }
@@ -3878,10 +3897,7 @@ static inline bool ts_query_cursor__advance(
         }
       }
 
-      bool should_descend =
-        node_intersects_range ||
-        ts_query_cursor__should_descend_outside_of_range(self);
-      if (should_descend) {
+      if (ts_query_cursor__should_descend(self, node_intersects_range)) {
         switch (ts_tree_cursor_goto_first_child_internal(&self->cursor)) {
           case TreeCursorStepVisible:
             self->depth++;
@@ -4069,6 +4085,17 @@ bool ts_query_cursor_next_capture(
       !ts_query_cursor__advance(self, true) &&
       self->finished_states.size == 0
     ) return false;
+  }
+}
+
+void ts_query_cursor_set_max_start_depth(
+  TSQueryCursor *self,
+  uint32_t max_start_depth
+) {
+  if (max_start_depth == 0) {
+    self->max_start_depth = UINT32_MAX;
+  } else {
+    self->max_start_depth = max_start_depth;
   }
 }
 
