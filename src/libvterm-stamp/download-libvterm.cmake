@@ -75,7 +75,7 @@ if("/home/runner/work/deps/deps/neovim/deps/build/downloads/libvterm/libvterm-0.
   message(FATAL_ERROR "LOCAL can't be empty")
 endif()
 
-if("https://launchpad.net/libvterm/trunk/v0.3/+download/libvterm-0.3.1.tar.gz" STREQUAL "")
+if("https://github.com/neovim/deps/raw/aa004f1b2b6470a92363cba8e1cc1874141dacc4/opt/libvterm-0.3.1.tar.gz" STREQUAL "")
   message(FATAL_ERROR "REMOTE can't be empty")
 endif()
 
@@ -115,7 +115,7 @@ foreach(i RANGE ${retry_number})
   if(status_code IN_LIST download_retry_codes)
     sleep_before_download(${i})
   endif()
-  foreach(url https://launchpad.net/libvterm/trunk/v0.3/+download/libvterm-0.3.1.tar.gz)
+  foreach(url https://github.com/neovim/deps/raw/aa004f1b2b6470a92363cba8e1cc1874141dacc4/opt/libvterm-0.3.1.tar.gz)
     if(NOT url IN_LIST skip_url_list)
       message(STATUS "Using src='${url}'")
 
