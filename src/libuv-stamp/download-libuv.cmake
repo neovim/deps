@@ -22,16 +22,16 @@ function(check_file_hash has_hash hash_is_good)
   set("${has_hash}" TRUE PARENT_SCOPE)
 
   message(STATUS "verifying file...
-       file='/home/runner/work/deps/deps/neovim/deps/build/downloads/libuv/62c2374a8c005ce9e42088965f8f8af2532c177b.tar.gz'")
+       file='/home/runner/work/deps/deps/neovim/deps/build/downloads/libuv/15e81386bf9a285cada688c5faf67b3ed1319dcf.tar.gz'")
 
-  file("SHA256" "/home/runner/work/deps/deps/neovim/deps/build/downloads/libuv/62c2374a8c005ce9e42088965f8f8af2532c177b.tar.gz" actual_value)
+  file("SHA256" "/home/runner/work/deps/deps/neovim/deps/build/downloads/libuv/15e81386bf9a285cada688c5faf67b3ed1319dcf.tar.gz" actual_value)
 
-  if(NOT "${actual_value}" STREQUAL "c7e89137da65a1cb550ba96b892dfeeabea982bf33b9237bcf9bbcd90f2e70a1")
+  if(NOT "${actual_value}" STREQUAL "cd97aff8e7073fb128aef7a45e9183264ccaf07945a6cb430053070bd03ff200")
     set("${hash_is_good}" FALSE PARENT_SCOPE)
     message(STATUS "SHA256 hash of
-    /home/runner/work/deps/deps/neovim/deps/build/downloads/libuv/62c2374a8c005ce9e42088965f8f8af2532c177b.tar.gz
+    /home/runner/work/deps/deps/neovim/deps/build/downloads/libuv/15e81386bf9a285cada688c5faf67b3ed1319dcf.tar.gz
   does not match expected value
-    expected: 'c7e89137da65a1cb550ba96b892dfeeabea982bf33b9237bcf9bbcd90f2e70a1'
+    expected: 'cd97aff8e7073fb128aef7a45e9183264ccaf07945a6cb430053070bd03ff200'
       actual: '${actual_value}'")
   else()
     set("${hash_is_good}" TRUE PARENT_SCOPE)
@@ -71,40 +71,40 @@ function(sleep_before_download attempt)
   execute_process(COMMAND "${CMAKE_COMMAND}" -E sleep "${sleep_seconds}")
 endfunction()
 
-if("/home/runner/work/deps/deps/neovim/deps/build/downloads/libuv/62c2374a8c005ce9e42088965f8f8af2532c177b.tar.gz" STREQUAL "")
+if("/home/runner/work/deps/deps/neovim/deps/build/downloads/libuv/15e81386bf9a285cada688c5faf67b3ed1319dcf.tar.gz" STREQUAL "")
   message(FATAL_ERROR "LOCAL can't be empty")
 endif()
 
-if("https://github.com/libuv/libuv/archive/62c2374a8c005ce9e42088965f8f8af2532c177b.tar.gz" STREQUAL "")
+if("https://github.com/libuv/libuv/archive/15e81386bf9a285cada688c5faf67b3ed1319dcf.tar.gz" STREQUAL "")
   message(FATAL_ERROR "REMOTE can't be empty")
 endif()
 
-if(EXISTS "/home/runner/work/deps/deps/neovim/deps/build/downloads/libuv/62c2374a8c005ce9e42088965f8f8af2532c177b.tar.gz")
+if(EXISTS "/home/runner/work/deps/deps/neovim/deps/build/downloads/libuv/15e81386bf9a285cada688c5faf67b3ed1319dcf.tar.gz")
   check_file_hash(has_hash hash_is_good)
   if(has_hash)
     if(hash_is_good)
       message(STATUS "File already exists and hash match (skip download):
-  file='/home/runner/work/deps/deps/neovim/deps/build/downloads/libuv/62c2374a8c005ce9e42088965f8f8af2532c177b.tar.gz'
-  SHA256='c7e89137da65a1cb550ba96b892dfeeabea982bf33b9237bcf9bbcd90f2e70a1'"
+  file='/home/runner/work/deps/deps/neovim/deps/build/downloads/libuv/15e81386bf9a285cada688c5faf67b3ed1319dcf.tar.gz'
+  SHA256='cd97aff8e7073fb128aef7a45e9183264ccaf07945a6cb430053070bd03ff200'"
       )
       return()
     else()
       message(STATUS "File already exists but hash mismatch. Removing...")
-      file(REMOVE "/home/runner/work/deps/deps/neovim/deps/build/downloads/libuv/62c2374a8c005ce9e42088965f8f8af2532c177b.tar.gz")
+      file(REMOVE "/home/runner/work/deps/deps/neovim/deps/build/downloads/libuv/15e81386bf9a285cada688c5faf67b3ed1319dcf.tar.gz")
     endif()
   else()
     message(STATUS "File already exists but no hash specified (use URL_HASH):
-  file='/home/runner/work/deps/deps/neovim/deps/build/downloads/libuv/62c2374a8c005ce9e42088965f8f8af2532c177b.tar.gz'
+  file='/home/runner/work/deps/deps/neovim/deps/build/downloads/libuv/15e81386bf9a285cada688c5faf67b3ed1319dcf.tar.gz'
 Old file will be removed and new file downloaded from URL."
     )
-    file(REMOVE "/home/runner/work/deps/deps/neovim/deps/build/downloads/libuv/62c2374a8c005ce9e42088965f8f8af2532c177b.tar.gz")
+    file(REMOVE "/home/runner/work/deps/deps/neovim/deps/build/downloads/libuv/15e81386bf9a285cada688c5faf67b3ed1319dcf.tar.gz")
   endif()
 endif()
 
 set(retry_number 5)
 
 message(STATUS "Downloading...
-   dst='/home/runner/work/deps/deps/neovim/deps/build/downloads/libuv/62c2374a8c005ce9e42088965f8f8af2532c177b.tar.gz'
+   dst='/home/runner/work/deps/deps/neovim/deps/build/downloads/libuv/15e81386bf9a285cada688c5faf67b3ed1319dcf.tar.gz'
    timeout='none'
    inactivity timeout='none'"
 )
@@ -115,7 +115,7 @@ foreach(i RANGE ${retry_number})
   if(status_code IN_LIST download_retry_codes)
     sleep_before_download(${i})
   endif()
-  foreach(url https://github.com/libuv/libuv/archive/62c2374a8c005ce9e42088965f8f8af2532c177b.tar.gz)
+  foreach(url https://github.com/libuv/libuv/archive/15e81386bf9a285cada688c5faf67b3ed1319dcf.tar.gz)
     if(NOT url IN_LIST skip_url_list)
       message(STATUS "Using src='${url}'")
 
@@ -126,7 +126,7 @@ foreach(i RANGE ${retry_number})
 
       file(
         DOWNLOAD
-        "${url}" "/home/runner/work/deps/deps/neovim/deps/build/downloads/libuv/62c2374a8c005ce9e42088965f8f8af2532c177b.tar.gz"
+        "${url}" "/home/runner/work/deps/deps/neovim/deps/build/downloads/libuv/15e81386bf9a285cada688c5faf67b3ed1319dcf.tar.gz"
         
         # no TIMEOUT
         # no INACTIVITY_TIMEOUT
@@ -143,7 +143,7 @@ foreach(i RANGE ${retry_number})
         check_file_hash(has_hash hash_is_good)
         if(has_hash AND NOT hash_is_good)
           message(STATUS "Hash mismatch, removing...")
-          file(REMOVE "/home/runner/work/deps/deps/neovim/deps/build/downloads/libuv/62c2374a8c005ce9e42088965f8f8af2532c177b.tar.gz")
+          file(REMOVE "/home/runner/work/deps/deps/neovim/deps/build/downloads/libuv/15e81386bf9a285cada688c5faf67b3ed1319dcf.tar.gz")
         else()
           message(STATUS "Downloading... done")
           return()
