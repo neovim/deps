@@ -20,10 +20,10 @@ endif()
 # Prepare a space for extracting:
 #
 set(i 1234)
-while(EXISTS "${directory}/../ex-luv-static${i}")
+while(EXISTS "${directory}/../ex-luv${i}")
   math(EXPR i "${i} + 1")
 endwhile()
-set(ut_dir "${directory}/../ex-luv-static${i}")
+set(ut_dir "${directory}/../ex-luv${i}")
 file(MAKE_DIRECTORY "${ut_dir}")
 
 # Extract it:
