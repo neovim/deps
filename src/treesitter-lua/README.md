@@ -1,8 +1,11 @@
-![GitHub Workflow Status: CI](https://img.shields.io/github/workflow/status/MunifTanjim/tree-sitter-lua/CI/main?label=CI&style=for-the-badge)
+![GitHub Workflow Status: CI](https://img.shields.io/github/actions/workflow/status/MunifTanjim/tree-sitter-lua/ci.yml?branch=main&label=CI&style=for-the-badge)
 
 # tree-sitter-lua
 
 Lua grammar for tree-sitter.
+
+- Lua 5.x
+- LuaJIT 2.x
 
 ## References
 
@@ -10,7 +13,7 @@ Lua grammar for tree-sitter.
 
 ## Acknowledgement
 
-The [external scanner](/src/scanner.c) was based on these repositories:
+The [external scanner](/src/scanner.c) was initially based on these repositories:
 
 - [Azganoth/tree-sitter-lua](https://github.com/Azganoth/tree-sitter-lua)
 - [euclidianAce/tree-sitter-teal](https://github.com/euclidianAce/tree-sitter-teal)

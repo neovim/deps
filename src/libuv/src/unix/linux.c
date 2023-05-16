@@ -159,6 +159,7 @@ enum {
 
 enum {
   UV__IORING_SQ_NEED_WAKEUP = 1u,
+  UV__IORING_SQ_CQ_OVERFLOW = 2u,
 };
 
 struct uv__io_cqring_offsets {
@@ -891,7 +892,9 @@ static void uv__poll_io_uring(uv_loop_t* loop, struct uv__iou* iou) {
   uint32_t tail;
   uint32_t mask;
   uint32_t i;
+  uint32_t flags;
   int nevents;
+  int rc;
 
   head = *iou->cqhead;
   tail = atomic_load_explicit((_Atomic uint32_t*) iou->cqtail,
@@ -930,6 +933,21 @@ static void uv__poll_io_uring(uv_loop_t* loop, struct uv__iou* iou) {
   atomic_store_explicit((_Atomic uint32_t*) iou->cqhead,
                         tail,
                         memory_order_release);
+
+  /* Check whether CQE's overflowed, if so enter the kernel to make them
+   * available. Don't grab them immediately but in the next loop iteration to
+   * avoid loop starvation. */
+  flags = atomic_load_explicit((_Atomic uint32_t*) iou->sqflags,
+                               memory_order_acquire);
+
+  if (flags & UV__IORING_SQ_CQ_OVERFLOW) {
+    do
+      rc = uv__io_uring_enter(iou->ringfd, 0, 0, UV__IORING_ENTER_GETEVENTS);
+    while (rc == -1 && errno == EINTR);
+
+    if (rc < 0)
+      perror("libuv: io_uring_enter(getevents)");  /* Can't happen. */
+  }
 
   uv__metrics_inc_events(loop, nevents);
   if (uv__get_internal_fields(loop)->current_timeout == 0)
@@ -1841,7 +1859,7 @@ static uint64_t uv__read_uint64(const char* filename) {
   if (0 == uv__slurp(filename, buf, sizeof(buf)))
     if (1 != sscanf(buf, "%" PRIu64, &rc))
       if (0 == strcmp(buf, "max\n"))
-        rc = ~0ull;
+        rc = UINT64_MAX;
 
   return rc;
 }
@@ -1877,6 +1895,7 @@ static void uv__get_cgroup1_memory_limits(char buf[static 1024], uint64_t* high,
   char filename[4097];
   char* p;
   int n;
+  uint64_t cgroup1_max;
 
   /* Find out where the controller is mounted. */
   p = uv__cgroup1_find_memory_controller(buf, &n);
@@ -1893,12 +1912,22 @@ static void uv__get_cgroup1_memory_limits(char buf[static 1024], uint64_t* high,
      * as indicated by uv__read_uint64 returning 0.
      */
      if (*high != 0 && *max != 0)
-       return;
+       goto update_limits;
   }
 
   /* Fall back to the limits of the global memory controller. */
   *high = uv__read_uint64("/sys/fs/cgroup/memory/memory.soft_limit_in_bytes");
   *max = uv__read_uint64("/sys/fs/cgroup/memory/memory.limit_in_bytes");
+
+  /* uv__read_uint64 detects cgroup2's "max", so we need to separately detect
+   * cgroup1's maximum value (which is derived from LONG_MAX and PAGE_SIZE).
+   */
+update_limits:
+  cgroup1_max = LONG_MAX & ~(sysconf(_SC_PAGESIZE) - 1);
+  if (*high == cgroup1_max)
+    *high = UINT64_MAX;
+  if (*max == cgroup1_max)
+    *max = UINT64_MAX;
 }
 
 static void uv__get_cgroup2_memory_limits(char buf[static 1024], uint64_t* high,

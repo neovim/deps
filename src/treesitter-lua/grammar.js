@@ -33,9 +33,9 @@ module.exports = grammar({
     $._block_comment_content,
     $._block_comment_end,
 
-    $._string_start,
-    $._string_content,
-    $._string_end,
+    $._block_string_start,
+    $._block_string_content,
+    $._block_string_end,
   ],
 
   supertypes: ($) => [$.statement, $.expression, $.declaration, $.variable],
@@ -51,7 +51,7 @@ module.exports = grammar({
         optional($.return_statement)
       ),
 
-    hash_bang_line: (_) => /#!.*/,
+    hash_bang_line: (_) => /#.*/,
 
     // block ::= {stat} [retstat]
     _block: ($) =>
@@ -309,45 +309,92 @@ module.exports = grammar({
 
     // Numeral
     number: (_) => {
-      const decimal_digits = /[0-9]+/;
-      const signed_integer = seq(optional(choice('-', '+')), decimal_digits);
-      const decimal_exponent_part = seq(choice('e', 'E'), signed_integer);
+      function number_literal(digits, exponent_marker, exponent_digits) {
+        return choice(
+          seq(digits, /U?LL/i),
+          seq(
+            choice(
+              seq(optional(digits), optional('.'), digits),
+              seq(digits, optional('.'), optional(digits))
+            ),
+            optional(
+              seq(
+                choice(
+                  exponent_marker.toLowerCase(),
+                  exponent_marker.toUpperCase()
+                ),
+                seq(optional(choice('-', '+')), exponent_digits)
+              )
+            ),
+            optional(choice('i', 'I'))
+          )
+        );
+      }
 
-      const decimal_integer_literal = choice(
-        '0',
-        seq(optional('0'), /[1-9]/, optional(decimal_digits))
+      const decimal_digits = /[0-9]+/;
+      const decimal_literal = number_literal(
+        decimal_digits,
+        'e',
+        decimal_digits
       );
 
       const hex_digits = /[a-fA-F0-9]+/;
-      const hex_exponent_part = seq(choice('p', 'P'), signed_integer);
-
-      const decimal_literal = choice(
-        seq(
-          decimal_integer_literal,
-          '.',
-          optional(decimal_digits),
-          optional(decimal_exponent_part)
-        ),
-        seq('.', decimal_digits, optional(decimal_exponent_part)),
-        seq(decimal_integer_literal, optional(decimal_exponent_part))
-      );
-
       const hex_literal = seq(
         choice('0x', '0X'),
-        hex_digits,
-        optional(seq('.', hex_digits)),
-        optional(hex_exponent_part)
+        number_literal(hex_digits, 'p', decimal_digits)
       );
 
       return token(choice(decimal_literal, hex_literal));
     },
 
     // LiteralString
-    string: ($) =>
+    string: ($) => choice($._quote_string, $._block_string),
+
+    _quote_string: ($) =>
+      choice(
+        seq(
+          field('start', alias('"', '"')),
+          field(
+            'content',
+            optional(alias($._doublequote_string_content, $.string_content))
+          ),
+          field('end', alias('"', '"'))
+        ),
+        seq(
+          field('start', alias("'", "'")),
+          field(
+            'content',
+            optional(alias($._singlequote_string_content, $.string_content))
+          ),
+          field('end', alias("'", "'"))
+        )
+      ),
+
+    _doublequote_string_content: ($) =>
+      repeat1(choice(token.immediate(prec(1, /[^"\\]+/)), $.escape_sequence)),
+
+    _singlequote_string_content: ($) =>
+      repeat1(choice(token.immediate(prec(1, /[^'\\]+/)), $.escape_sequence)),
+
+    _block_string: ($) =>
       seq(
-        field('start', alias($._string_start, 'string_start')),
-        field('content', optional(alias($._string_content, 'string_content'))),
-        field('end', alias($._string_end, 'string_end'))
+        field('start', alias($._block_string_start, '[[')),
+        field('content', alias($._block_string_content, $.string_content)),
+        field('end', alias($._block_string_end, ']]'))
+      ),
+
+    escape_sequence: () =>
+      token.immediate(
+        seq(
+          '\\',
+          choice(
+            /[\nabfnrtv\\'"]/,
+            /z\s*/,
+            /[0-9]{1,3}/,
+            /x[0-9a-fA-F]{2}/,
+            /u\{[0-9a-fA-F]+\}/
+          )
+        )
       ),
 
     // '...'
