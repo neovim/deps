@@ -705,7 +705,8 @@ static void uv__iou_submit(struct uv__iou* iou) {
 
   if (flags & UV__IORING_SQ_NEED_WAKEUP)
     if (uv__io_uring_enter(iou->ringfd, 0, 0, UV__IORING_ENTER_SQ_WAKEUP))
-      perror("libuv: io_uring_enter(wakeup)");  /* Can't happen. */
+      if (errno != EOWNERDEAD)  /* Kernel bug. Harmless, ignore. */
+        perror("libuv: io_uring_enter(wakeup)");  /* Can't happen. */
 }
 
 
@@ -780,6 +781,11 @@ int uv__iou_fs_read_or_write(uv_loop_t* loop,
                              int is_read) {
   struct uv__io_uring_sqe* sqe;
   struct uv__iou* iou;
+
+  /* For the moment, if iovcnt is greater than IOV_MAX, fallback to the
+   * threadpool. In the future we might take advantage of IOSQE_IO_LINK. */
+  if (req->nbufs > IOV_MAX)
+    return 0;
 
   iou = &uv__get_internal_fields(loop)->iou;
 
