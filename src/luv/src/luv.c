@@ -372,12 +372,22 @@ static const luaL_Reg luv_functions[] = {
   {"random", luv_random},
 #endif
   {"sleep", luv_sleep},
+#if LUV_UV_VERSION_GEQ(1, 45, 0)
+  {"cpumask_size", luv_cpumask_size},
+  {"get_available_memory", luv_get_available_memory},
+  {"clock_gettime", luv_clock_gettime},
+#endif
 
   // thread.c
   {"new_thread", luv_new_thread},
   {"thread_equal", luv_thread_equal},
   {"thread_self", luv_thread_self},
   {"thread_join", luv_thread_join},
+#if LUV_UV_VERSION_GEQ(1, 45, 0)
+  {"thread_getaffinity", luv_thread_getaffinity},
+  {"thread_setaffinity", luv_thread_setaffinity},
+  {"thread_getcpu", luv_thread_getcpu},
+#endif
 
   // work.c
   {"new_work", luv_new_work},
@@ -391,6 +401,9 @@ static const luaL_Reg luv_functions[] = {
   // metrics.c
 #if LUV_UV_VERSION_GEQ(1, 39, 0)
   {"metrics_idle_time", luv_metrics_idle_time},
+#endif
+#if LUV_UV_VERSION_GEQ(1, 45, 0)
+  {"metrics_info", luv_metrics_info},
 #endif
 
   {NULL, NULL}

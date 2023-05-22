@@ -70,7 +70,7 @@ jobs:
     - name: Build
       run: make
     - name: Test
-      run: valgrind --suppressions=.ci/pthread_create.supp --error-exitcode=1 --leak-check=full --child-silent-after-fork=yes --keep-debuginfo=yes ./build/lua -e "collectgarbage('setpause', 0); collectgarbage('setstepmul', 10000000000000)" tests/run.lua
+      run: valgrind --suppressions=.ci/valgrind_mem.supp --error-exitcode=1 --leak-check=full --child-silent-after-fork=yes --keep-debuginfo=yes --track-origins=yes ./build/lua -e "collectgarbage('setpause', 0); collectgarbage('setstepmul', 10000000000000)" tests/run.lua
 
   process-cleanup-test:
     runs-on: ubuntu-latest
@@ -144,7 +144,7 @@ jobs:
     - name: Build with Luarocks (alternate rockspec)
       run: |
         mkdir ${{github.workspace}}/build/lib
-        cp ${{github.workspace}}/build/deps/libuv/libuv_a.a ${{github.workspace}}/build/lib/libuv.a
+        cp ${{github.workspace}}/build/deps/libuv/libuv.a ${{github.workspace}}/build/lib/libuv.a
         cp -a ${{github.workspace}}/deps/libuv/include ${{github.workspace}}/build
         luarocks make rockspecs/$(ls rockspecs) LIBUV_DIR=${{github.workspace}}/build LUA_COMPAT53_INCDIR=${{github.workspace}}/deps/lua-compat-5.3/c-api
         test $PWD = `lua -e "print(require'luv'.cwd())"`

@@ -22,16 +22,16 @@ function(check_file_hash has_hash hash_is_good)
   set("${has_hash}" TRUE PARENT_SCOPE)
 
   message(STATUS "verifying file...
-       file='/home/runner/work/deps/deps/neovim/deps/build/downloads/luv/093a977b82077591baefe1e880d37dfa2730bd54.tar.gz'")
+       file='/home/runner/work/deps/deps/neovim/deps/build/downloads/luv/c1497c0ffd3e1400a137ac99a614159a685f716b.tar.gz'")
 
-  file("SHA256" "/home/runner/work/deps/deps/neovim/deps/build/downloads/luv/093a977b82077591baefe1e880d37dfa2730bd54.tar.gz" actual_value)
+  file("SHA256" "/home/runner/work/deps/deps/neovim/deps/build/downloads/luv/c1497c0ffd3e1400a137ac99a614159a685f716b.tar.gz" actual_value)
 
-  if(NOT "${actual_value}" STREQUAL "222b38b6425f0926218e14e7da81481fdde6f9660c1feac25a53e6fb52e886e6")
+  if(NOT "${actual_value}" STREQUAL "fc8c8c777454b78e09c06bd177860da9b79804affc967b015ecccb75b3af6893")
     set("${hash_is_good}" FALSE PARENT_SCOPE)
     message(STATUS "SHA256 hash of
-    /home/runner/work/deps/deps/neovim/deps/build/downloads/luv/093a977b82077591baefe1e880d37dfa2730bd54.tar.gz
+    /home/runner/work/deps/deps/neovim/deps/build/downloads/luv/c1497c0ffd3e1400a137ac99a614159a685f716b.tar.gz
   does not match expected value
-    expected: '222b38b6425f0926218e14e7da81481fdde6f9660c1feac25a53e6fb52e886e6'
+    expected: 'fc8c8c777454b78e09c06bd177860da9b79804affc967b015ecccb75b3af6893'
       actual: '${actual_value}'")
   else()
     set("${hash_is_good}" TRUE PARENT_SCOPE)
@@ -71,40 +71,40 @@ function(sleep_before_download attempt)
   execute_process(COMMAND "${CMAKE_COMMAND}" -E sleep "${sleep_seconds}")
 endfunction()
 
-if("/home/runner/work/deps/deps/neovim/deps/build/downloads/luv/093a977b82077591baefe1e880d37dfa2730bd54.tar.gz" STREQUAL "")
+if("/home/runner/work/deps/deps/neovim/deps/build/downloads/luv/c1497c0ffd3e1400a137ac99a614159a685f716b.tar.gz" STREQUAL "")
   message(FATAL_ERROR "LOCAL can't be empty")
 endif()
 
-if("https://github.com/luvit/luv/archive/093a977b82077591baefe1e880d37dfa2730bd54.tar.gz" STREQUAL "")
+if("https://github.com/luvit/luv/archive/c1497c0ffd3e1400a137ac99a614159a685f716b.tar.gz" STREQUAL "")
   message(FATAL_ERROR "REMOTE can't be empty")
 endif()
 
-if(EXISTS "/home/runner/work/deps/deps/neovim/deps/build/downloads/luv/093a977b82077591baefe1e880d37dfa2730bd54.tar.gz")
+if(EXISTS "/home/runner/work/deps/deps/neovim/deps/build/downloads/luv/c1497c0ffd3e1400a137ac99a614159a685f716b.tar.gz")
   check_file_hash(has_hash hash_is_good)
   if(has_hash)
     if(hash_is_good)
       message(STATUS "File already exists and hash match (skip download):
-  file='/home/runner/work/deps/deps/neovim/deps/build/downloads/luv/093a977b82077591baefe1e880d37dfa2730bd54.tar.gz'
-  SHA256='222b38b6425f0926218e14e7da81481fdde6f9660c1feac25a53e6fb52e886e6'"
+  file='/home/runner/work/deps/deps/neovim/deps/build/downloads/luv/c1497c0ffd3e1400a137ac99a614159a685f716b.tar.gz'
+  SHA256='fc8c8c777454b78e09c06bd177860da9b79804affc967b015ecccb75b3af6893'"
       )
       return()
     else()
       message(STATUS "File already exists but hash mismatch. Removing...")
-      file(REMOVE "/home/runner/work/deps/deps/neovim/deps/build/downloads/luv/093a977b82077591baefe1e880d37dfa2730bd54.tar.gz")
+      file(REMOVE "/home/runner/work/deps/deps/neovim/deps/build/downloads/luv/c1497c0ffd3e1400a137ac99a614159a685f716b.tar.gz")
     endif()
   else()
     message(STATUS "File already exists but no hash specified (use URL_HASH):
-  file='/home/runner/work/deps/deps/neovim/deps/build/downloads/luv/093a977b82077591baefe1e880d37dfa2730bd54.tar.gz'
+  file='/home/runner/work/deps/deps/neovim/deps/build/downloads/luv/c1497c0ffd3e1400a137ac99a614159a685f716b.tar.gz'
 Old file will be removed and new file downloaded from URL."
     )
-    file(REMOVE "/home/runner/work/deps/deps/neovim/deps/build/downloads/luv/093a977b82077591baefe1e880d37dfa2730bd54.tar.gz")
+    file(REMOVE "/home/runner/work/deps/deps/neovim/deps/build/downloads/luv/c1497c0ffd3e1400a137ac99a614159a685f716b.tar.gz")
   endif()
 endif()
 
 set(retry_number 5)
 
 message(STATUS "Downloading...
-   dst='/home/runner/work/deps/deps/neovim/deps/build/downloads/luv/093a977b82077591baefe1e880d37dfa2730bd54.tar.gz'
+   dst='/home/runner/work/deps/deps/neovim/deps/build/downloads/luv/c1497c0ffd3e1400a137ac99a614159a685f716b.tar.gz'
    timeout='none'
    inactivity timeout='none'"
 )
@@ -115,7 +115,7 @@ foreach(i RANGE ${retry_number})
   if(status_code IN_LIST download_retry_codes)
     sleep_before_download(${i})
   endif()
-  foreach(url https://github.com/luvit/luv/archive/093a977b82077591baefe1e880d37dfa2730bd54.tar.gz)
+  foreach(url https://github.com/luvit/luv/archive/c1497c0ffd3e1400a137ac99a614159a685f716b.tar.gz)
     if(NOT url IN_LIST skip_url_list)
       message(STATUS "Using src='${url}'")
 
@@ -126,7 +126,7 @@ foreach(i RANGE ${retry_number})
 
       file(
         DOWNLOAD
-        "${url}" "/home/runner/work/deps/deps/neovim/deps/build/downloads/luv/093a977b82077591baefe1e880d37dfa2730bd54.tar.gz"
+        "${url}" "/home/runner/work/deps/deps/neovim/deps/build/downloads/luv/c1497c0ffd3e1400a137ac99a614159a685f716b.tar.gz"
         
         # no TIMEOUT
         # no INACTIVITY_TIMEOUT
@@ -143,7 +143,7 @@ foreach(i RANGE ${retry_number})
         check_file_hash(has_hash hash_is_good)
         if(has_hash AND NOT hash_is_good)
           message(STATUS "Hash mismatch, removing...")
-          file(REMOVE "/home/runner/work/deps/deps/neovim/deps/build/downloads/luv/093a977b82077591baefe1e880d37dfa2730bd54.tar.gz")
+          file(REMOVE "/home/runner/work/deps/deps/neovim/deps/build/downloads/luv/c1497c0ffd3e1400a137ac99a614159a685f716b.tar.gz")
         else()
           message(STATUS "Downloading... done")
           return()
