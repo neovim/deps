@@ -3,6 +3,6 @@ includedir=@INCDIR@
 
 Name: vterm
 Description: Abstract VT220/Xterm/ECMA-48 emulation library
-Version: 0.3.1
+Version: 0.3.2
 Libs: -L${libdir} -lvterm
 Cflags: -I${includedir}

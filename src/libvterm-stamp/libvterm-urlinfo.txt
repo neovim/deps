@@ -6,7 +6,7 @@ method=url
 command=/usr/local/bin/cmake;-P;/home/runner/work/deps/deps/neovim/deps/build/src/libvterm-stamp/download-libvterm.cmake;COMMAND;/usr/local/bin/cmake;-P;/home/runner/work/deps/deps/neovim/deps/build/src/libvterm-stamp/verify-libvterm.cmake;COMMAND;/usr/local/bin/cmake;-P;/home/runner/work/deps/deps/neovim/deps/build/src/libvterm-stamp/extract-libvterm.cmake
 source_dir=/home/runner/work/deps/deps/neovim/deps/build/src/libvterm
 work_dir=/home/runner/work/deps/deps/neovim/deps/build/src
-url(s)=https://github.com/neovim/deps/raw/aa004f1b2b6470a92363cba8e1cc1874141dacc4/opt/libvterm-0.3.1.tar.gz
-hash=SHA256=25a8ad9c15485368dfd0a8a9dca1aec8fea5c27da3fa74ec518d5d3787f0c397
+url(s)=https://github.com/neovim/deps/raw/6c0a5213d062f2210fd5fecb9524ac27ca018ef4/opt/libvterm-0.3.2.tar.gz
+hash=SHA256=91eb5088069f4e6edab69e14c4212f6da0192e65695956dc048016a0dab8bcf6
 no_extract=
 
