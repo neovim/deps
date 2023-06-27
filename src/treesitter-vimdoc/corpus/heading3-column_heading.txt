@@ -127,6 +127,7 @@ nvim_ui_try_resize({width}, {height})                   *nvim_ui_try_resize()*
   (block
     (line
       (word)
+      (word)
       (argument
         (word))
       (word)
@@ -271,11 +272,13 @@ buffer-diagram
       (word))
     (line
       (word)
-      (word)
+      (ERROR
+        (word))
       (word))
     (line
       (word)
-      (word)
+      (ERROR
+        (word))
       (word))
     (line
       (taglink

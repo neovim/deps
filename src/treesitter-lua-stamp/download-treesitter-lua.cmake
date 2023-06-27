@@ -22,16 +22,16 @@ function(check_file_hash has_hash hash_is_good)
   set("${has_hash}" TRUE PARENT_SCOPE)
 
   message(STATUS "verifying file...
-       file='/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter-lua/v0.0.17.tar.gz'")
+       file='/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter-lua/v0.0.18.tar.gz'")
 
-  file("SHA256" "/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter-lua/v0.0.17.tar.gz" actual_value)
+  file("SHA256" "/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter-lua/v0.0.18.tar.gz" actual_value)
 
-  if(NOT "${actual_value}" STREQUAL "8963fd0a185d786c164dfca3824941c7eaec497ce49a3a0bc24bf753f5e0e59c")
+  if(NOT "${actual_value}" STREQUAL "659beef871a7fa1d9a02c23f5ebf55019aa3adce6d7f5441947781e128845256")
     set("${hash_is_good}" FALSE PARENT_SCOPE)
     message(STATUS "SHA256 hash of
-    /home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter-lua/v0.0.17.tar.gz
+    /home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter-lua/v0.0.18.tar.gz
   does not match expected value
-    expected: '8963fd0a185d786c164dfca3824941c7eaec497ce49a3a0bc24bf753f5e0e59c'
+    expected: '659beef871a7fa1d9a02c23f5ebf55019aa3adce6d7f5441947781e128845256'
       actual: '${actual_value}'")
   else()
     set("${hash_is_good}" TRUE PARENT_SCOPE)
@@ -71,40 +71,40 @@ function(sleep_before_download attempt)
   execute_process(COMMAND "${CMAKE_COMMAND}" -E sleep "${sleep_seconds}")
 endfunction()
 
-if("/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter-lua/v0.0.17.tar.gz" STREQUAL "")
+if("/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter-lua/v0.0.18.tar.gz" STREQUAL "")
   message(FATAL_ERROR "LOCAL can't be empty")
 endif()
 
-if("https://github.com/MunifTanjim/tree-sitter-lua/archive/v0.0.17.tar.gz" STREQUAL "")
+if("https://github.com/MunifTanjim/tree-sitter-lua/archive/v0.0.18.tar.gz" STREQUAL "")
   message(FATAL_ERROR "REMOTE can't be empty")
 endif()
 
-if(EXISTS "/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter-lua/v0.0.17.tar.gz")
+if(EXISTS "/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter-lua/v0.0.18.tar.gz")
   check_file_hash(has_hash hash_is_good)
   if(has_hash)
     if(hash_is_good)
       message(STATUS "File already exists and hash match (skip download):
-  file='/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter-lua/v0.0.17.tar.gz'
-  SHA256='8963fd0a185d786c164dfca3824941c7eaec497ce49a3a0bc24bf753f5e0e59c'"
+  file='/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter-lua/v0.0.18.tar.gz'
+  SHA256='659beef871a7fa1d9a02c23f5ebf55019aa3adce6d7f5441947781e128845256'"
       )
       return()
     else()
       message(STATUS "File already exists but hash mismatch. Removing...")
-      file(REMOVE "/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter-lua/v0.0.17.tar.gz")
+      file(REMOVE "/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter-lua/v0.0.18.tar.gz")
     endif()
   else()
     message(STATUS "File already exists but no hash specified (use URL_HASH):
-  file='/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter-lua/v0.0.17.tar.gz'
+  file='/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter-lua/v0.0.18.tar.gz'
 Old file will be removed and new file downloaded from URL."
     )
-    file(REMOVE "/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter-lua/v0.0.17.tar.gz")
+    file(REMOVE "/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter-lua/v0.0.18.tar.gz")
   endif()
 endif()
 
 set(retry_number 5)
 
 message(STATUS "Downloading...
-   dst='/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter-lua/v0.0.17.tar.gz'
+   dst='/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter-lua/v0.0.18.tar.gz'
    timeout='none'
    inactivity timeout='none'"
 )
@@ -115,7 +115,7 @@ foreach(i RANGE ${retry_number})
   if(status_code IN_LIST download_retry_codes)
     sleep_before_download(${i})
   endif()
-  foreach(url https://github.com/MunifTanjim/tree-sitter-lua/archive/v0.0.17.tar.gz)
+  foreach(url https://github.com/MunifTanjim/tree-sitter-lua/archive/v0.0.18.tar.gz)
     if(NOT url IN_LIST skip_url_list)
       message(STATUS "Using src='${url}'")
 
@@ -126,7 +126,7 @@ foreach(i RANGE ${retry_number})
 
       file(
         DOWNLOAD
-        "${url}" "/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter-lua/v0.0.17.tar.gz"
+        "${url}" "/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter-lua/v0.0.18.tar.gz"
         
         # no TIMEOUT
         # no INACTIVITY_TIMEOUT
@@ -143,7 +143,7 @@ foreach(i RANGE ${retry_number})
         check_file_hash(has_hash hash_is_good)
         if(has_hash AND NOT hash_is_good)
           message(STATUS "Hash mismatch, removing...")
-          file(REMOVE "/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter-lua/v0.0.17.tar.gz")
+          file(REMOVE "/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter-lua/v0.0.18.tar.gz")
         else()
           message(STATUS "Downloading... done")
           return()
