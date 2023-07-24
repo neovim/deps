@@ -509,7 +509,7 @@ fn test_parsing_after_detecting_error_in_the_middle_of_a_string_token() {
     let tree = parser.parse(&source, None).unwrap();
     assert_eq!(
         tree.root_node().to_sexp(),
-        "(module (expression_statement (assignment left: (identifier) right: (expression_list (identifier) (string string_content: (string_content))))))"
+        "(module (expression_statement (assignment left: (identifier) right: (expression_list (identifier) (string (string_start) (string_content) (string_end))))))"
     );
 
     // Delete a suffix of the source code, starting in the middle of the string
@@ -661,7 +661,11 @@ fn test_parsing_with_a_timeout() {
         None,
     );
     assert!(tree.is_none());
+    #[cfg(not(target_arch = "sparc64"))]
     assert!(start_time.elapsed().as_micros() < 2000);
+
+    #[cfg(target_arch = "sparc64")]
+    assert!(start_time.elapsed().as_micros() < 4000);
 
     // Continue parsing, but pause after 1 ms of processing.
     parser.set_timeout_micros(5000);
@@ -700,6 +704,7 @@ fn test_parsing_with_a_timeout() {
 }
 
 #[test]
+#[retry(10)]
 fn test_parsing_with_a_timeout_and_a_reset() {
     let mut parser = Parser::new();
     parser.set_language(get_language("json")).unwrap();
@@ -755,6 +760,7 @@ fn test_parsing_with_a_timeout_and_a_reset() {
 }
 
 #[test]
+#[retry(10)]
 fn test_parsing_with_a_timeout_and_implicit_reset() {
     allocations::record(|| {
         let mut parser = Parser::new();
@@ -788,6 +794,7 @@ fn test_parsing_with_a_timeout_and_implicit_reset() {
 }
 
 #[test]
+#[retry(10)]
 fn test_parsing_with_timeout_and_no_completion() {
     allocations::record(|| {
         let mut parser = Parser::new();

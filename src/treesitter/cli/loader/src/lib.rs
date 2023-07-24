@@ -370,14 +370,15 @@ impl Loader {
                 .opt_level(2)
                 .cargo_metadata(false)
                 .target(BUILD_TARGET)
-                .host(BUILD_TARGET);
+                .host(BUILD_TARGET)
+                .flag_if_supported("-Werror=implicit-function-declaration");
             let compiler = config.get_compiler();
             let mut command = Command::new(compiler.path());
             for (key, value) in compiler.env() {
                 command.env(key, value);
             }
 
-            if cfg!(windows) {
+            if compiler.is_like_msvc() {
                 command.args(&["/nologo", "/LD", "/I"]).arg(header_path);
                 if self.debug_build {
                     command.arg("/Od");
@@ -394,13 +395,16 @@ impl Loader {
             } else {
                 command
                     .arg("-shared")
-                    .arg("-fPIC")
                     .arg("-fno-exceptions")
                     .arg("-g")
                     .arg("-I")
                     .arg(header_path)
                     .arg("-o")
                     .arg(&library_path);
+
+                if !cfg!(windows) {
+                    command.arg("-fPIC");
+                }
 
                 if self.debug_build {
                     command.arg("-O0");
