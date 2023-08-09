@@ -14,9 +14,9 @@ use crate::{
     test::{parse_tests, print_diff, print_diff_key, strip_sexp_fields, TestEntry},
     util,
 };
-use proc_macro::test_with_seed;
 use std::{env, fs};
 use tree_sitter::{LogType, Node, Parser, Point, Range, Tree};
+use tree_sitter_proc_macro::test_with_seed;
 
 #[test_with_seed(retry=10, seed=*START_SEED, seed_fn=new_seed)]
 fn test_corpus_for_bash(seed: usize) {
@@ -260,7 +260,7 @@ fn test_feature_corpus_files() {
             grammar_path = test_path.join("grammar.json");
         }
         let error_message_path = test_path.join("expected_error.txt");
-        let grammar_json = generate::load_grammar_file(&grammar_path).unwrap();
+        let grammar_json = generate::load_grammar_file(&grammar_path, None).unwrap();
         let generate_result = generate::generate_parser_for_grammar(&grammar_json);
 
         if error_message_path.exists() {
@@ -502,6 +502,7 @@ fn flatten_tests(test: TestEntry) -> Vec<FlattenedTest> {
                 input,
                 output,
                 has_fields,
+                ..
             } => {
                 if !prefix.is_empty() {
                     name.insert_str(0, " - ");

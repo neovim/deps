@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, Context, Error, Result};
 use clap::{App, AppSettings, Arg, SubCommand};
 use glob::glob;
 use std::path::{Path, PathBuf};
@@ -126,6 +126,14 @@ fn run() -> Result<()> {
                         .long("report-states-for-rule")
                         .value_name("rule-name")
                         .takes_value(true),
+                )
+                .arg(
+                    Arg::with_name("js-runtime")
+                        .long("js-runtime")
+                        .takes_value(true)
+                        .value_name("executable")
+                        .env("TREE_SITTER_JS_RUNTIME")
+                        .help("Use a JavaScript runtime other than node"),
                 ),
         )
         .subcommand(
@@ -307,6 +315,7 @@ fn run() -> Result<()> {
             let debug_build = matches.is_present("debug-build");
             let build = matches.is_present("build");
             let libdir = matches.value_of("libdir");
+            let js_runtime = matches.value_of("js-runtime");
             let report_symbol_name = matches.value_of("report-states-for-rule").or_else(|| {
                 if matches.is_present("report-states") {
                     Some("")
@@ -317,16 +326,18 @@ fn run() -> Result<()> {
             if matches.is_present("log") {
                 logger::init();
             }
-            let abi_version =
-                matches
-                    .value_of("abi-version")
-                    .map_or(DEFAULT_GENERATE_ABI_VERSION, |version| {
-                        if version == "latest" {
-                            tree_sitter::LANGUAGE_VERSION
-                        } else {
-                            version.parse().expect("invalid abi version flag")
-                        }
-                    });
+            let abi_version = matches.value_of("abi-version").map_or(
+                Ok::<_, Error>(DEFAULT_GENERATE_ABI_VERSION),
+                |version| {
+                    Ok(if version == "latest" {
+                        tree_sitter::LANGUAGE_VERSION
+                    } else {
+                        version
+                            .parse()
+                            .with_context(|| "invalid abi version flag")?
+                    })
+                },
+            )?;
             let generate_bindings = !matches.is_present("no-bindings");
             generate::generate_parser_in_directory(
                 &current_dir,
@@ -334,6 +345,7 @@ fn run() -> Result<()> {
                 abi_version,
                 generate_bindings,
                 report_symbol_name,
+                js_runtime,
             )?;
             if build {
                 if let Some(path) = libdir {
@@ -607,6 +619,7 @@ fn run() -> Result<()> {
                             highlight_config,
                             quiet,
                             time,
+                            Some(&cancellation_flag),
                         )?;
                     } else {
                         highlight::ansi(
@@ -635,7 +648,7 @@ fn run() -> Result<()> {
 
         ("playground", Some(matches)) => {
             let open_in_browser = !matches.is_present("quiet");
-            playground::serve(&current_dir, open_in_browser);
+            playground::serve(&current_dir, open_in_browser)?;
         }
 
         ("dump-languages", Some(_)) => {
