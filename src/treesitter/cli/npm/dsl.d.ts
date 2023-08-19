@@ -42,6 +42,7 @@ type GrammarSymbols<RuleName extends string> = {
 
 type RuleBuilder<RuleName extends string> = (
   $: GrammarSymbols<RuleName>,
+  previous: Rule,
 ) => RuleOrLiteral;
 
 type RuleBuilders<
@@ -68,11 +69,17 @@ interface Grammar<
   rules: Rules;
 
   /**
-   * An array of arrays of precedence names. Each inner array represents
-   * a *descending* ordering. Names listed earlier in one of these arrays
-   * have higher precedence than any names listed later in the same array.
+   * An array of arrays of precedence names or rules. Each inner array represents
+   * a *descending* ordering. Names/rules listed earlier in one of these arrays
+   * have higher precedence than any names/rules listed later in the same array.
+   *
+   * Using rules is just a shorthand way for using a name then calling prec()
+   * with that name. It is just a convenience.
    */
-  precedences?: () => String[][],
+  precedences?: (
+    $: GrammarSymbols<RuleName | BaseGrammarRuleName>,
+    previous: Rule[][],
+  ) => RuleOrLiteral[][],
 
   /**
    * An array of arrays of rule names. Each inner array represents a set of
@@ -86,6 +93,7 @@ interface Grammar<
    */
   conflicts?: (
     $: GrammarSymbols<RuleName | BaseGrammarRuleName>,
+    previous: Rule[][],
   ) => RuleOrLiteral[][];
 
   /**
@@ -102,7 +110,7 @@ interface Grammar<
   externals?: (
     $: Record<string, SymbolRule<string>>,
     previous: Rule[],
-  ) => (SymbolRule<string> | RegExp | string)[];
+  ) => RuleOrLiteral[];
 
   /**
    * An array of tokens that may appear anywhere in the language. This
@@ -126,6 +134,7 @@ interface Grammar<
    */
   inline?: (
     $: GrammarSymbols<RuleName | BaseGrammarRuleName>,
+    previous: Rule[],
   ) => RuleOrLiteral[];
 
   /**
@@ -138,6 +147,7 @@ interface Grammar<
    */
   supertypes?: (
     $: GrammarSymbols<RuleName | BaseGrammarRuleName>,
+    previous: Rule[],
   ) => RuleOrLiteral[];
 
   /**

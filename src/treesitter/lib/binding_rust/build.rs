@@ -26,7 +26,8 @@ fn main() {
 
     cc::Build::new()
         .flag_if_supported("-std=c99")
-        .flag_if_supported("-Wno-unused-parameter")
+        .flag_if_supported("-fvisibility=hidden")
+        .flag_if_supported("-Wshadow")
         .include(src_path)
         .include("include")
         .file(src_path.join("lib.c"))

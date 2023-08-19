@@ -5,7 +5,7 @@ cmake_minimum_required(VERSION 3.5)
 
 # Make file names absolute:
 #
-get_filename_component(filename "/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter/0a1c4d8466efed6ef5971aa03a84ebb0836128b1.tar.gz" ABSOLUTE)
+get_filename_component(filename "/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter/ab09ae20d640711174b8da8a654f6b3dec93da1a.tar.gz" ABSOLUTE)
 get_filename_component(directory "/home/runner/work/deps/deps/neovim/deps/build/src/treesitter" ABSOLUTE)
 
 message(STATUS "extracting...

@@ -282,6 +282,17 @@ class Node {
     return unmarshalNode(this.tree);
   }
 
+  fieldNameForChild(index) {
+    marshalNode(this);
+    const address = C._ts_node_field_name_for_child_wasm(this.tree[0], index);
+    if (!address) {
+      return null;
+    }
+    const result = AsciiToString(address);
+    // must not free, the string memory is owned by the language
+    return result;
+  }
+
   namedChild(index) {
     marshalNode(this);
     C._ts_node_named_child_wasm(this.tree[0], index);
@@ -1025,7 +1036,7 @@ class LookaheadIterable {
     const self = this;
     return {
       next() {
-        if (C._ts_lookahead_iterator_advance(self[0])) {
+        if (C._ts_lookahead_iterator_next(self[0])) {
           return { done: false, value: self.currentType };
         }
 
