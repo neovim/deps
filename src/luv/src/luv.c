@@ -184,6 +184,10 @@ static const luaL_Reg luv_functions[] = {
   {"pipe_chmod", luv_pipe_chmod},
 #endif
   {"pipe_connect", luv_pipe_connect},
+#if LUV_UV_VERSION_GEQ(1, 46, 0)
+  {"pipe_bind2", luv_pipe_bind2},
+  {"pipe_connect2", luv_pipe_connect2},
+#endif
   {"pipe_getsockname", luv_pipe_getsockname},
 #if LUV_UV_VERSION_GEQ(1, 3, 0)
   {"pipe_getpeername", luv_pipe_getpeername},
@@ -485,6 +489,10 @@ static const luaL_Reg luv_pipe_methods[] = {
   {"chmod", luv_pipe_chmod},
 #endif
   {"connect", luv_pipe_connect},
+#if LUV_UV_VERSION_GEQ(1, 46, 0)
+  {"bind2", luv_pipe_bind2},
+  {"connect2", luv_pipe_connect2},
+#endif
   {"getsockname", luv_pipe_getsockname},
 #if LUV_UV_VERSION_GEQ(1, 3, 0)
   {"getpeername", luv_pipe_getpeername},
@@ -698,7 +706,8 @@ LUALIB_API int luv_cfpcall(lua_State* L, int nargs, int nresult, int flags) {
     break;
   case LUA_ERRMEM:
     if ((flags & LUVF_CALLBACK_NOERRMSG) == 0)
-      fprintf(stderr, "System Error: %s\n", lua_tostring(L, -1));
+      fprintf(stderr, "System Error: %s\n",
+              luaL_tolstring(L, lua_absindex(L, -1), NULL));
     if ((flags & LUVF_CALLBACK_NOEXIT) == 0)
       exit(-1);
     lua_pop(L, 1);
@@ -708,7 +717,8 @@ LUALIB_API int luv_cfpcall(lua_State* L, int nargs, int nresult, int flags) {
   case LUA_ERRERR:
   default:
     if ((flags & LUVF_CALLBACK_NOERRMSG) == 0)
-      fprintf(stderr, "Uncaught Error: %s\n", lua_tostring(L, -1));
+      fprintf(stderr, "Uncaught Error: %s\n",
+              luaL_tolstring(L, lua_absindex(L, -1), NULL));
     if ((flags & LUVF_CALLBACK_NOEXIT) == 0)
       exit(-1);
     lua_pop(L, 1);

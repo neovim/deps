@@ -1279,7 +1279,7 @@ When the child process exits, `on_exit` is called with an exit code and signal.
 
 **Parameters:**
 - `process`: `uv_process_t userdata`
-- `signum`: `integer` or `string`
+- `signum`: `integer` or `string` or `nil` (default: `sigterm`)
 
 Sends the specified signal to the given process handle. Check the documentation
 on `uv_signal_t` for signal support, specially on Windows.
@@ -1290,7 +1290,7 @@ on `uv_signal_t` for signal support, specially on Windows.
 
 **Parameters:**
 - `pid`: `integer`
-- `signum`: `integer` or `string`
+- `signum`: `integer` or `string` or `nil` (default: `sigterm`)
 
 Sends the specified signal to the given PID. Check the documentation on
 `uv_signal_t` for signal support, specially on Windows.
@@ -1943,6 +1943,66 @@ read_pipe:read_start(function(err, chunk)
   print(chunk)
 end)
 ```
+
+### `uv.pipe_bind2(pipe, name, [flags])`
+
+> method form `pipe:bind2(name, [flags])`
+
+**Parameters:**
+
+- `pipe`: `uv_pipe_t userdata`
+- `name`: `string`
+- `flags`: `integer` or `table` or `nil`(default: 0)
+
+Bind the pipe to a file path (Unix) or a name (Windows).
+
+`Flags`:
+
+- If `type(flags)` is `number`, it must be `0` or `uv.constants.PIPE_NO_TRUNCATE`.
+- If `type(flags)` is `table`, it must be `{}` or `{ no_trunate = true|false }`.
+- If `type(flags)` is `nil`, it use default value `0`.
+- Returns `EINVAL` for unsupported flags without performing the bind operation.
+
+Supports Linux abstract namespace sockets. namelen must include the leading '\0' byte but not the trailing nul byte.
+
+**Returns:** `0` or `fail`
+
+**Note**:
+
+1. Paths on Unix get truncated to sizeof(sockaddr_un.sun_path) bytes,
+typically between 92 and 108 bytes.
+2. New in version 1.46.0.
+
+### `uv.pipe_connect2(pipe, name, [flags], [callback])`
+
+> method form `pipe:connect2(name, [flags], [callback])`
+
+**Parameters:**
+
+- `pipe`: `uv_pipe_t userdata`
+- `name`: `string`
+- `flags`: `integer` or `table` or `nil`(default: 0)
+- `callback`: `callable` or `nil`
+  - `err`: `nil` or `string`
+
+Connect to the Unix domain socket or the named pipe.
+
+`Flags`:
+
+- If `type(flags)` is `number`, it must be `0` or `uv.constants.PIPE_NO_TRUNCATE`.
+- If `type(flags)` is `table`, it must be `{}` or `{ no_trunate = true|false }`.
+- If `type(flags)` is `nil`, it use default value `0`.
+- Returns `EINVAL` for unsupported flags without performing the bind operation.
+
+Supports Linux abstract namespace sockets. namelen must include the leading nul byte but not the trailing nul byte.
+
+**Returns:** `uv_connect_t userdata` or `fail`
+
+**Note**:
+
+1. Paths on Unix get truncated to sizeof(sockaddr_un.sun_path) bytes,
+typically between 92 and 108 bytes.
+2. New in version 1.46.0.
 
 ## `uv_tty_t` — TTY handle
 
@@ -3711,7 +3771,12 @@ Sets the environmental variable specified by `name` with the string `value`.
 
 **Warning:** This function is not thread safe.
 
-### `uv.os_unsetenv()`
+### `uv.os_unsetenv(name)`
+
+**Parameters:**
+- `name`: `string`
+
+Unsets the environmental variable specified by `name`.
 
 **Returns:** `boolean` or `fail`
 
