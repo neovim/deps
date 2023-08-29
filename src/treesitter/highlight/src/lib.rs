@@ -19,6 +19,7 @@ const BUFFER_LINES_RESERVE_CAPACITY: usize = 1000;
 lazy_static! {
     static ref STANDARD_CAPTURE_NAMES: HashSet<&'static str> = vec![
         "attribute",
+        "boolean",
         "carriage-return",
         "comment",
         "comment.documentation",
@@ -102,6 +103,7 @@ pub enum HighlightEvent {
 /// This struct is immutable and can be shared between threads.
 pub struct HighlightConfiguration {
     pub language: Language,
+    pub language_name: String,
     pub query: Query,
     pub apply_all_captures: bool,
     combined_injections_query: Option<Query>,
@@ -153,6 +155,7 @@ where
     F: FnMut(&str) -> Option<&'a HighlightConfiguration> + 'a,
 {
     source: &'a [u8],
+    language_name: &'a str,
     byte_offset: usize,
     highlighter: &'a mut Highlighter,
     injection_callback: F,
@@ -197,6 +200,7 @@ impl Highlighter {
     ) -> Result<impl Iterator<Item = Result<HighlightEvent, Error>> + 'a, Error> {
         let layers = HighlightIterLayer::new(
             source,
+            None,
             self,
             cancellation_flag,
             &mut injection_callback,
@@ -212,6 +216,7 @@ impl Highlighter {
         assert_ne!(layers.len(), 0);
         let mut result = HighlightIter {
             source,
+            language_name: &config.language_name,
             byte_offset: 0,
             injection_callback,
             cancellation_flag,
@@ -244,6 +249,7 @@ impl HighlightConfiguration {
     /// Returns a `HighlightConfiguration` that can then be used with the `highlight` method.
     pub fn new(
         language: Language,
+        name: impl Into<String>,
         highlights_query: &str,
         injection_query: &str,
         locals_query: &str,
@@ -327,6 +333,7 @@ impl HighlightConfiguration {
         let highlight_indices = vec![None; query.capture_names().len()];
         Ok(HighlightConfiguration {
             language,
+            language_name: name.into(),
             query,
             apply_all_captures,
             combined_injections_query,
@@ -411,6 +418,7 @@ impl<'a> HighlightIterLayer<'a> {
     /// added to the returned vector.
     fn new<F: FnMut(&str) -> Option<&'a HighlightConfiguration> + 'a>(
         source: &'a [u8],
+        parent_name: Option<&str>,
         highlighter: &mut Highlighter,
         cancellation_flag: Option<&'a AtomicUsize>,
         injection_callback: &mut F,
@@ -443,8 +451,13 @@ impl<'a> HighlightIterLayer<'a> {
                         cursor.matches(combined_injections_query, tree.root_node(), source);
                     for mat in matches {
                         let entry = &mut injections_by_pattern_index[mat.pattern_index];
-                        let (language_name, content_node, include_children) =
-                            injection_for_match(config, combined_injections_query, &mat, source);
+                        let (language_name, content_node, include_children) = injection_for_match(
+                            config,
+                            parent_name,
+                            combined_injections_query,
+                            &mat,
+                            source,
+                        );
                         if language_name.is_some() {
                             entry.0 = language_name;
                         }
@@ -765,8 +778,13 @@ where
 
             // If this capture represents an injection, then process the injection.
             if match_.pattern_index < layer.config.locals_pattern_index {
-                let (language_name, content_node, include_children) =
-                    injection_for_match(&layer.config, &layer.config.query, &match_, &self.source);
+                let (language_name, content_node, include_children) = injection_for_match(
+                    layer.config,
+                    Some(self.language_name),
+                    &layer.config.query,
+                    &match_,
+                    self.source,
+                );
 
                 // Explicitly remove this match so that none of its other captures will remain
                 // in the stream of captures.
@@ -784,6 +802,7 @@ where
                         if !ranges.is_empty() {
                             match HighlightIterLayer::new(
                                 self.source,
+                                Some(self.language_name),
                                 self.highlighter,
                                 self.cancellation_flag,
                                 &mut self.injection_callback,
@@ -1110,7 +1129,8 @@ impl HtmlRenderer {
 }
 
 fn injection_for_match<'a>(
-    config: &HighlightConfiguration,
+    config: &'a HighlightConfiguration,
+    parent_name: Option<&'a str>,
     query: &'a Query,
     query_match: &QueryMatch<'a, 'a>,
     source: &'a [u8],
@@ -1120,6 +1140,7 @@ fn injection_for_match<'a>(
 
     let mut language_name = None;
     let mut content_node = None;
+
     for capture in query_match.captures {
         let index = Some(capture.index);
         if index == language_capture_index {
@@ -1137,7 +1158,25 @@ fn injection_for_match<'a>(
             // that sets the injection.language key.
             "injection.language" => {
                 if language_name.is_none() {
-                    language_name = prop.value.as_ref().map(|s| s.as_ref())
+                    language_name = prop.value.as_ref().map(|s| s.as_ref());
+                }
+            }
+
+            // Setting the `injection.self` key can be used to specify that the
+            // language name should be the same as the language of the current
+            // layer.
+            "injection.self" => {
+                if language_name.is_none() {
+                    language_name = Some(config.language_name.as_str());
+                }
+            }
+
+            // Setting the `injection.parent` key can be used to specify that
+            // the language name should be the same as the language of the
+            // parent layer
+            "injection.parent" => {
+                if language_name.is_none() {
+                    language_name = parent_name;
                 }
             }
 
