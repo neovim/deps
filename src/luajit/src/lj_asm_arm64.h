@@ -1107,6 +1107,8 @@ static void asm_ahuvload(ASMState *as, IRIns *ir)
   }
   type = ra_scratch(as, rset_clear(gpr, tmp));
   idx = asm_fuseahuref(as, ir->op1, &ofs, rset_clear(gpr, type), A64I_LDRx);
+  rset_clear(gpr, idx);
+  if (ofs & FUSE_REG) rset_clear(gpr, ofs & 31);
   if (ir->o == IR_VLOAD) ofs += 8 * ir->op2;
   /* Always do the type check, even if the load result is unused. */
   asm_guardcc(as, irt_isnum(ir->t) ? CC_LS : CC_NE);
@@ -1114,7 +1116,7 @@ static void asm_ahuvload(ASMState *as, IRIns *ir)
     lj_assertA(irt_isinteger(ir->t) || irt_isnum(ir->t),
 	       "bad load type %d", irt_type(ir->t));
     emit_nm(as, A64I_CMPx | A64F_SH(A64SH_LSR, 32),
-	    ra_allock(as, LJ_TISNUM << 15, rset_exclude(gpr, idx)), tmp);
+	    ra_allock(as, LJ_TISNUM << 15, gpr), tmp);
   } else if (irt_isaddr(ir->t)) {
     emit_n(as, (A64I_CMNx^A64I_K12) | A64F_U12(-irt_toitype(ir->t)), type);
     emit_dn(as, A64I_ASRx | A64F_IMMR(47), type, tmp);
@@ -1439,7 +1441,7 @@ static void asm_intneg(ASMState *as, IRIns *ir)
 static void asm_intmul(ASMState *as, IRIns *ir)
 {
   Reg dest = ra_dest(as, ir, RSET_GPR);
-  Reg left = ra_alloc1(as, ir->op1, rset_exclude(RSET_GPR, dest));
+  Reg left = ra_alloc1(as, ir->op1, RSET_GPR);
   Reg right = ra_alloc1(as, ir->op2, rset_exclude(RSET_GPR, left));
   if (irt_isguard(ir->t)) {  /* IR_MULOV */
     asm_guardcc(as, CC_NE);
