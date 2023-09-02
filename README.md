@@ -13,10 +13,10 @@ CI build.
 
 ## For Mac users
 
-Mac tar converts extended attributes (such as `com.apple.quarantine` for files
-downloaded with Safari) to hidden files, which will break the installation step
-on Windows and Linux. Prepend tar with `COPYFILE_DISABLE=1` to create
-cross-platform archives:
+BSD tar (which is the default tar shipped on mac) converts extended attributes
+(such as `com.apple.quarantine` for files downloaded with Safari) to hidden
+files, which will break the installation step on Windows and Linux. Prepend tar
+with `COPYFILE_DISABLE=1` to create cross-platform archives:
 
 ```
 COPYFILE_DISABLE=1 tar czf busted-2.1.1.tar.gz busted-2.1.1
