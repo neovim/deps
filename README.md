@@ -10,3 +10,14 @@ CI build.
     - Used by the [unstable PPA](https://launchpad.net/~neovim-ppa/+archive/ubuntu/unstable). PPA builds aren't allowed network access, so a pre-build step fetches this repo to use as input to the build to ensure we have the latest dependencies.
 - `opt/`
     - cache for manually-managed dependencies (not auto-updated because the origin is unreliable)
+
+## For Mac users
+
+Mac tar converts extended attributes (such as `com.apple.quarantine` for files
+downloaded with Safari) to hidden files, which will break the installation step
+on Windows and Linux. Prepend tar with `COPYFILE_DISABLE=1` to create
+cross-platform archives:
+
+```
+COPYFILE_DISABLE=1 tar czf busted-2.1.1.tar.gz busted-2.1.1
+```
