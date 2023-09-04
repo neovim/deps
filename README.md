@@ -21,3 +21,9 @@ cross-platform archives:
 ```
 COPYFILE_DISABLE=1 tar czf busted-2.1.1.tar.gz busted-2.1.1
 ```
+
+## Dependency-specific information
+### Lpeg
+We've vendored
+[re.lua](https://github.com/neovim/neovim/blob/master/runtime/lua/vim/re.lua).
+Remember to update it in the neovim repository when bumping the lpeg version.
