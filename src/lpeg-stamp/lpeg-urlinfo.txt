@@ -6,7 +6,7 @@ method=url
 command=/usr/local/bin/cmake;-P;/home/runner/work/deps/deps/neovim/deps/build/src/lpeg-stamp/download-lpeg.cmake;COMMAND;/usr/local/bin/cmake;-P;/home/runner/work/deps/deps/neovim/deps/build/src/lpeg-stamp/verify-lpeg.cmake;COMMAND;/usr/local/bin/cmake;-P;/home/runner/work/deps/deps/neovim/deps/build/src/lpeg-stamp/extract-lpeg.cmake
 source_dir=/home/runner/work/deps/deps/neovim/deps/build/src/lpeg
 work_dir=/home/runner/work/deps/deps/neovim/deps/build/src
-url(s)=https://github.com/neovim/deps/raw/aa004f1b2b6470a92363cba8e1cc1874141dacc4/opt/lpeg-1.0.2.tar.gz
-hash=SHA256=48d66576051b6c78388faad09b70493093264588fcd0f258ddaab1cdd4a15ffe
+url(s)=https://github.com/neovim/deps/raw/d495ee6f79e7962a53ad79670cb92488abe0b9b4/opt/lpeg-1.1.0.tar.gz
+hash=SHA256=4b155d67d2246c1ffa7ad7bc466c1ea899bbc40fef0257cc9c03cecbaed4352a
 no_extract=
 
