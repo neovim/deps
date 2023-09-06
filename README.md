@@ -10,6 +10,8 @@ CI build.
     - Used by the [unstable PPA](https://launchpad.net/~neovim-ppa/+archive/ubuntu/unstable). PPA builds aren't allowed network access, so a pre-build step fetches this repo to use as input to the build to ensure we have the latest dependencies.
 - `opt/`
     - cache for manually-managed dependencies (not auto-updated because the origin is unreliable)
+    - `lua-dev-deps` is a combination of *only* the share files of `busted`
+      v2.1.1 and `luacheck` v1.1.0.
 
 ## For Mac users
 
