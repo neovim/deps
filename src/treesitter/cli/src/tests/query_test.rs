@@ -2269,7 +2269,7 @@ fn test_query_captures_within_byte_range_assigned_after_iterating() {
         for (mat, capture_ix) in captures.by_ref().take(5) {
             let capture = mat.captures[capture_ix as usize];
             results.push((
-                query.capture_names()[capture.index as usize].as_str(),
+                query.capture_names()[capture.index as usize],
                 &source[capture.node.byte_range()],
             ));
         }
@@ -2292,7 +2292,7 @@ fn test_query_captures_within_byte_range_assigned_after_iterating() {
         for (mat, capture_ix) in captures {
             let capture = mat.captures[capture_ix as usize];
             results.push((
-                query.capture_names()[capture.index as usize].as_str(),
+                query.capture_names()[capture.index as usize],
                 &source[capture.node.byte_range()],
             ));
         }
@@ -2533,7 +2533,7 @@ fn test_query_matches_with_captured_wildcard_at_root() {
                     .iter()
                     .map(|c| {
                         (
-                            query.capture_names()[c.index as usize].as_str(),
+                            query.capture_names()[c.index as usize],
                             c.node.kind(),
                             c.node.start_position().row,
                         )
@@ -2934,7 +2934,8 @@ fn test_query_captures_with_predicates() {
                 args: vec![
                     QueryPredicateArg::Capture(0),
                     QueryPredicateArg::String("omg".to_string().into_boxed_str()),
-                ],
+                ]
+                .into_boxed_slice(),
             },]
         );
         assert_eq!(query.property_settings(1), &[]);
@@ -3604,12 +3605,7 @@ fn test_query_capture_names() {
 
         assert_eq!(
             query.capture_names(),
-            &[
-                "left-operand".to_string(),
-                "right-operand".to_string(),
-                "body".to_string(),
-                "loop-condition".to_string(),
-            ]
+            ["left-operand", "right-operand", "body", "loop-condition"]
         );
     });
 }
@@ -3826,7 +3822,7 @@ fn test_query_random() {
                     captures: mat
                         .captures
                         .iter()
-                        .map(|c| (query.capture_names()[c.index as usize].as_str(), c.node))
+                        .map(|c| (query.capture_names()[c.index as usize], c.node))
                         .collect::<Vec<_>>(),
                 })
                 .collect::<Vec<_>>();
@@ -4570,6 +4566,89 @@ fn test_capture_quantifiers() {
                     actual_quantifier,
                 )
             }
+        }
+    });
+}
+
+#[test]
+fn test_query_quantified_captures() {
+    struct Row {
+        description: &'static str,
+        language: Language,
+        code: &'static str,
+        pattern: &'static str,
+        captures: &'static [(&'static str, &'static str)],
+    }
+
+    // #[rustfmt::skip]
+    let rows = &[
+        Row {
+            description: "doc comments where all must match the prefix",
+            language: get_language("c"),
+            code: indoc! {"
+            /// foo
+            /// bar
+            /// baz
+
+            void main() {}
+
+            /// qux
+            /// quux
+            // quuz
+        "},
+            pattern: r#"
+                ((comment)+ @comment.documentation
+                  (#match? @comment.documentation "^///"))
+            "#,
+            captures: &[
+                ("comment.documentation", "/// foo"),
+                ("comment.documentation", "/// bar"),
+                ("comment.documentation", "/// baz"),
+            ],
+        },
+        Row {
+            description: "doc comments where one must match the prefix",
+            language: get_language("c"),
+            code: indoc! {"
+            /// foo
+            /// bar
+            /// baz
+
+            void main() {}
+
+            /// qux
+            /// quux
+            // quuz
+        "},
+            pattern: r#"
+                ((comment)+ @comment.documentation
+                  (#any-match? @comment.documentation "^///"))
+            "#,
+            captures: &[
+                ("comment.documentation", "/// foo"),
+                ("comment.documentation", "/// bar"),
+                ("comment.documentation", "/// baz"),
+                ("comment.documentation", "/// qux"),
+                ("comment.documentation", "/// quux"),
+                ("comment.documentation", "// quuz"),
+            ],
+        },
+    ];
+
+    allocations::record(|| {
+        for row in rows {
+            eprintln!("  quantified query example: {:?}", row.description);
+
+            let mut parser = Parser::new();
+            parser.set_language(row.language).unwrap();
+            let tree = parser.parse(row.code, None).unwrap();
+
+            let query = Query::new(row.language, row.pattern).unwrap();
+
+            let mut cursor = QueryCursor::new();
+            let matches = cursor.captures(&query, tree.root_node(), row.code.as_bytes());
+
+            assert_eq!(collect_captures(matches, &query, row.code), row.captures);
         }
     });
 }

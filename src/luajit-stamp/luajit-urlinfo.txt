@@ -6,7 +6,7 @@ method=url
 command=/usr/local/bin/cmake;-P;/home/runner/work/deps/deps/neovim/deps/build/src/luajit-stamp/download-luajit.cmake;COMMAND;/usr/local/bin/cmake;-P;/home/runner/work/deps/deps/neovim/deps/build/src/luajit-stamp/verify-luajit.cmake;COMMAND;/usr/local/bin/cmake;-P;/home/runner/work/deps/deps/neovim/deps/build/src/luajit-stamp/extract-luajit.cmake
 source_dir=/home/runner/work/deps/deps/neovim/deps/build/src/luajit
 work_dir=/home/runner/work/deps/deps/neovim/deps/build/src
-url(s)=https://github.com/LuaJIT/LuaJIT/archive/5a18d4582ff3a22898e49a039c05ed7d5720999d.tar.gz
-hash=SHA256=76f0a93ee9674aedf8604b6e8246a8a70ebfa487d6592703c2efdf9162c0debc
+url(s)=https://github.com/LuaJIT/LuaJIT/archive/8af63f992058ebbac2d72ef92811cf22a90fa347.tar.gz
+hash=SHA256=dd97df7f2ef20721549cfd2ddb2c23b4b3f450358c525ea57a46f67ceb5ba813
 no_extract=
 
