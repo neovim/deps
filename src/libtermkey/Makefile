@@ -131,3 +131,50 @@ install-man:
 	  echo ln -sf $$TO.gz $(DESTDIR)$(MAN3DIR)/$$FROM.gz; \
 	done < man/also
 
+# DIST CUT
+
+MANSOURCE=$(wildcard man/*.3.sh)
+BUILTMAN=$(MANSOURCE:.3.sh=.3)
+
+all: doc
+
+doc: $(BUILTMAN)
+
+%.3: %.3.sh
+	sh $< >$@
+
+clean: clean-built
+
+clean-built:
+	rm -f $(BUILTMAN) termkey.h
+
+termkey.h: termkey.h.in Makefile
+	rm -f $@
+	sed -e 's/@@VERSION_MAJOR@@/$(VERSION_MAJOR)/g' \
+	    -e 's/@@VERSION_MINOR@@/$(VERSION_MINOR)/g' \
+	    $< >$@
+	chmod a-w $@
+
+DISTDIR=libtermkey-$(VERSION)
+
+distdir: all
+	mkdir __distdir
+	cp *.c *.h LICENSE __distdir
+	mkdir __distdir/t
+	cp t/*.c t/*.h __distdir/t
+	mkdir __distdir/man
+	cp man/*.[37] man/also __distdir/man
+	cp termkey.pc.sh __distdir/termkey.pc.sh
+	sed "/^# DIST CUT/Q" <Makefile >__distdir/Makefile
+	mv __distdir $(DISTDIR)
+
+TARBALL=$(DISTDIR).tar.gz
+
+dist: distdir
+	tar -czf $(TARBALL) $(DISTDIR)
+	rm -rf $(DISTDIR)
+
+HTMLDIR=html
+
+htmldocs: $(BUILTMAN)
+	perl $(HOME)/src/perl/Parse-Man/examples/man-to-html.pl -O $(HTMLDIR) --file-extension tmpl --link-extension html --template home_lou.tt2 --also man/also man/*.3 man/*.7 --index index.tmpl

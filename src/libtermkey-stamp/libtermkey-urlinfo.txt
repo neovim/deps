@@ -6,7 +6,7 @@ method=url
 command=/usr/local/bin/cmake;-P;/home/runner/work/deps/deps/neovim/deps/build/src/libtermkey-stamp/download-libtermkey.cmake;COMMAND;/usr/local/bin/cmake;-P;/home/runner/work/deps/deps/neovim/deps/build/src/libtermkey-stamp/verify-libtermkey.cmake;COMMAND;/usr/local/bin/cmake;-P;/home/runner/work/deps/deps/neovim/deps/build/src/libtermkey-stamp/extract-libtermkey.cmake
 source_dir=/home/runner/work/deps/deps/neovim/deps/build/src/libtermkey
 work_dir=/home/runner/work/deps/deps/neovim/deps/build/src
-url(s)=https://github.com/neovim/deps/raw/aa004f1b2b6470a92363cba8e1cc1874141dacc4/opt/libtermkey-0.22.tar.gz
-hash=SHA256=6945bd3c4aaa83da83d80a045c5563da4edd7d0374c62c0d35aec09eb3014600
+url(s)=https://github.com/neovim/libtermkey/archive/v0.22.tar.gz
+hash=SHA256=81cac2b685c9ada4ead4ea788fb69ff74fc1947ad188ed0264c646fe12b496ba
 no_extract=
 
