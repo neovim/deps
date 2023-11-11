@@ -6,7 +6,7 @@ method=url
 command=/usr/local/bin/cmake;-P;/home/runner/work/deps/deps/neovim/deps/build/src/treesitter-markdown-stamp/download-treesitter-markdown.cmake;COMMAND;/usr/local/bin/cmake;-P;/home/runner/work/deps/deps/neovim/deps/build/src/treesitter-markdown-stamp/verify-treesitter-markdown.cmake;COMMAND;/usr/local/bin/cmake;-P;/home/runner/work/deps/deps/neovim/deps/build/src/treesitter-markdown-stamp/extract-treesitter-markdown.cmake
 source_dir=/home/runner/work/deps/deps/neovim/deps/build/src/treesitter-markdown
 work_dir=/home/runner/work/deps/deps/neovim/deps/build/src
-url(s)=https://github.com/MDeiml/tree-sitter-markdown/archive/v0.1.6.tar.gz
-hash=SHA256=34cbeadfbe07454a5040163d04b3118ef0ac427a5cba39089de7384992729088
+url(s)=https://github.com/MDeiml/tree-sitter-markdown/archive/v0.1.7.tar.gz
+hash=SHA256=7d0e7f7ed4516ed0816f9c304e2e7fa93b2c16f9280416c2fb64dc4efd9c5f83
 no_extract=
 

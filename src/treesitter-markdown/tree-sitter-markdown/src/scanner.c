@@ -276,7 +276,16 @@ static void deserialize(Scanner *s, const char *buffer, unsigned length) {
         size_t blocks_size = length - size;
         if (blocks_size > 0) {
             size_t blocks_count = blocks_size / sizeof(Block);
-            s->open_blocks.capacity = roundup_32(blocks_count);
+
+            // ensure open blocks has enough room
+            if (s->open_blocks.capacity < blocks_count) {
+              size_t capacity = roundup_32(blocks_count);
+              void *tmp = realloc(s->open_blocks.items,
+                            sizeof(Block) * capacity);
+              assert(tmp != NULL);
+              s->open_blocks.items = tmp;
+              s->open_blocks.capacity = capacity;
+            }
             memcpy(s->open_blocks.items, &buffer[size], blocks_size);
             s->open_blocks.size = blocks_count;
         }
@@ -1443,12 +1452,7 @@ static bool scan(Scanner *s, TSLexer *lexer, const bool *valid_symbols) {
         }
 
         if (!(s->state & STATE_WAS_SOFT_LINE_BREAK)) {
-            Block block = last_block(s);
             lexer->result_symbol = BLOCK_CLOSE;
-            if (block == FENCED_CODE_BLOCK) {
-                mark_end(s, lexer);
-                s->indentation = 0;
-            }
             pop_block(s);
             if (s->matched == s->open_blocks.size) {
                 s->state &= (~STATE_MATCHING);
@@ -1557,7 +1561,7 @@ void *tree_sitter_markdown_external_scanner_create() {
     Scanner *s = (Scanner *)malloc(sizeof(Scanner));
     s->open_blocks.items = (Block *)calloc(1, sizeof(Block));
 #if defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 201112L)
-    static_assert(ATX_H6_MARKER == ATX_H1_MARKER + 5, "");
+    _Static_assert(ATX_H6_MARKER == ATX_H1_MARKER + 5, "");
 #else
     assert(ATX_H6_MARKER == ATX_H1_MARKER + 5);
 #endif
