@@ -22,16 +22,16 @@ function(check_file_hash has_hash hash_is_good)
   set("${has_hash}" TRUE PARENT_SCOPE)
 
   message(STATUS "verifying file...
-       file='/home/runner/work/deps/deps/neovim/deps/build/downloads/luajit/113a168b792cd367822ec04cdc2ef32facd28efa.tar.gz'")
+       file='/home/runner/work/deps/deps/neovim/deps/build/downloads/luajit/43d0a19158ceabaa51b0462c1ebc97612b420a2e.tar.gz'")
 
-  file("SHA256" "/home/runner/work/deps/deps/neovim/deps/build/downloads/luajit/113a168b792cd367822ec04cdc2ef32facd28efa.tar.gz" actual_value)
+  file("SHA256" "/home/runner/work/deps/deps/neovim/deps/build/downloads/luajit/43d0a19158ceabaa51b0462c1ebc97612b420a2e.tar.gz" actual_value)
 
-  if(NOT "${actual_value}" STREQUAL "a1a6512a2ab3ce5a41c69f3841b6fd9fddb046bff2c39ebb9a34ed0083ab0853")
+  if(NOT "${actual_value}" STREQUAL "4fefa19bc5600928fb13c928bf5325eaa1c78f2c1738a8ac9552154ef178bb9a")
     set("${hash_is_good}" FALSE PARENT_SCOPE)
     message(STATUS "SHA256 hash of
-    /home/runner/work/deps/deps/neovim/deps/build/downloads/luajit/113a168b792cd367822ec04cdc2ef32facd28efa.tar.gz
+    /home/runner/work/deps/deps/neovim/deps/build/downloads/luajit/43d0a19158ceabaa51b0462c1ebc97612b420a2e.tar.gz
   does not match expected value
-    expected: 'a1a6512a2ab3ce5a41c69f3841b6fd9fddb046bff2c39ebb9a34ed0083ab0853'
+    expected: '4fefa19bc5600928fb13c928bf5325eaa1c78f2c1738a8ac9552154ef178bb9a'
       actual: '${actual_value}'")
   else()
     set("${hash_is_good}" TRUE PARENT_SCOPE)
@@ -71,40 +71,40 @@ function(sleep_before_download attempt)
   execute_process(COMMAND "${CMAKE_COMMAND}" -E sleep "${sleep_seconds}")
 endfunction()
 
-if("/home/runner/work/deps/deps/neovim/deps/build/downloads/luajit/113a168b792cd367822ec04cdc2ef32facd28efa.tar.gz" STREQUAL "")
+if("/home/runner/work/deps/deps/neovim/deps/build/downloads/luajit/43d0a19158ceabaa51b0462c1ebc97612b420a2e.tar.gz" STREQUAL "")
   message(FATAL_ERROR "LOCAL can't be empty")
 endif()
 
-if("https://github.com/LuaJIT/LuaJIT/archive/113a168b792cd367822ec04cdc2ef32facd28efa.tar.gz" STREQUAL "")
+if("https://github.com/LuaJIT/LuaJIT/archive/43d0a19158ceabaa51b0462c1ebc97612b420a2e.tar.gz" STREQUAL "")
   message(FATAL_ERROR "REMOTE can't be empty")
 endif()
 
-if(EXISTS "/home/runner/work/deps/deps/neovim/deps/build/downloads/luajit/113a168b792cd367822ec04cdc2ef32facd28efa.tar.gz")
+if(EXISTS "/home/runner/work/deps/deps/neovim/deps/build/downloads/luajit/43d0a19158ceabaa51b0462c1ebc97612b420a2e.tar.gz")
   check_file_hash(has_hash hash_is_good)
   if(has_hash)
     if(hash_is_good)
       message(STATUS "File already exists and hash match (skip download):
-  file='/home/runner/work/deps/deps/neovim/deps/build/downloads/luajit/113a168b792cd367822ec04cdc2ef32facd28efa.tar.gz'
-  SHA256='a1a6512a2ab3ce5a41c69f3841b6fd9fddb046bff2c39ebb9a34ed0083ab0853'"
+  file='/home/runner/work/deps/deps/neovim/deps/build/downloads/luajit/43d0a19158ceabaa51b0462c1ebc97612b420a2e.tar.gz'
+  SHA256='4fefa19bc5600928fb13c928bf5325eaa1c78f2c1738a8ac9552154ef178bb9a'"
       )
       return()
     else()
       message(STATUS "File already exists but hash mismatch. Removing...")
-      file(REMOVE "/home/runner/work/deps/deps/neovim/deps/build/downloads/luajit/113a168b792cd367822ec04cdc2ef32facd28efa.tar.gz")
+      file(REMOVE "/home/runner/work/deps/deps/neovim/deps/build/downloads/luajit/43d0a19158ceabaa51b0462c1ebc97612b420a2e.tar.gz")
     endif()
   else()
     message(STATUS "File already exists but no hash specified (use URL_HASH):
-  file='/home/runner/work/deps/deps/neovim/deps/build/downloads/luajit/113a168b792cd367822ec04cdc2ef32facd28efa.tar.gz'
+  file='/home/runner/work/deps/deps/neovim/deps/build/downloads/luajit/43d0a19158ceabaa51b0462c1ebc97612b420a2e.tar.gz'
 Old file will be removed and new file downloaded from URL."
     )
-    file(REMOVE "/home/runner/work/deps/deps/neovim/deps/build/downloads/luajit/113a168b792cd367822ec04cdc2ef32facd28efa.tar.gz")
+    file(REMOVE "/home/runner/work/deps/deps/neovim/deps/build/downloads/luajit/43d0a19158ceabaa51b0462c1ebc97612b420a2e.tar.gz")
   endif()
 endif()
 
 set(retry_number 5)
 
 message(STATUS "Downloading...
-   dst='/home/runner/work/deps/deps/neovim/deps/build/downloads/luajit/113a168b792cd367822ec04cdc2ef32facd28efa.tar.gz'
+   dst='/home/runner/work/deps/deps/neovim/deps/build/downloads/luajit/43d0a19158ceabaa51b0462c1ebc97612b420a2e.tar.gz'
    timeout='none'
    inactivity timeout='none'"
 )
@@ -115,7 +115,7 @@ foreach(i RANGE ${retry_number})
   if(status_code IN_LIST download_retry_codes)
     sleep_before_download(${i})
   endif()
-  foreach(url https://github.com/LuaJIT/LuaJIT/archive/113a168b792cd367822ec04cdc2ef32facd28efa.tar.gz)
+  foreach(url https://github.com/LuaJIT/LuaJIT/archive/43d0a19158ceabaa51b0462c1ebc97612b420a2e.tar.gz)
     if(NOT url IN_LIST skip_url_list)
       message(STATUS "Using src='${url}'")
 
@@ -126,7 +126,7 @@ foreach(i RANGE ${retry_number})
 
       file(
         DOWNLOAD
-        "${url}" "/home/runner/work/deps/deps/neovim/deps/build/downloads/luajit/113a168b792cd367822ec04cdc2ef32facd28efa.tar.gz"
+        "${url}" "/home/runner/work/deps/deps/neovim/deps/build/downloads/luajit/43d0a19158ceabaa51b0462c1ebc97612b420a2e.tar.gz"
         
         # no TIMEOUT
         # no INACTIVITY_TIMEOUT
@@ -143,7 +143,7 @@ foreach(i RANGE ${retry_number})
         check_file_hash(has_hash hash_is_good)
         if(has_hash AND NOT hash_is_good)
           message(STATUS "Hash mismatch, removing...")
-          file(REMOVE "/home/runner/work/deps/deps/neovim/deps/build/downloads/luajit/113a168b792cd367822ec04cdc2ef32facd28efa.tar.gz")
+          file(REMOVE "/home/runner/work/deps/deps/neovim/deps/build/downloads/luajit/43d0a19158ceabaa51b0462c1ebc97612b420a2e.tar.gz")
         else()
           message(STATUS "Downloading... done")
           return()
