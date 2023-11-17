@@ -241,6 +241,8 @@ TermKeyResult termkey_interpret_mouse(TermKey *tk, const TermKeyKey *key, TermKe
 
   case 64:
   case 65:
+  case 66:
+  case 67:
     *event = drag ? TERMKEY_MOUSE_DRAG : TERMKEY_MOUSE_PRESS;
     btn = code + 4 - 64;
     break;
@@ -322,7 +324,7 @@ TermKeyResult termkey_interpret_modereport(TermKey *tk, const TermKeyKey *key, i
     *initial = key->code.mouse[0];
 
   if(mode)
-    *mode = (key->code.mouse[1] << 8) | key->code.mouse[2];
+    *mode = ((uint8_t)key->code.mouse[1] << 8) | (uint8_t)key->code.mouse[2];
 
   if(value)
     *value = key->code.mouse[3];
@@ -653,6 +655,8 @@ static TermKeyResult peekkey_ctrlstring(TermKey *tk, TermKeyCsi *csi, size_t int
   size_t str_end = introlen;
 
   while(str_end < tk->buffcount) {
+    if(CHARAT(str_end) == 0x07) // BEL
+      break;
     if(CHARAT(str_end) == 0x9c) // ST
       break;
     if(CHARAT(str_end) == 0x1b &&

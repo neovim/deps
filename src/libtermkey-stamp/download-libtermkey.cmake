@@ -22,16 +22,16 @@ function(check_file_hash has_hash hash_is_good)
   set("${has_hash}" TRUE PARENT_SCOPE)
 
   message(STATUS "verifying file...
-       file='/home/runner/work/deps/deps/neovim/deps/build/downloads/libtermkey/v0.22.tar.gz'")
+       file='/home/runner/work/deps/deps/neovim/deps/build/downloads/libtermkey/dcb198a85c520ce38450a5970c97f8ff03b50f0e.tar.gz'")
 
-  file("SHA256" "/home/runner/work/deps/deps/neovim/deps/build/downloads/libtermkey/v0.22.tar.gz" actual_value)
+  file("SHA256" "/home/runner/work/deps/deps/neovim/deps/build/downloads/libtermkey/dcb198a85c520ce38450a5970c97f8ff03b50f0e.tar.gz" actual_value)
 
-  if(NOT "${actual_value}" STREQUAL "81cac2b685c9ada4ead4ea788fb69ff74fc1947ad188ed0264c646fe12b496ba")
+  if(NOT "${actual_value}" STREQUAL "5eb3e50af54312817bd56fa63b9f8dbd12ec11cedbcf8a7aa0fd79950cc83259")
     set("${hash_is_good}" FALSE PARENT_SCOPE)
     message(STATUS "SHA256 hash of
-    /home/runner/work/deps/deps/neovim/deps/build/downloads/libtermkey/v0.22.tar.gz
+    /home/runner/work/deps/deps/neovim/deps/build/downloads/libtermkey/dcb198a85c520ce38450a5970c97f8ff03b50f0e.tar.gz
   does not match expected value
-    expected: '81cac2b685c9ada4ead4ea788fb69ff74fc1947ad188ed0264c646fe12b496ba'
+    expected: '5eb3e50af54312817bd56fa63b9f8dbd12ec11cedbcf8a7aa0fd79950cc83259'
       actual: '${actual_value}'")
   else()
     set("${hash_is_good}" TRUE PARENT_SCOPE)
@@ -71,40 +71,40 @@ function(sleep_before_download attempt)
   execute_process(COMMAND "${CMAKE_COMMAND}" -E sleep "${sleep_seconds}")
 endfunction()
 
-if("/home/runner/work/deps/deps/neovim/deps/build/downloads/libtermkey/v0.22.tar.gz" STREQUAL "")
+if("/home/runner/work/deps/deps/neovim/deps/build/downloads/libtermkey/dcb198a85c520ce38450a5970c97f8ff03b50f0e.tar.gz" STREQUAL "")
   message(FATAL_ERROR "LOCAL can't be empty")
 endif()
 
-if("https://github.com/neovim/libtermkey/archive/v0.22.tar.gz" STREQUAL "")
+if("https://github.com/neovim/libtermkey/archive/dcb198a85c520ce38450a5970c97f8ff03b50f0e.tar.gz" STREQUAL "")
   message(FATAL_ERROR "REMOTE can't be empty")
 endif()
 
-if(EXISTS "/home/runner/work/deps/deps/neovim/deps/build/downloads/libtermkey/v0.22.tar.gz")
+if(EXISTS "/home/runner/work/deps/deps/neovim/deps/build/downloads/libtermkey/dcb198a85c520ce38450a5970c97f8ff03b50f0e.tar.gz")
   check_file_hash(has_hash hash_is_good)
   if(has_hash)
     if(hash_is_good)
       message(STATUS "File already exists and hash match (skip download):
-  file='/home/runner/work/deps/deps/neovim/deps/build/downloads/libtermkey/v0.22.tar.gz'
-  SHA256='81cac2b685c9ada4ead4ea788fb69ff74fc1947ad188ed0264c646fe12b496ba'"
+  file='/home/runner/work/deps/deps/neovim/deps/build/downloads/libtermkey/dcb198a85c520ce38450a5970c97f8ff03b50f0e.tar.gz'
+  SHA256='5eb3e50af54312817bd56fa63b9f8dbd12ec11cedbcf8a7aa0fd79950cc83259'"
       )
       return()
     else()
       message(STATUS "File already exists but hash mismatch. Removing...")
-      file(REMOVE "/home/runner/work/deps/deps/neovim/deps/build/downloads/libtermkey/v0.22.tar.gz")
+      file(REMOVE "/home/runner/work/deps/deps/neovim/deps/build/downloads/libtermkey/dcb198a85c520ce38450a5970c97f8ff03b50f0e.tar.gz")
     endif()
   else()
     message(STATUS "File already exists but no hash specified (use URL_HASH):
-  file='/home/runner/work/deps/deps/neovim/deps/build/downloads/libtermkey/v0.22.tar.gz'
+  file='/home/runner/work/deps/deps/neovim/deps/build/downloads/libtermkey/dcb198a85c520ce38450a5970c97f8ff03b50f0e.tar.gz'
 Old file will be removed and new file downloaded from URL."
     )
-    file(REMOVE "/home/runner/work/deps/deps/neovim/deps/build/downloads/libtermkey/v0.22.tar.gz")
+    file(REMOVE "/home/runner/work/deps/deps/neovim/deps/build/downloads/libtermkey/dcb198a85c520ce38450a5970c97f8ff03b50f0e.tar.gz")
   endif()
 endif()
 
 set(retry_number 5)
 
 message(STATUS "Downloading...
-   dst='/home/runner/work/deps/deps/neovim/deps/build/downloads/libtermkey/v0.22.tar.gz'
+   dst='/home/runner/work/deps/deps/neovim/deps/build/downloads/libtermkey/dcb198a85c520ce38450a5970c97f8ff03b50f0e.tar.gz'
    timeout='none'
    inactivity timeout='none'"
 )
@@ -115,7 +115,7 @@ foreach(i RANGE ${retry_number})
   if(status_code IN_LIST download_retry_codes)
     sleep_before_download(${i})
   endif()
-  foreach(url https://github.com/neovim/libtermkey/archive/v0.22.tar.gz)
+  foreach(url https://github.com/neovim/libtermkey/archive/dcb198a85c520ce38450a5970c97f8ff03b50f0e.tar.gz)
     if(NOT url IN_LIST skip_url_list)
       message(STATUS "Using src='${url}'")
 
@@ -126,7 +126,7 @@ foreach(i RANGE ${retry_number})
 
       file(
         DOWNLOAD
-        "${url}" "/home/runner/work/deps/deps/neovim/deps/build/downloads/libtermkey/v0.22.tar.gz"
+        "${url}" "/home/runner/work/deps/deps/neovim/deps/build/downloads/libtermkey/dcb198a85c520ce38450a5970c97f8ff03b50f0e.tar.gz"
         
         # no TIMEOUT
         # no INACTIVITY_TIMEOUT
@@ -143,7 +143,7 @@ foreach(i RANGE ${retry_number})
         check_file_hash(has_hash hash_is_good)
         if(has_hash AND NOT hash_is_good)
           message(STATUS "Hash mismatch, removing...")
-          file(REMOVE "/home/runner/work/deps/deps/neovim/deps/build/downloads/libtermkey/v0.22.tar.gz")
+          file(REMOVE "/home/runner/work/deps/deps/neovim/deps/build/downloads/libtermkey/dcb198a85c520ce38450a5970c97f8ff03b50f0e.tar.gz")
         else()
           message(STATUS "Downloading... done")
           return()
