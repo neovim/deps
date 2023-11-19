@@ -10,19 +10,13 @@ CI build.
     - Used by the [unstable PPA](https://launchpad.net/~neovim-ppa/+archive/ubuntu/unstable). PPA builds aren't allowed network access, so a pre-build step fetches this repo to use as input to the build to ensure we have the latest dependencies.
 - `opt/`
     - cache for manually-managed dependencies (not auto-updated because the origin is unreliable)
-    - `lua-dev-deps` is a combination of *only* the share files of `busted`
-      v2.1.1 and `luacheck` v1.1.0.
+    - `lua-dev-deps` is a combination of *only* the share files of `busted` and
+      `luacheck`. The used versions are specified in the Makefile.
 
-## For Mac users
-
-Mac tar converts extended attributes (such as `com.apple.quarantine` for files
-downloaded with Safari) to hidden files, which will break the installation step
-on Windows and Linux. Prepend tar with `COPYFILE_DISABLE=1` to create
-cross-platform archives:
-
-```
-COPYFILE_DISABLE=1 tar czf busted-2.1.1.tar.gz busted-2.1.1
-```
+## Bumping dependency versions
+The Makefile automatically performs the necessary steps to download and package
+dependencies as needed. Run `make <dependency>` to package a single dependency
+and just `make` to package all of them.
 
 ## Dependency-specific information
 ### Lpeg
