@@ -922,14 +922,14 @@ end)
 async:send()
 ```
 
-### `uv.new_async([callback])`
+### `uv.new_async(callback)`
 
 **Parameters:**
-- `callback`: `callable` or `nil`
+- `callback`: `callable`
   - `...`: `threadargs` passed to/from `uv.async_send(async, ...)`
 
 Creates and initializes a new `uv_async_t`. Returns the Lua userdata wrapping
-it. A `nil` callback is allowed.
+it.
 
 **Returns:** `uv_async_t userdata` or `fail`
 
@@ -1235,10 +1235,11 @@ end)
 
 The `options` table accepts the following fields:
 
-  - `options.args` - Command line arguments as a list of string. The first
-  string should be the path to the program. On Windows, this uses CreateProcess
-  which concatenates the arguments into a string. This can cause some strange
-  errors. (See `options.verbatim` below for Windows.)
+  - `options.args` - Command line arguments as a list of strings. The first
+  string should *not* be the path to the program, since that is already
+  provided via `path`. On Windows, this uses CreateProcess which concatenates
+  the arguments into a string. This can cause some strange errors
+  (see `options.verbatim` below for Windows).
   - `options.stdio` - Set the file descriptors that will be made available to
   the child process. The convention is that the first entries are stdin, stdout,
   and stderr. (**Note**: On Windows, file descriptors after the third are

@@ -1,13 +1,9 @@
 cmake_minimum_required(VERSION 3.5)
 
-if(POLICY CMP0053)
-  cmake_policy(SET CMP0053 NEW) # faster evaluation of variable references
-endif()
-
 project (luv C ASM)
 
 set(LUV_VERSION_MAJOR 1)
-set(LUV_VERSION_MINOR 46)
+set(LUV_VERSION_MINOR 47)
 set(LUV_VERSION_PATCH 0)
 set(LUV_VERSION ${LUV_VERSION_MAJOR}.${LUV_VERSION_MINOR}.${LUV_VERSION_PATCH})
 
