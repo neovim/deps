@@ -2,13 +2,15 @@ use super::helpers::{
     allocations,
     edits::invert_edit,
     edits::ReadRecorder,
-    fixtures::{get_language, get_test_grammar, get_test_language},
+    fixtures::{get_language, get_test_language},
 };
 use crate::{
     generate::generate_parser_for_grammar,
     parse::{perform_edit, Edit},
+    tests::helpers::fixtures::fixtures_dir,
 };
 use std::{
+    fs,
     sync::atomic::{AtomicUsize, Ordering},
     thread, time,
 };
@@ -148,7 +150,7 @@ fn test_parsing_with_custom_utf8_input() {
         )
     );
     assert_eq!(root.kind(), "source_file");
-    assert_eq!(root.has_error(), false);
+    assert!(!root.has_error());
     assert_eq!(root.child(0).unwrap().kind(), "function_item");
 }
 
@@ -187,7 +189,7 @@ fn test_parsing_with_custom_utf16_input() {
         "(source_file (function_item (visibility_modifier) name: (identifier) parameters: (parameters) body: (block (integer_literal))))"
     );
     assert_eq!(root.kind(), "source_file");
-    assert_eq!(root.has_error(), false);
+    assert!(!root.has_error());
     assert_eq!(root.child(0).unwrap().kind(), "function_item");
 }
 
@@ -342,7 +344,8 @@ fn test_parsing_after_editing_beginning_of_code() {
             deleted_length: 0,
             inserted_text: b" || 5".to_vec(),
         },
-    );
+    )
+    .unwrap();
 
     let mut recorder = ReadRecorder::new(&code);
     let tree = parser
@@ -389,7 +392,8 @@ fn test_parsing_after_editing_end_of_code() {
             deleted_length: 0,
             inserted_text: b".d".to_vec(),
         },
-    );
+    )
+    .unwrap();
 
     let mut recorder = ReadRecorder::new(&code);
     let tree = parser
@@ -425,16 +429,15 @@ fn test_parsing_empty_file_with_reused_tree() {
 
 #[test]
 fn test_parsing_after_editing_tree_that_depends_on_column_values() {
-    let (grammar, path) = get_test_grammar("uses_current_column");
+    let dir = fixtures_dir()
+        .join("test_grammars")
+        .join("uses_current_column");
+    let grammar = fs::read_to_string(&dir.join("grammar.json")).unwrap();
     let (grammar_name, parser_code) = generate_parser_for_grammar(&grammar).unwrap();
 
     let mut parser = Parser::new();
     parser
-        .set_language(get_test_language(
-            &grammar_name,
-            &parser_code,
-            path.as_ref().map(AsRef::as_ref),
-        ))
+        .set_language(get_test_language(&grammar_name, &parser_code, Some(&dir)))
         .unwrap();
 
     let mut code = b"
@@ -464,7 +467,8 @@ h + i
             deleted_length: 0,
             inserted_text: b"1234".to_vec(),
         },
-    );
+    )
+    .unwrap();
 
     assert_eq!(
         code,
@@ -528,12 +532,12 @@ fn test_parsing_after_detecting_error_in_the_middle_of_a_string_token() {
     let undo = invert_edit(&source, &edit);
 
     let mut tree2 = tree.clone();
-    perform_edit(&mut tree2, &mut source, &edit);
+    perform_edit(&mut tree2, &mut source, &edit).unwrap();
     tree2 = parser.parse(&source, Some(&tree2)).unwrap();
     assert!(tree2.root_node().has_error());
 
     let mut tree3 = tree2.clone();
-    perform_edit(&mut tree3, &mut source, &undo);
+    perform_edit(&mut tree3, &mut source, &undo).unwrap();
     tree3 = parser.parse(&source, Some(&tree3)).unwrap();
     assert_eq!(tree3.root_node().to_sexp(), tree.root_node().to_sexp(),);
 }
@@ -834,7 +838,7 @@ fn test_parsing_with_one_included_range() {
         concat!(
             "(program (expression_statement (call_expression ",
             "function: (member_expression object: (identifier) property: (property_identifier)) ",
-            "arguments: (arguments (string)))))",
+            "arguments: (arguments (string (string_fragment))))))",
         )
     );
     assert_eq!(
@@ -1183,7 +1187,7 @@ fn test_parsing_with_a_newly_included_range() {
         .set_included_ranges(&[simple_range(range1_start, range1_end)])
         .unwrap();
     let tree = parser
-        .parse_with(&mut chunked_input(&source_code, 3), None)
+        .parse_with(&mut chunked_input(source_code, 3), None)
         .unwrap();
     assert_eq!(
         tree.root_node().to_sexp(),
@@ -1202,7 +1206,7 @@ fn test_parsing_with_a_newly_included_range() {
         ])
         .unwrap();
     let tree2 = parser
-        .parse_with(&mut chunked_input(&source_code, 3), Some(&tree))
+        .parse_with(&mut chunked_input(source_code, 3), Some(&tree))
         .unwrap();
     assert_eq!(
         tree2.root_node().to_sexp(),
@@ -1226,7 +1230,7 @@ fn test_parsing_with_a_newly_included_range() {
             simple_range(range3_start, range3_end),
         ])
         .unwrap();
-    let tree3 = parser.parse(&source_code, Some(&tree)).unwrap();
+    let tree3 = parser.parse(source_code, Some(&tree)).unwrap();
     assert_eq!(
         tree3.root_node().to_sexp(),
         concat!(
