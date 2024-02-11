@@ -68,6 +68,7 @@ module.exports = grammar({
     $._special_variable_name,
     $._c_word,
     $._statement_not_subshell,
+    $._redirect,
   ],
 
   externals: $ => [
@@ -97,6 +98,8 @@ module.exports = grammar({
     '<<',
     '<<-',
     /\n/,
+    '(',
+    'esac',
     $.__error_recovery,
   ],
 
@@ -179,7 +182,7 @@ module.exports = grammar({
       $.subshell,
     )),
 
-    redirected_statement: $ => prec.dynamic(-1, prec(-1, choice(
+    redirected_statement: $ => prec.dynamic(-1, prec.right(-1, choice(
       seq(
         field('body', $._statement),
         field('redirect', choice(
@@ -193,7 +196,7 @@ module.exports = grammar({
         field('body', choice($.if_statement, $.while_statement)),
         $.herestring_redirect,
       ),
-      field('redirect', repeat1($.file_redirect)),
+      field('redirect', repeat1($._redirect)),
       $.herestring_redirect,
     ))),
 
@@ -379,9 +382,11 @@ module.exports = grammar({
         choice(
           $.compound_statement,
           $.subshell,
-          $.test_command),
+          $.test_command,
+          $.if_statement,
+        ),
       ),
-      field('redirect', optional($.file_redirect)),
+      field('redirect', optional($._redirect)),
     )),
 
     compound_statement: $ => seq(
@@ -425,8 +430,23 @@ module.exports = grammar({
     test_command: $ => seq(
       choice(
         seq('[', optional(choice($._expression, $.redirected_statement)), ']'),
-        seq('[[', $._expression, ']]'),
+        seq(
+          '[[',
+          choice(
+            $._expression,
+            alias($._test_command_binary_expression, $.binary_expression),
+          ),
+          ']]',
+        ),
         seq('((', optional($._expression), '))'),
+      ),
+    ),
+
+    _test_command_binary_expression: $ => prec(PREC.ASSIGN,
+      seq(
+        field('left', $._expression),
+        field('operator', '='),
+        field('right', alias($._regex_no_space, $.regex)),
       ),
     ),
 
@@ -450,7 +470,7 @@ module.exports = grammar({
     command: $ => prec.left(seq(
       repeat(choice(
         $.variable_assignment,
-        field('redirect', choice($.file_redirect, $.herestring_redirect)),
+        field('redirect', $._redirect),
       )),
       field('name', $.command_name),
       choice(
@@ -518,7 +538,7 @@ module.exports = grammar({
       optional(choice(
         alias($._heredoc_pipeline, $.pipeline),
         seq(
-          field('redirect', repeat1($.file_redirect)),
+          field('redirect', repeat1($._redirect)),
           optional($._heredoc_expression),
         ),
         $._heredoc_expression,
@@ -565,6 +585,8 @@ module.exports = grammar({
       '<<<',
       $._literal,
     )),
+
+    _redirect: $ => choice($.file_redirect, $.herestring_redirect),
 
     // Expressions
 
@@ -828,8 +850,8 @@ module.exports = grammar({
 
     number: $ => choice(
       /-?(0x)?[0-9]+(#[0-9A-Za-z@_]+)?/,
-      // the base can be an expansion
-      seq(/-?(0x)?[0-9]+#/, $.expansion),
+      // the base can be an expansion or command substitution
+      seq(/-?(0x)?[0-9]+#/, choice($.expansion, $.command_substitution)),
     ),
 
     simple_expansion: $ => seq(
@@ -838,6 +860,7 @@ module.exports = grammar({
         $._simple_variable_name,
         $._multiline_variable_name,
         $._special_variable_name,
+        $.variable_name,
         alias('!', $.special_variable_name),
         alias('#', $.special_variable_name),
       ),
@@ -919,7 +942,13 @@ module.exports = grammar({
 
     _expansion_regex: $ => seq(
       field('operator', choice('#', alias($._immediate_double_hash, '##'), '%', '%%')),
-      optional(choice($.regex, alias(')', $.regex), $.string, $.raw_string, alias(/\s+/, $.regex))),
+      repeat(choice(
+        $.regex,
+        alias(')', $.regex),
+        $.string,
+        $.raw_string,
+        alias(/\s+/, $.regex),
+      )),
     ),
 
     _expansion_regex_replacement: $ => seq(
@@ -966,6 +995,7 @@ module.exports = grammar({
       )),
       optional(seq(
         field('operator', ':'),
+        optional($.simple_expansion),
         optional(choice(
           $._simple_variable_name,
           $.number,
@@ -1019,6 +1049,7 @@ module.exports = grammar({
         $.command_substitution,
         alias($._expansion_word, $.word),
         $.array,
+        $.process_substitution,
       ),
       repeat1(seq(
         choice($._concat, alias(/`\s*`/, '``')),
@@ -1033,6 +1064,7 @@ module.exports = grammar({
           $.command_substitution,
           alias($._expansion_word, $.word),
           $.array,
+          $.process_substitution,
         ),
       )),
     )),

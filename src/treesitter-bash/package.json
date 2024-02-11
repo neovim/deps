@@ -1,6 +1,6 @@
 {
   "name": "tree-sitter-bash",
-  "version": "0.20.4",
+  "version": "0.20.5",
   "description": "Bash grammar for tree-sitter",
   "main": "bindings/node",
   "keywords": [
@@ -8,7 +8,10 @@
     "lexer",
     "bash"
   ],
-  "author": "Max Brunsfeld",
+  "author": "Max Brunsfeld <maxbrunsfeld@gmail.com>",
+  "contributors": [
+    "Amaan Qureshi <amaanq12@gmail.com>"
+  ],
   "license": "MIT",
   "dependencies": {
     "nan": "^2.18.0",
@@ -16,10 +19,10 @@
     "web-tree-sitter": "^0.20.8"
   },
   "devDependencies": {
-    "eslint": "^8.50.0",
+    "eslint": "^8.56.0",
     "eslint-config-google": "^0.14.0",
-    "node-gyp": "^9.4.0",
-    "prebuild": "^12.1.0",
+    "node-gyp": "^10.0.1",
+    "prebuild": "^13.0.0",
     "tree-sitter-cli": "^0.20.8"
   },
   "overrides": {
@@ -42,9 +45,15 @@
   "tree-sitter": [
     {
       "scope": "source.bash",
+      "injection-regex": "(shell|bash|sh)",
+      "first-line-regex": "^#!.*\\b(sh|bash|dash)\\b.*$",
       "file-types": [
         "sh",
-        "bash"
+        "bash",
+        ".bashrc",
+        ".bash_profile",
+        "ebuild",
+        "eclass"
       ]
     }
   ]

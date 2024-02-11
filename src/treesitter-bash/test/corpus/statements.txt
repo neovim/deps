@@ -835,7 +835,7 @@ esac
     (case_item (word) (command (command_name (word)) (word))))
   (case_statement
     (string (simple_expansion (variable_name)))
-    (case_item (word) (word) (command (command_name (word)))))
+    (case_item (extglob_pattern) (extglob_pattern) (command (command_name (word)))))
   (case_statement
     (simple_expansion (variable_name))
     (case_item
@@ -1051,6 +1051,8 @@ Test commands with regexes
 [[ ${file} == @(*${GENTOO_PATCH_NAME}.tar.xz|*.asc|*.sig) ]]
 [[ $RUBY_TARGETS != *$( eselect ruby show | awk 'NR==2' | tr  -d ' '  )* ]]
 [[ " ${m[0]##*/}" =~ ^(\ ${skip_files[*]/%/.*|\\} ) ]]
+[[ ' boop xyz' =~ ' boop '(.*)$ ]]
+[[ $b = foo* ]]
 
 --------------------------------------------------------------------------------
 
@@ -1113,7 +1115,9 @@ Test commands with regexes
           (command (command_name (word)) (word) (raw_string))))
       (extglob_pattern)))
   (test_command
-    (binary_expression (string (expansion (subscript (variable_name) (number)) (regex))) (regex))))
+    (binary_expression (string (expansion (subscript (variable_name) (number)) (regex))) (regex)))
+  (test_command (binary_expression (raw_string) (regex)))
+  (test_command (binary_expression (simple_expansion (variable_name)) (regex))))
 
 ================================================================================
 Test command paren statefulness with a case glob
@@ -1211,6 +1215,19 @@ function do_yet_another_thing {
 
 do_nothing() { return 0; }
 
+foo::bar() {
+  echo what
+}
+
+foo::baz() {
+  echo how
+}
+
+assert()
+  if ! $1; then
+    return 1
+  fi
+
 --------------------------------------------------------------------------------
 
 (program
@@ -1267,6 +1284,32 @@ do_nothing() { return 0; }
   (function_definition
     (word)
     (compound_statement
+      (command
+        (command_name
+          (word))
+        (number))))
+  (function_definition
+    (word)
+    (compound_statement
+      (command
+        (command_name
+          (word))
+        (word))))
+  (function_definition
+    (word)
+    (compound_statement
+      (command
+        (command_name
+          (word))
+        (word))))
+  (function_definition
+    (word)
+    (if_statement
+      (negated_command
+        (command
+          (command_name
+            (simple_expansion
+              (variable_name)))))
       (command
         (command_name
           (word))
@@ -1341,6 +1384,7 @@ Variable declaration: export
 
 export PATH
 export FOOBAR PATH="$PATH:/usr/foobar/bin"
+export $FOO:$BAR
 
 --------------------------------------------------------------------------------
 
@@ -1354,7 +1398,14 @@ export FOOBAR PATH="$PATH:/usr/foobar/bin"
       (string
         (simple_expansion
           (variable_name))
-          (string_content)))))
+          (string_content))))
+  (declaration_command
+    (concatenation
+      (simple_expansion
+        (variable_name))
+      (word)
+      (simple_expansion
+        (variable_name)))))
 
 ================================================================================
 Variable declaration: command substitution with semi-colon

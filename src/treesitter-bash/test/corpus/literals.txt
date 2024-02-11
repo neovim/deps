@@ -147,6 +147,7 @@ C="${D%</E>*}"
 F="${#!}"
 G=${H,,[I]}
 J=${K^^[L]}
+L="${M/'N'*/O}"
 
 --------------------------------------------------------------------------------
 
@@ -250,7 +251,14 @@ J=${K^^[L]}
     (variable_name)
     (expansion
       (variable_name)
-      (regex))))
+      (regex)))
+  (variable_assignment
+    (variable_name)
+    (string
+      (expansion
+        (variable_name)
+        (regex)
+        (word)))))
 
 ================================================================================
 More Variable expansions with operators
@@ -271,6 +279,7 @@ ${var:pos:len}
 ${MATRIX:$(($RANDOM%${#MATRIX})):1}
 ${PKG_CONFIG_LIBDIR:-${ESYSROOT}/usr/$(get_libdir)/pkgconfig}
 ${ver_str::${#ver_str}-${#not_match}}
+${value#\{sd.cicd.}
 
 --------------------------------------------------------------------------------
 
@@ -363,7 +372,12 @@ ${ver_str::${#ver_str}-${#not_match}}
         (variable_name)
         (binary_expression
           (expansion (variable_name))
-          (expansion (variable_name)))))))
+          (expansion (variable_name))))))
+  (command
+    (command_name
+      (expansion
+        (variable_name)
+        (regex)))))
 
 ================================================================================
 Variable expansions in strings
@@ -614,6 +628,7 @@ ${dict_langs:+;}
 ${UTIL_LINUX_LIBC[@]/%/? ( sys-apps/util-linux )}
 ${id}${2+ ${2}}
 ${BRANDING_GCC_PKGVERSION/(/(Gentoo ${PVR}${extvers}, } # look at that parenthesis!
+some-command ${foo:+--arg <(printf '%s\n' "$foo")}
 
 --------------------------------------------------------------------------------
 
@@ -651,7 +666,18 @@ ${BRANDING_GCC_PKGVERSION/(/(Gentoo ${PVR}${extvers}, } # look at that parenthes
         (variable_name)
         (regex)
         (concatenation (word) (expansion (variable_name)) (expansion (variable_name)) (word)))))
-  (comment))
+  (comment)
+      (command
+        (command_name (word))
+        (expansion
+          (variable_name)
+          (concatenation
+            (word)
+            (process_substitution
+              (command
+                (command_name (word))
+                (raw_string)
+                (string (simple_expansion (variable_name)))))))))
 
 ================================================================================
 Variable Expansions: Regex
@@ -665,6 +691,8 @@ echo ${LIB_DEPEND//\[static-libs(+)]}
 ${ALL_LLVM_TARGETS[@]/%/(-)?}
 filterdiff -p1 ${paths[@]/#/-i }
 ${cflags//-O? /$(get-flag O) }
+curf="${f%'-roff2html'*}.html"
+reff="${f/'-roff2html'*/'-ref'}.html"
 
 --------------------------------------------------------------------------------
 
@@ -678,7 +706,13 @@ ${cflags//-O? /$(get-flag O) }
   (command (command_name (word)) (word) (expansion (subscript (variable_name) (word)) (word)))
   (command
     (command_name
-      (expansion (variable_name) (regex) (command_substitution (command (command_name (word)) (word))) (word)))))
+      (expansion (variable_name) (regex) (command_substitution (command (command_name (word)) (word))) (word))))
+  (variable_assignment
+    (variable_name)
+    (string (expansion (variable_name) (raw_string) (regex)) (string_content)))
+  (variable_assignment
+    (variable_name)
+    (string (expansion (variable_name) (regex) (raw_string)) (string_content))))
 
 ================================================================================
 Words ending with '$'
