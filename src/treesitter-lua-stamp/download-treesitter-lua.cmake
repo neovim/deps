@@ -75,7 +75,7 @@ if("/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter-lua/v0.0.
   message(FATAL_ERROR "LOCAL can't be empty")
 endif()
 
-if("https://github.com/MunifTanjim/tree-sitter-lua/archive/v0.0.19.tar.gz" STREQUAL "")
+if("https://github.com/tree-sitter-grammars/tree-sitter-lua/archive/v0.0.19.tar.gz" STREQUAL "")
   message(FATAL_ERROR "REMOTE can't be empty")
 endif()
 
@@ -115,7 +115,7 @@ foreach(i RANGE ${retry_number})
   if(status_code IN_LIST download_retry_codes)
     sleep_before_download(${i})
   endif()
-  foreach(url https://github.com/MunifTanjim/tree-sitter-lua/archive/v0.0.19.tar.gz)
+  foreach(url https://github.com/tree-sitter-grammars/tree-sitter-lua/archive/v0.0.19.tar.gz)
     if(NOT url IN_LIST skip_url_list)
       message(STATUS "Using src='${url}'")
 

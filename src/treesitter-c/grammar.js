@@ -67,6 +67,7 @@ module.exports = grammar({
     [$.enum_specifier],
     [$._type_specifier, $._old_style_parameter_list],
     [$.parameter_list, $._old_style_parameter_list],
+    [$.function_declarator, $._function_declaration_declarator],
   ],
 
   word: $ => $.identifier,
@@ -244,13 +245,15 @@ module.exports = grammar({
 
     declaration: $ => seq(
       $._declaration_specifiers,
-      $._declaration_declarator,
+      commaSep1(field('declarator', choice(
+        seq(
+          $._declaration_declarator,
+          optional($.gnu_asm_expression),
+        ),
+        $.init_declarator,
+      ))),
       ';',
     ),
-    _declaration_declarator: $ => commaSep1(field('declarator', choice(
-      seq($._declarator, optional($.gnu_asm_expression)),
-      $.init_declarator,
-    ))),
 
     type_definition: $ => seq(
       optional('__extension__'),
@@ -357,6 +360,15 @@ module.exports = grammar({
       $.identifier,
     ),
 
+    _declaration_declarator: $ => choice(
+      $.attributed_declarator,
+      $.pointer_declarator,
+      alias($._function_declaration_declarator, $.function_declarator),
+      $.array_declarator,
+      $.parenthesized_declarator,
+      $.identifier,
+    ),
+
     _field_declarator: $ => choice(
       alias($.attributed_field_declarator, $.attributed_declarator),
       alias($.pointer_field_declarator, $.pointer_declarator),
@@ -450,8 +462,21 @@ module.exports = grammar({
         field('declarator', $._declarator),
         field('parameters', $.parameter_list),
         optional($.gnu_asm_expression),
+        repeat(choice(
+          $.attribute_specifier,
+          $.identifier,
+          alias($.preproc_call_expression, $.call_expression),
+        )),
+      )),
+
+    _function_declaration_declarator: $ => prec.right(1,
+      seq(
+        field('declarator', $._declarator),
+        field('parameters', $.parameter_list),
+        optional($.gnu_asm_expression),
         repeat($.attribute_specifier),
       )),
+
     function_field_declarator: $ => prec(1, seq(
       field('declarator', $._field_declarator),
       field('parameters', $.parameter_list),
@@ -624,12 +649,14 @@ module.exports = grammar({
         seq($.enumerator, ','),
         alias($.preproc_if_in_enumerator_list, $.preproc_if),
         alias($.preproc_ifdef_in_enumerator_list, $.preproc_ifdef),
+        seq($.preproc_call, ','),
       )),
       optional(seq(
         choice(
           $.enumerator,
           alias($.preproc_if_in_enumerator_list_no_comma, $.preproc_if),
           alias($.preproc_ifdef_in_enumerator_list_no_comma, $.preproc_ifdef),
+          $.preproc_call,
         ),
       )),
       '}',
@@ -909,15 +936,19 @@ module.exports = grammar({
       $.compound_literal_expression,
       $.identifier,
       $.number_literal,
-      $.string_literal,
+      $._string,
       $.true,
       $.false,
       $.null,
-      $.concatenated_string,
       $.char_literal,
       $.parenthesized_expression,
       $.gnu_asm_expression,
     ),
+
+    _string: $ => prec.left(choice(
+      $.string_literal,
+      $.concatenated_string,
+    )),
 
     comma_expression: $ => seq(
       field('left', $._expression),
@@ -1068,7 +1099,7 @@ module.exports = grammar({
       choice('asm', '__asm__'),
       repeat($.gnu_asm_qualifier),
       '(',
-      field('assembly_code', choice($.string_literal, $.concatenated_string)),
+      field('assembly_code', $._string),
       optional(seq(
         field('output_operands', $.gnu_asm_output_operand_list),
         optional(seq(
@@ -1230,10 +1261,15 @@ module.exports = grammar({
       '\'',
     ),
 
+    // Must concatenate at least 2 nodes, one of which must be a string_literal.
+    // Identifier is added to parse macros that are strings, like PRIu64.
     concatenated_string: $ => prec.right(seq(
-      choice($.identifier, $.string_literal),
-      $.string_literal,
-      repeat(choice($.string_literal, $.identifier)), // Identifier is added to parse macros that are strings, like PRIu64
+      choice(
+        seq($.identifier, $.string_literal),
+        seq($.string_literal, $.string_literal),
+        seq($.string_literal, $.identifier),
+      ),
+      repeat(choice($.string_literal, $.identifier)),
     )),
 
     string_literal: $ => seq(
@@ -1338,6 +1374,17 @@ function preprocIf(suffix, content, precedence = 0) {
     );
   }
 
+  /**
+    *
+    * @param {GrammarSymbols<string>} $
+    *
+    * @return {AliasRule | SymbolRule<string>}
+    *
+    */
+  function elifBlock($) {
+    return suffix ? alias($['preproc_elifdef' + suffix], $.preproc_elifdef) : $.preproc_elifdef;
+  }
+
   return {
     ['preproc_if' + suffix]: $ => prec(precedence, seq(
       preprocessor('if'),
@@ -1352,7 +1399,7 @@ function preprocIf(suffix, content, precedence = 0) {
       choice(preprocessor('ifdef'), preprocessor('ifndef')),
       field('name', $.identifier),
       repeat(content($)),
-      field('alternative', optional(choice(elseBlock($), $.preproc_elifdef))),
+      field('alternative', optional(choice(elseBlock($), elifBlock($)))),
       preprocessor('endif'),
     )),
 

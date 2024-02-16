@@ -6,7 +6,7 @@ method=url
 command=/usr/local/bin/cmake;-P;/home/runner/work/deps/deps/neovim/deps/build/src/treesitter-lua-stamp/download-treesitter-lua.cmake;COMMAND;/usr/local/bin/cmake;-P;/home/runner/work/deps/deps/neovim/deps/build/src/treesitter-lua-stamp/verify-treesitter-lua.cmake;COMMAND;/usr/local/bin/cmake;-P;/home/runner/work/deps/deps/neovim/deps/build/src/treesitter-lua-stamp/extract-treesitter-lua.cmake
 source_dir=/home/runner/work/deps/deps/neovim/deps/build/src/treesitter-lua
 work_dir=/home/runner/work/deps/deps/neovim/deps/build/src
-url(s)=https://github.com/MunifTanjim/tree-sitter-lua/archive/v0.0.19.tar.gz
+url(s)=https://github.com/tree-sitter-grammars/tree-sitter-lua/archive/v0.0.19.tar.gz
 hash=SHA256=974230f212d0049fce8e881b88b18eebbd05f1fd0edd16fe4ba5bdd2bcd78d08
 no_extract=
 
