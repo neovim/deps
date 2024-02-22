@@ -31,6 +31,16 @@
       }
     },
 
+    "precedences": {
+      "type": "array",
+      "items": {
+        "type": "array",
+        "items": {
+          "$ref": "#/definitions/rule"
+        }
+      }
+    },
+
     "externals": {
       "type": "array",
       "items": {
@@ -105,7 +115,8 @@
           "type": "string",
           "pattern": "^PATTERN$"
         },
-        "value": { "type": "string" }
+        "value": { "type": "string" },
+        "flags": { "type": "string" }
       },
       "required": ["type", "value"]
     },
@@ -240,7 +251,10 @@
           "pattern": "^(PREC|PREC_LEFT|PREC_RIGHT|PREC_DYNAMIC)$"
         },
         "value": {
-          "type": "integer"
+          "oneof": [
+            { "type": "integer" },
+            { "type": "string" }
+          ]
         },
         "content": {
           "$ref": "#/definitions/rule"

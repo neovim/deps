@@ -5,7 +5,7 @@ permalink: creating-parsers
 
 # Creating parsers
 
-Developing Tree-sitter grammars can have a difficult learning curve, but once you get the hang of it, it can be fun and even zen-like. This document will help get you to get started and to develop a useful mental model.
+Developing Tree-sitter grammars can have a difficult learning curve, but once you get the hang of it, it can be fun and even zen-like. This document will help you to get started and to develop a useful mental model.
 
 ## Getting Started
 
@@ -20,7 +20,7 @@ In order to develop a Tree-sitter parser, there are two dependencies that you ne
 
 To create a Tree-sitter parser, you need to use [the `tree-sitter` CLI][tree-sitter-cli]. You can install the CLI in a few different ways:
 
-* Build the `tree-sitter-cli` [Rust crate][crate] from source using [`cargo`][cargo], the Rust package manager. This works on any platform. See [the contributing docs](/docs/section-5-contributing.md#developing-tree-sitter) for more information.
+* Build the `tree-sitter-cli` [Rust crate][crate] from source using [`cargo`][cargo], the Rust package manager. This works on any platform. See [the contributing docs](./contributing#developing-tree-sitter) for more information.
 * Install the `tree-sitter-cli` [Node.js module][node-module] using [`npm`][npm], the Node package manager. This approach is fast, but is only works on certain platforms, because it relies on pre-built binaries.
 * Download a binary for your platform from [the latest GitHub release][releases], and put it into a directory on your `PATH`.
 
@@ -229,6 +229,20 @@ The following is a complete list of built-in functions you can use in your `gram
 
 * **Symbols (the `$` object)** - Every grammar rule is written as a JavaScript function that takes a parameter conventionally called `$`. The syntax `$.identifier` is how you refer to another grammar symbol within a rule. Names starting with `$.MISSING` or `$.UNEXPECTED` should be avoided as they have special meaning for the `tree-sitter test` command.
 * **String and Regex literals** - The terminal symbols in a grammar are described using JavaScript strings and regular expressions. Of course during parsing, Tree-sitter does not actually use JavaScript's regex engine to evaluate these regexes; it generates its own regex-matching logic as part of each parser. Regex literals are just used as a convenient way of writing regular expressions in your grammar.
+* **Regex Limitations** - Currently, only a subset of the Regex engine is actually
+supported. This is due to certain features like lookahead and lookaround assertions
+not feasible to use in an LR(1) grammar, as well as certain flags being unnecessary
+for tree-sitter. However, plenty of features are supported by default:
+
+  * Character classes
+  * Character ranges
+  * Character sets
+  * Quantifiers
+  * Alternation
+  * Grouping
+  * Unicode character escapes
+  * Unicode property escapes
+
 * **Sequences : `seq(rule1, rule2, ...)`** - This function creates a rule that matches any number of other rules, one after another. It is analogous to simply writing multiple symbols next to each other in [EBNF notation][ebnf].
 * **Alternatives : `choice(rule1, rule2, ...)`** - This function creates a rule that matches *one* of a set of possible rules. The order of the arguments does not matter. This is analogous to the `|` (pipe) operator in EBNF notation.
 * **Repetitions : `repeat(rule)`** - This function creates a rule that matches *zero-or-more* occurrences of a given rule. It is analogous to the `{x}` (curly brace) syntax in EBNF notation.
@@ -238,7 +252,15 @@ The following is a complete list of built-in functions you can use in your `gram
 * **Left Associativity : `prec.left([number], rule)`** - This function marks the given rule as left-associative (and optionally applies a numerical precedence). When an LR(1) conflict arises in which all of the rules have the same numerical precedence, Tree-sitter will consult the rules' associativity. If there is a left-associative rule, Tree-sitter will prefer matching a rule that ends *earlier*. This works similarly to [associativity directives][yacc-prec] in Yacc grammars.
 * **Right Associativity : `prec.right([number], rule)`** - This function is like `prec.left`, but it instructs Tree-sitter to prefer matching a rule that ends *later*.
 * **Dynamic Precedence : `prec.dynamic(number, rule)`** - This function is similar to `prec`, but the given numerical precedence is applied at *runtime* instead of at parser generation time. This is only necessary when handling a conflict dynamically using the `conflicts` field in the grammar, and when there is a genuine *ambiguity*: multiple rules correctly match a given piece of code. In that event, Tree-sitter compares the total dynamic precedence associated with each rule, and selects the one with the highest total. This is similar to [dynamic precedence directives][bison-dprec] in Bison grammars.
-* **Tokens : `token(rule)`** - This function marks the given rule as producing only a single token. Tree-sitter's default is to treat each String or RegExp literal in the grammar as a separate token. Each token is matched separately by the lexer and returned as its own leaf node in the tree. The `token` function allows you to express a complex rule using the functions described above (rather than as a single regular expression) but still have Tree-sitter treat it as a single token.
+* **Tokens : `token(rule)`** - This function marks the given rule as producing only
+a single token. Tree-sitter's default is to treat each String or RegExp literal
+in the grammar as a separate token. Each token is matched separately by the lexer
+and returned as its own leaf node in the tree. The `token` function allows you to
+express a complex rule using the functions described above (rather than as a single
+regular expression) but still have Tree-sitter treat it as a single token.
+The token function will only accept terminal rules, so `token($.foo)` will not work.
+You can think of it as a shortcut for squashing complex rules of strings or regexes
+down to a single token.
 * **Immediate Tokens : `token.immediate(rule)`** - Usually, whitespace (and any other extras, such as comments) is optional before each token. This function means that the token will only match if there is no whitespace.
 * **Aliases : `alias(rule, name)`** - This function causes the given rule to *appear* with an alternative name in the syntax tree. If `name` is a *symbol*, as in `alias($.foo, $.bar)`, then the aliased rule will *appear* as a [named node][named-vs-anonymous-nodes-section] called `bar`. And if `name` is a *string literal*, as in `alias($.foo, 'bar')`, then the aliased rule will appear as an [anonymous node][named-vs-anonymous-nodes-section], as if the rule had been written as the simple string.
 * **Field Names : `field(name, rule)`** - This function assigns a *field name* to the child node(s) matched by the given rule. In the resulting syntax tree, you can then use that field name to access specific children.
@@ -580,7 +602,7 @@ grammar({
     ),
 
     binary_expression: $ => choice(
-      prec.left(1, seq($._expression, 'instanceof', $._expression)
+      prec.left(1, seq($._expression, 'instanceof', $._expression))
       // ...
     ),
 
@@ -625,6 +647,13 @@ grammar({
 ```
 
 Then, add another C or C++ source file to your project. Currently, its path must be `src/scanner.c` or `src/scanner.cc` for the CLI to recognize it. Be sure to add this file to the `sources` section of your `binding.gyp` file so that it will be included when your project is compiled by Node.js and uncomment the appropriate block in your `bindings/rust/build.rs` file so that it will be included in your Rust crate.
+
+> **Note**
+>
+> C++ scanners are now deprecated and will be removed in the near future.
+> While it is currently possible to write an external scanner in C++, it can be difficult
+> to get working cross-platform and introduces extra requirements; therefore it
+> is *greatly* preferred to use C.
 
 In this new source file, define an [`enum`][enum] type containing the names of all of your external tokens. The ordering of this enum must match the order in your grammar's `externals` array; the actual names do not matter.
 

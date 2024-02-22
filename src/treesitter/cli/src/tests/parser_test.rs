@@ -20,7 +20,7 @@ use tree_sitter_proc_macro::retry;
 #[test]
 fn test_parsing_simple_string() {
     let mut parser = Parser::new();
-    parser.set_language(get_language("rust")).unwrap();
+    parser.set_language(&get_language("rust")).unwrap();
 
     let tree = parser
         .parse(
@@ -51,7 +51,7 @@ fn test_parsing_simple_string() {
 #[test]
 fn test_parsing_with_logging() {
     let mut parser = Parser::new();
-    parser.set_language(get_language("rust")).unwrap();
+    parser.set_language(&get_language("rust")).unwrap();
 
     let mut messages = Vec::new();
     parser.set_logger(Some(Box::new(|log_type, message| {
@@ -92,7 +92,7 @@ fn test_parsing_with_debug_graph_enabled() {
     let has_zero_indexed_row = |s: &str| s.contains("position: 0,");
 
     let mut parser = Parser::new();
-    parser.set_language(get_language("javascript")).unwrap();
+    parser.set_language(&get_language("javascript")).unwrap();
 
     let mut debug_graph_file = tempfile::tempfile().unwrap();
     parser.print_dot_graphs(&debug_graph_file);
@@ -105,8 +105,7 @@ fn test_parsing_with_debug_graph_enabled() {
     for line in log_reader {
         assert!(
             !has_zero_indexed_row(&line),
-            "Graph log output includes zero-indexed row: {}",
-            line
+            "Graph log output includes zero-indexed row: {line}",
         );
     }
 }
@@ -114,7 +113,7 @@ fn test_parsing_with_debug_graph_enabled() {
 #[test]
 fn test_parsing_with_custom_utf8_input() {
     let mut parser = Parser::new();
-    parser.set_language(get_language("rust")).unwrap();
+    parser.set_language(&get_language("rust")).unwrap();
 
     let lines = &["pub fn foo() {", "  1", "}"];
 
@@ -157,12 +156,12 @@ fn test_parsing_with_custom_utf8_input() {
 #[test]
 fn test_parsing_with_custom_utf16_input() {
     let mut parser = Parser::new();
-    parser.set_language(get_language("rust")).unwrap();
+    parser.set_language(&get_language("rust")).unwrap();
 
-    let lines: Vec<Vec<u16>> = ["pub fn foo() {", "  1", "}"]
+    let lines = ["pub fn foo() {", "  1", "}"]
         .iter()
-        .map(|s| s.encode_utf16().collect())
-        .collect();
+        .map(|s| s.encode_utf16().collect::<Vec<_>>())
+        .collect::<Vec<_>>();
 
     let tree = parser
         .parse_utf16_with(
@@ -196,7 +195,7 @@ fn test_parsing_with_custom_utf16_input() {
 #[test]
 fn test_parsing_with_callback_returning_owned_strings() {
     let mut parser = Parser::new();
-    parser.set_language(get_language("rust")).unwrap();
+    parser.set_language(&get_language("rust")).unwrap();
 
     let text = b"pub fn foo() { 1 }";
 
@@ -217,7 +216,7 @@ fn test_parsing_with_callback_returning_owned_strings() {
 #[test]
 fn test_parsing_text_with_byte_order_mark() {
     let mut parser = Parser::new();
-    parser.set_language(get_language("rust")).unwrap();
+    parser.set_language(&get_language("rust")).unwrap();
 
     // Parse UTF16 text with a BOM
     let tree = parser
@@ -276,7 +275,7 @@ fn test_parsing_text_with_byte_order_mark() {
 #[test]
 fn test_parsing_invalid_chars_at_eof() {
     let mut parser = Parser::new();
-    parser.set_language(get_language("json")).unwrap();
+    parser.set_language(&get_language("json")).unwrap();
     let tree = parser.parse(b"\xdf", None).unwrap();
     assert_eq!(
         tree.root_node().to_sexp(),
@@ -287,7 +286,7 @@ fn test_parsing_invalid_chars_at_eof() {
 #[test]
 fn test_parsing_unexpected_null_characters_within_source() {
     let mut parser = Parser::new();
-    parser.set_language(get_language("javascript")).unwrap();
+    parser.set_language(&get_language("javascript")).unwrap();
     let tree = parser.parse(b"var \0 something;", None).unwrap();
     assert_eq!(
         tree.root_node().to_sexp(),
@@ -298,7 +297,7 @@ fn test_parsing_unexpected_null_characters_within_source() {
 #[test]
 fn test_parsing_ends_when_input_callback_returns_empty() {
     let mut parser = Parser::new();
-    parser.set_language(get_language("javascript")).unwrap();
+    parser.set_language(&get_language("javascript")).unwrap();
     let mut i = 0;
     let source = b"abcdefghijklmnoqrs";
     let tree = parser
@@ -322,7 +321,7 @@ fn test_parsing_ends_when_input_callback_returns_empty() {
 #[test]
 fn test_parsing_after_editing_beginning_of_code() {
     let mut parser = Parser::new();
-    parser.set_language(get_language("javascript")).unwrap();
+    parser.set_language(&get_language("javascript")).unwrap();
 
     let mut code = b"123 + 456 * (10 + x);".to_vec();
     let mut tree = parser.parse(&code, None).unwrap();
@@ -370,7 +369,7 @@ fn test_parsing_after_editing_beginning_of_code() {
 #[test]
 fn test_parsing_after_editing_end_of_code() {
     let mut parser = Parser::new();
-    parser.set_language(get_language("javascript")).unwrap();
+    parser.set_language(&get_language("javascript")).unwrap();
 
     let mut code = b"x * (100 + abc);".to_vec();
     let mut tree = parser.parse(&code, None).unwrap();
@@ -418,7 +417,7 @@ fn test_parsing_after_editing_end_of_code() {
 #[test]
 fn test_parsing_empty_file_with_reused_tree() {
     let mut parser = Parser::new();
-    parser.set_language(get_language("rust")).unwrap();
+    parser.set_language(&get_language("rust")).unwrap();
 
     let tree = parser.parse("", None);
     parser.parse("", tree.as_ref());
@@ -432,12 +431,12 @@ fn test_parsing_after_editing_tree_that_depends_on_column_values() {
     let dir = fixtures_dir()
         .join("test_grammars")
         .join("uses_current_column");
-    let grammar = fs::read_to_string(&dir.join("grammar.json")).unwrap();
+    let grammar = fs::read_to_string(dir.join("grammar.json")).unwrap();
     let (grammar_name, parser_code) = generate_parser_for_grammar(&grammar).unwrap();
 
     let mut parser = Parser::new();
     parser
-        .set_language(get_test_language(&grammar_name, &parser_code, Some(&dir)))
+        .set_language(&get_test_language(&grammar_name, &parser_code, Some(&dir)))
         .unwrap();
 
     let mut code = b"
@@ -507,7 +506,7 @@ h + i
 #[test]
 fn test_parsing_after_detecting_error_in_the_middle_of_a_string_token() {
     let mut parser = Parser::new();
-    parser.set_language(get_language("python")).unwrap();
+    parser.set_language(&get_language("python")).unwrap();
 
     let mut source = b"a = b, 'c, d'".to_vec();
     let tree = parser.parse(&source, None).unwrap();
@@ -551,7 +550,7 @@ fn test_parsing_on_multiple_threads() {
     let this_file_source = include_str!("parser_test.rs");
 
     let mut parser = Parser::new();
-    parser.set_language(get_language("rust")).unwrap();
+    parser.set_language(&get_language("rust")).unwrap();
     let tree = parser.parse(this_file_source, None).unwrap();
 
     let mut parse_threads = Vec::new();
@@ -579,7 +578,7 @@ fn test_parsing_on_multiple_threads() {
 
             // Reparse using the old tree as a starting point.
             let mut parser = Parser::new();
-            parser.set_language(get_language("rust")).unwrap();
+            parser.set_language(&get_language("rust")).unwrap();
             parser.parse(&prepended_source, Some(&tree_clone)).unwrap()
         }));
     }
@@ -600,7 +599,7 @@ fn test_parsing_cancelled_by_another_thread() {
     let cancellation_flag = std::sync::Arc::new(AtomicUsize::new(0));
 
     let mut parser = Parser::new();
-    parser.set_language(get_language("javascript")).unwrap();
+    parser.set_language(&get_language("javascript")).unwrap();
     unsafe { parser.set_cancellation_flag(Some(&cancellation_flag)) };
 
     // Long input - parsing succeeds
@@ -649,7 +648,7 @@ fn test_parsing_cancelled_by_another_thread() {
 #[retry(10)]
 fn test_parsing_with_a_timeout() {
     let mut parser = Parser::new();
-    parser.set_language(get_language("json")).unwrap();
+    parser.set_language(&get_language("json")).unwrap();
 
     // Parse an infinitely-long array, but pause after 1ms of processing.
     parser.set_timeout_micros(1000);
@@ -665,11 +664,7 @@ fn test_parsing_with_a_timeout() {
         None,
     );
     assert!(tree.is_none());
-    #[cfg(not(target_arch = "sparc64"))]
     assert!(start_time.elapsed().as_micros() < 2000);
-
-    #[cfg(target_arch = "sparc64")]
-    assert!(start_time.elapsed().as_micros() < 8000);
 
     // Continue parsing, but pause after 1 ms of processing.
     parser.set_timeout_micros(5000);
@@ -692,14 +687,10 @@ fn test_parsing_with_a_timeout() {
     parser.set_timeout_micros(0);
     let tree = parser
         .parse_with(
-            &mut |offset, _| {
-                if offset > 5000 {
-                    "".as_bytes()
-                } else if offset == 5000 {
-                    "]".as_bytes()
-                } else {
-                    ",0".as_bytes()
-                }
+            &mut |offset, _| match offset {
+                5001.. => "".as_bytes(),
+                5000 => "]".as_bytes(),
+                _ => ",0".as_bytes(),
             },
             None,
         )
@@ -711,7 +702,7 @@ fn test_parsing_with_a_timeout() {
 #[retry(10)]
 fn test_parsing_with_a_timeout_and_a_reset() {
     let mut parser = Parser::new();
-    parser.set_language(get_language("json")).unwrap();
+    parser.set_language(&get_language("json")).unwrap();
 
     parser.set_timeout_micros(5);
     let tree = parser.parse(
@@ -768,7 +759,7 @@ fn test_parsing_with_a_timeout_and_a_reset() {
 fn test_parsing_with_a_timeout_and_implicit_reset() {
     allocations::record(|| {
         let mut parser = Parser::new();
-        parser.set_language(get_language("javascript")).unwrap();
+        parser.set_language(&get_language("javascript")).unwrap();
 
         parser.set_timeout_micros(5);
         let tree = parser.parse(
@@ -779,7 +770,7 @@ fn test_parsing_with_a_timeout_and_implicit_reset() {
 
         // Changing the parser's language implicitly resets, discarding
         // the previous partial parse.
-        parser.set_language(get_language("json")).unwrap();
+        parser.set_language(&get_language("json")).unwrap();
         parser.set_timeout_micros(0);
         let tree = parser.parse(
             "[null, 1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32]",
@@ -802,7 +793,7 @@ fn test_parsing_with_a_timeout_and_implicit_reset() {
 fn test_parsing_with_timeout_and_no_completion() {
     allocations::record(|| {
         let mut parser = Parser::new();
-        parser.set_language(get_language("javascript")).unwrap();
+        parser.set_language(&get_language("javascript")).unwrap();
 
         parser.set_timeout_micros(5);
         let tree = parser.parse(
@@ -822,7 +813,7 @@ fn test_parsing_with_one_included_range() {
     let source_code = "<span>hi</span><script>console.log('sup');</script>";
 
     let mut parser = Parser::new();
-    parser.set_language(get_language("html")).unwrap();
+    parser.set_language(&get_language("html")).unwrap();
     let html_tree = parser.parse(source_code, None).unwrap();
     let script_content_node = html_tree.root_node().child(1).unwrap().child(1).unwrap();
     assert_eq!(script_content_node.kind(), "raw_text");
@@ -830,7 +821,7 @@ fn test_parsing_with_one_included_range() {
     parser
         .set_included_ranges(&[script_content_node.range()])
         .unwrap();
-    parser.set_language(get_language("javascript")).unwrap();
+    parser.set_language(&get_language("javascript")).unwrap();
     let js_tree = parser.parse(source_code, None).unwrap();
 
     assert_eq!(
@@ -853,23 +844,23 @@ fn test_parsing_with_multiple_included_ranges() {
     let source_code = "html `<div>Hello, ${name.toUpperCase()}, it's <b>${now()}</b>.</div>`";
 
     let mut parser = Parser::new();
-    parser.set_language(get_language("javascript")).unwrap();
+    parser.set_language(&get_language("javascript")).unwrap();
     let js_tree = parser.parse(source_code, None).unwrap();
     let template_string_node = js_tree
         .root_node()
         .descendant_for_byte_range(
-            source_code.find("<div>").unwrap(),
-            source_code.find("Hello").unwrap(),
+            source_code.find("`<").unwrap(),
+            source_code.find(">`").unwrap(),
         )
         .unwrap();
     assert_eq!(template_string_node.kind(), "template_string");
 
     let open_quote_node = template_string_node.child(0).unwrap();
-    let interpolation_node1 = template_string_node.child(1).unwrap();
-    let interpolation_node2 = template_string_node.child(2).unwrap();
-    let close_quote_node = template_string_node.child(3).unwrap();
+    let interpolation_node1 = template_string_node.child(2).unwrap();
+    let interpolation_node2 = template_string_node.child(4).unwrap();
+    let close_quote_node = template_string_node.child(6).unwrap();
 
-    parser.set_language(get_language("html")).unwrap();
+    parser.set_language(&get_language("html")).unwrap();
     let html_ranges = &[
         Range {
             start_byte: open_quote_node.end_byte(),
@@ -896,7 +887,7 @@ fn test_parsing_with_multiple_included_ranges() {
     assert_eq!(
         html_tree.root_node().to_sexp(),
         concat!(
-            "(fragment (element",
+            "(document (element",
             " (start_tag (tag_name))",
             " (text)",
             " (element (start_tag (tag_name)) (end_tag (tag_name)))",
@@ -948,7 +939,7 @@ fn test_parsing_with_included_range_containing_mismatched_positions() {
     let source_code = "<div>test</div>{_ignore_this_part_}";
 
     let mut parser = Parser::new();
-    parser.set_language(get_language("html")).unwrap();
+    parser.set_language(&get_language("html")).unwrap();
 
     let end_byte = source_code.find("{_ignore_this_part_").unwrap();
 
@@ -975,7 +966,7 @@ fn test_parsing_with_included_range_containing_mismatched_positions() {
 
     assert_eq!(
         html_tree.root_node().to_sexp(),
-        "(fragment (element (start_tag (tag_name)) (text) (end_tag (tag_name))))"
+        "(document (element (start_tag (tag_name)) (text) (end_tag (tag_name))))"
     );
 }
 
@@ -1023,13 +1014,17 @@ fn test_parsing_error_in_invalid_included_ranges() {
 #[test]
 fn test_parsing_utf16_code_with_errors_at_the_end_of_an_included_range() {
     let source_code = "<script>a.</script>";
-    let utf16_source_code: Vec<u16> = source_code.as_bytes().iter().map(|c| *c as u16).collect();
+    let utf16_source_code = source_code
+        .as_bytes()
+        .iter()
+        .map(|c| u16::from(*c))
+        .collect::<Vec<_>>();
 
     let start_byte = 2 * source_code.find("a.").unwrap();
     let end_byte = 2 * source_code.find("</script>").unwrap();
 
     let mut parser = Parser::new();
-    parser.set_language(get_language("javascript")).unwrap();
+    parser.set_language(&get_language("javascript")).unwrap();
     parser
         .set_included_ranges(&[Range {
             start_byte,
@@ -1051,7 +1046,7 @@ fn test_parsing_with_external_scanner_that_uses_included_range_boundaries() {
     let range2_end_byte = range2_start_byte + " d() ".len();
 
     let mut parser = Parser::new();
-    parser.set_language(get_language("javascript")).unwrap();
+    parser.set_language(&get_language("javascript")).unwrap();
     parser
         .set_included_ranges(&[
             Range {
@@ -1095,7 +1090,7 @@ fn test_parsing_with_a_newly_excluded_range() {
 
     // Parse HTML including the template directive, which will cause an error
     let mut parser = Parser::new();
-    parser.set_language(get_language("html")).unwrap();
+    parser.set_language(&get_language("html")).unwrap();
     let mut first_tree = parser
         .parse_with(&mut chunked_input(&source_code, 3), None)
         .unwrap();
@@ -1140,7 +1135,7 @@ fn test_parsing_with_a_newly_excluded_range() {
     assert_eq!(
         tree.root_node().to_sexp(),
         concat!(
-            "(fragment (text) (element",
+            "(document (text) (element",
             " (start_tag (tag_name))",
             " (element (start_tag (tag_name)) (end_tag (tag_name)))",
             " (end_tag (tag_name))))"
@@ -1182,7 +1177,7 @@ fn test_parsing_with_a_newly_included_range() {
 
     // Parse only the first code directive as JavaScript
     let mut parser = Parser::new();
-    parser.set_language(get_language("javascript")).unwrap();
+    parser.set_language(&get_language("javascript")).unwrap();
     parser
         .set_included_ranges(&[simple_range(range1_start, range1_end)])
         .unwrap();
@@ -1274,7 +1269,7 @@ fn test_parsing_with_included_ranges_and_missing_tokens() {
 
     let mut parser = Parser::new();
     parser
-        .set_language(get_test_language(&parser_name, &parser_code, None))
+        .set_language(&get_test_language(&parser_name, &parser_code, None))
         .unwrap();
 
     // There's a missing `a` token at the beginning of the code. It must be inserted
@@ -1331,7 +1326,7 @@ fn test_grammars_that_can_hang_on_eof() {
 
     let mut parser = Parser::new();
     parser
-        .set_language(get_test_language(&parser_name, &parser_code, None))
+        .set_language(&get_test_language(&parser_name, &parser_code, None))
         .unwrap();
     parser.parse("\"", None).unwrap();
 
@@ -1356,7 +1351,7 @@ fn test_grammars_that_can_hang_on_eof() {
     .unwrap();
 
     parser
-        .set_language(get_test_language(&parser_name, &parser_code, None))
+        .set_language(&get_test_language(&parser_name, &parser_code, None))
         .unwrap();
     parser.parse("\"", None).unwrap();
 
@@ -1381,12 +1376,12 @@ fn test_grammars_that_can_hang_on_eof() {
     .unwrap();
 
     parser
-        .set_language(get_test_language(&parser_name, &parser_code, None))
+        .set_language(&get_test_language(&parser_name, &parser_code, None))
         .unwrap();
     parser.parse("\"", None).unwrap();
 }
 
-fn simple_range(start: usize, end: usize) -> Range {
+const fn simple_range(start: usize, end: usize) -> Range {
     Range {
         start_byte: start,
         end_byte: end,

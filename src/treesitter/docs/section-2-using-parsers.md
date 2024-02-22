@@ -137,7 +137,7 @@ TSTree *ts_parser_parse(
 );
 ```
 
-The `TSInput` structure lets you to provide your own function for reading a chunk of text at a given byte offset and row/column position. The function can return text encoded in either UTF8 or UTF16. This interface allows you to efficiently parse text that is stored in your own data structure.
+The `TSInput` structure lets you provide your own function for reading a chunk of text at a given byte offset and row/column position. The function can return text encoded in either UTF8 or UTF16. This interface allows you to efficiently parse text that is stored in your own data structure.
 
 ```c
 typedef struct {
@@ -410,6 +410,12 @@ Internally, copying a syntax tree just entails incrementing an atomic reference 
 
 You can access every node in a syntax tree using the `TSNode` APIs [described above](#retrieving-nodes), but if you need to access a large number of nodes, the fastest way to do so is with a _tree cursor_. A cursor is a stateful object that allows you to walk a syntax tree with maximum efficiency.
 
+Note that the given input node is considered the root of the cursor, and the
+cursor cannot walk outside this node, so going to the parent or any sibling
+of the root node will return `false`. This has no unexpected effects if the given
+input node is the actual `root` node of the tree, but is something to keep in mind
+when using nodes that are not the `root` node.
+
 You can initialize a cursor from any node:
 
 ```c
@@ -655,7 +661,7 @@ Consider the following example targeting C:
   (#eq? @variable.builtin "self"))
 ```
 
-This pattern would match any identifier that is `self` or `this`.
+This pattern would match any identifier that is `self`.
 
 And this pattern would match key-value pairs where the `value` is an identifier
 with the same name as the key:

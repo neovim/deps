@@ -11,25 +11,28 @@ jobs:
   check_undefined_behaviour:
     name: Sanitizer checks
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     env:
       TREE_SITTER: ${{ github.workspace }}/target/release/tree-sitter
     steps:
     - name: Checkout source code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: Install UBSAN library
       run: sudo apt-get update -y && sudo apt-get install -y libubsan1
 
-    - name: Install Rust toolchain
-      uses: dtolnay/rust-toolchain@stable
+    - run: rustup toolchain install stable --profile minimal
+    - uses: Swatinem/rust-cache@v2
 
     - name: Build CLI
       run: cargo build --release
 
-    - name: Fetch fixtures
-      run: script/fetch-fixtures
+    - run: script/fetch-fixtures
 
-    - name: Generate fixtures
+    - uses: ./.github/actions/cache
+      id: cache
+
+    - if: ${{ steps.cache.outputs.cache-hit != 'true' }}
       run: script/generate-fixtures
 
     - name: Run main tests with undefined behaviour sanitizer (UBSAN)
