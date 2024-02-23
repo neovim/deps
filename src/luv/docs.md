@@ -779,7 +779,7 @@ end)
 Creates and initializes a new `uv_prepare_t`. Returns the Lua userdata wrapping
 it.
 
-**Returns:** `uv_prepare_t userdata` or `fail`
+**Returns:** `uv_prepare_t userdata`
 
 ### `uv.prepare_start(prepare, callback)`
 
@@ -825,7 +825,7 @@ end)
 Creates and initializes a new `uv_check_t`. Returns the Lua userdata wrapping
 it.
 
-**Returns:** `uv_check_t userdata` or `fail`
+**Returns:** `uv_check_t userdata`
 
 ### `uv.check_start(check, callback)`
 
@@ -878,7 +878,7 @@ end)
 Creates and initializes a new `uv_idle_t`. Returns the Lua userdata wrapping
 it.
 
-**Returns:** `uv_idle_t userdata` or `fail`
+**Returns:** `uv_idle_t userdata`
 
 ### `uv.idle_start(idle, callback)`
 
@@ -1960,7 +1960,7 @@ Bind the pipe to a file path (Unix) or a name (Windows).
 `Flags`:
 
 - If `type(flags)` is `number`, it must be `0` or `uv.constants.PIPE_NO_TRUNCATE`.
-- If `type(flags)` is `table`, it must be `{}` or `{ no_trunate = true|false }`.
+- If `type(flags)` is `table`, it must be `{}` or `{ no_truncate = true|false }`.
 - If `type(flags)` is `nil`, it use default value `0`.
 - Returns `EINVAL` for unsupported flags without performing the bind operation.
 
@@ -1991,7 +1991,7 @@ Connect to the Unix domain socket or the named pipe.
 `Flags`:
 
 - If `type(flags)` is `number`, it must be `0` or `uv.constants.PIPE_NO_TRUNCATE`.
-- If `type(flags)` is `table`, it must be `{}` or `{ no_trunate = true|false }`.
+- If `type(flags)` is `table`, it must be `{}` or `{ no_truncate = true|false }`.
 - If `type(flags)` is `nil`, it use default value `0`.
 - Returns `EINVAL` for unsupported flags without performing the bind operation.
 
@@ -3406,6 +3406,43 @@ the number to correspond with the table keys used in `uv.thread_getaffinity` and
 `uv.thread_setaffinity`.
 
 **Returns:** `integer` or `fail`
+
+### `uv.thread_setpriority(thread, priority)`
+
+> method form `thread:setpriority(priority)`
+
+**Parameters:**
+- `thread`: `luv_thread_t userdata`
+- `priority`: ``number`
+
+Sets the specified thread's scheduling priority setting. It requires elevated
+privilege to set specific priorities on some platforms.
+
+The priority can be set to the following constants.
+
+- uv.constants.THREAD_PRIORITY_HIGHEST
+- uv.constants.THREAD_PRIORITY_ABOVE_NORMAL
+- uv.constants.THREAD_PRIORITY_NORMAL
+- uv.constants.THREAD_PRIORITY_BELOW_NORMAL
+- uv.constants.THREAD_PRIORITY_LOWEST
+
+**Returns:** `boolean` or `fail`
+
+### `uv.thread_getpriority(thread)
+
+> method form `thread:getpriority()`
+
+**Parameters:**
+- `thread`: `luv_thread_t userdata`
+
+Gets the  thread's priority setting.
+
+Retrieves the scheduling priority of the specified thread. The returned priority
+value is platform dependent.
+
+For Linux, when schedule policy is SCHED_OTHER (default), priority is 0.
+
+**Returns:** `number` or `fail`
 
 ### `uv.thread_self()`
 
