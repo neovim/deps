@@ -1,8 +1,8 @@
 package = "bit32"
 version = "scm-1"
 source = {
-   url = "https://github.com/keplerproject/lua-compat-5.3/archive/master.zip",
-   branch = "lua-compat-5.3-master",
+   url = "https://github.com/lunarmodules/lua-compat-5.3/archive/master.zip",
+   dir = "lua-compat-5.3-master",
 }
 description = {
    summary = "Lua 5.2 bit manipulation library",

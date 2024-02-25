@@ -1,7 +1,7 @@
 package = "compat53"
 version = "scm-0"
 source = {
-   url = "https://github.com/keplerproject/lua-compat-5.3/archive/master.zip",
+   url = "https://github.com/lunarmodules/lua-compat-5.3/archive/master.zip",
    dir = "lua-compat-5.3-master",
 }
 description = {
@@ -12,7 +12,7 @@ description = {
       It does *not* make Lua 5.2 (or even 5.1) entirely compatible
       with Lua 5.3, but it brings the API closer to that of Lua 5.3.
    ]],
-   homepage = "https://github.com/keplerproject/lua-compat-5.3",
+   homepage = "https://github.com/lunarmodules/lua-compat-5.3",
    license = "MIT"
 }
 dependencies = {
@@ -27,6 +27,7 @@ build = {
       ["compat53.utf8"] = "lutf8lib.c",
       ["compat53.table"] = "ltablib.c",
       ["compat53.string"] = "lstrlib.c",
+      ["compat53.io"] = "liolib.c",
    }
 }
 
