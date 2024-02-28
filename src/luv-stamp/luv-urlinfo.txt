@@ -6,7 +6,7 @@ method=url
 command=/usr/local/bin/cmake;-P;/home/runner/work/deps/deps/neovim/deps/build/src/luv-stamp/download-luv.cmake;COMMAND;/usr/local/bin/cmake;-P;/home/runner/work/deps/deps/neovim/deps/build/src/luv-stamp/verify-luv.cmake;COMMAND;/usr/local/bin/cmake;-P;/home/runner/work/deps/deps/neovim/deps/build/src/luv-stamp/extract-luv.cmake
 source_dir=/home/runner/work/deps/deps/neovim/deps/build/src/luv
 work_dir=/home/runner/work/deps/deps/neovim/deps/build/src
-url(s)=https://github.com/luvit/luv/archive/v1.48.0-0.tar.gz
-hash=SHA256=c9c12e414f8045aea11e5dbb44cd6c68196c10e02e1294dad971c367976cc1f9
+url(s)=https://github.com/luvit/luv/archive/1.48.0-1.tar.gz
+hash=SHA256=99042665a3fb486b8d0c80d0130e62b918abbad069e908eb333765462245e275
 no_extract=
 
