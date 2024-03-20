@@ -1,3 +1,8 @@
+/* eslint-disable-next-line spaced-comment */
+/// <reference types="emscripten" />
+/* eslint-disable-next-line spaced-comment */
+/// <reference path="tree-sitter-web.d.ts"/>
+
 const C = Module;
 const INTERNAL = {};
 const SIZE_OF_INT = 4;
@@ -69,7 +74,7 @@ class ParserImpl {
 
   parse(callback, oldTree, options) {
     if (typeof callback === 'string') {
-      currentParseCallback = (index, _, endIndex) => callback.slice(index, endIndex);
+      currentParseCallback = (index, _) => callback.slice(index);
     } else if (typeof callback === 'function') {
       currentParseCallback = callback;
     } else {
@@ -120,12 +125,28 @@ class ParserImpl {
     C._ts_parser_reset(this[0]);
   }
 
-  setTimeoutMicros(timeout) {
-    C._ts_parser_set_timeout_micros(this[0], timeout);
+  getIncludedRanges() {
+    C._ts_parser_included_ranges_wasm(this[0]);
+    const count = getValue(TRANSFER_BUFFER, 'i32');
+    const buffer = getValue(TRANSFER_BUFFER + SIZE_OF_INT, 'i32');
+    const result = new Array(count);
+    if (count > 0) {
+      let address = buffer;
+      for (let i = 0; i < count; i++) {
+        result[i] = unmarshalRange(address);
+        address += SIZE_OF_RANGE;
+      }
+      C._free(buffer);
+    }
+    return result;
   }
 
   getTimeoutMicros() {
     return C._ts_parser_timeout_micros(this[0]);
+  }
+
+  setTimeoutMicros(timeout) {
+    C._ts_parser_set_timeout_micros(this[0], timeout);
   }
 
   setLogger(callback) {
@@ -171,6 +192,14 @@ class Tree {
     return unmarshalNode(this);
   }
 
+  rootNodeWithOffset(offsetBytes, offsetExtent) {
+    const address = TRANSFER_BUFFER + SIZE_OF_NODE;
+    setValue(address, offsetBytes, 'i32');
+    marshalPoint(address + SIZE_OF_INT, offsetExtent);
+    C._ts_tree_root_node_with_offset_wasm(this[0]);
+    return unmarshalNode(this);
+  }
+
   getLanguage() {
     return this.language;
   }
@@ -185,6 +214,22 @@ class Tree {
     }
 
     C._ts_tree_get_changed_ranges_wasm(this[0], other[0]);
+    const count = getValue(TRANSFER_BUFFER, 'i32');
+    const buffer = getValue(TRANSFER_BUFFER + SIZE_OF_INT, 'i32');
+    const result = new Array(count);
+    if (count > 0) {
+      let address = buffer;
+      for (let i = 0; i < count; i++) {
+        result[i] = unmarshalRange(address);
+        address += SIZE_OF_RANGE;
+      }
+      C._free(buffer);
+    }
+    return result;
+  }
+
+  getIncludedRanges() {
+    C._ts_tree_included_ranges_wasm(this[0]);
     const count = getValue(TRANSFER_BUFFER, 'i32');
     const buffer = getValue(TRANSFER_BUFFER + SIZE_OF_INT, 'i32');
     const result = new Array(count);
@@ -249,29 +294,34 @@ class Node {
     return C._ts_node_next_parse_state_wasm(this.tree[0]);
   }
 
-  isNamed() {
+  get isNamed() {
     marshalNode(this);
     return C._ts_node_is_named_wasm(this.tree[0]) === 1;
   }
 
-  hasError() {
+  get hasError() {
     marshalNode(this);
     return C._ts_node_has_error_wasm(this.tree[0]) === 1;
   }
 
-  hasChanges() {
+  get hasChanges() {
     marshalNode(this);
     return C._ts_node_has_changes_wasm(this.tree[0]) === 1;
   }
 
-  isError() {
+  get isError() {
     marshalNode(this);
     return C._ts_node_is_error_wasm(this.tree[0]) === 1;
   }
 
-  isMissing() {
+  get isMissing() {
     marshalNode(this);
     return C._ts_node_is_missing_wasm(this.tree[0]) === 1;
+  }
+
+  get isExtra() {
+    marshalNode(this);
+    return C._ts_node_is_extra_wasm(this.tree[0]) === 1;
   }
 
   equals(other) {
@@ -282,17 +332,6 @@ class Node {
     marshalNode(this);
     C._ts_node_child_wasm(this.tree[0], index);
     return unmarshalNode(this.tree);
-  }
-
-  fieldNameForChild(index) {
-    marshalNode(this);
-    const address = C._ts_node_field_name_for_child_wasm(this.tree[0], index);
-    if (!address) {
-      return null;
-    }
-    const result = AsciiToString(address);
-    // must not free, the string memory is owned by the language
-    return result;
   }
 
   namedChild(index) {
@@ -310,6 +349,55 @@ class Node {
   childForFieldName(fieldName) {
     const fieldId = this.tree.language.fields.indexOf(fieldName);
     if (fieldId !== -1) return this.childForFieldId(fieldId);
+  }
+
+  fieldNameForChild(index) {
+    marshalNode(this);
+    const address = C._ts_node_field_name_for_child_wasm(this.tree[0], index);
+    if (!address) {
+      return null;
+    }
+    const result = AsciiToString(address);
+    // must not free, the string memory is owned by the language
+    return result;
+  }
+
+  childrenForFieldName(fieldName) {
+    const fieldId = this.tree.language.fields.indexOf(fieldName);
+    if (fieldId !== -1 && fieldId !== 0) return this.childrenForFieldId(fieldId);
+  }
+
+  childrenForFieldId(fieldId) {
+    marshalNode(this);
+    C._ts_node_children_by_field_id_wasm(this.tree[0], fieldId);
+    const count = getValue(TRANSFER_BUFFER, 'i32');
+    const buffer = getValue(TRANSFER_BUFFER + SIZE_OF_INT, 'i32');
+    const result = new Array(count);
+    if (count > 0) {
+      let address = buffer;
+      for (let i = 0; i < count; i++) {
+        result[i] = unmarshalNode(this.tree, address);
+        address += SIZE_OF_NODE;
+      }
+      C._free(buffer);
+    }
+    return result;
+  }
+
+  firstChildForIndex(index) {
+    marshalNode(this);
+    const address = TRANSFER_BUFFER + SIZE_OF_NODE;
+    setValue(address, index, 'i32');
+    C._ts_node_first_child_for_byte_wasm(this.tree[0]);
+    return unmarshalNode(this.tree);
+  }
+
+  firstNamedChildForIndex(index) {
+    marshalNode(this);
+    const address = TRANSFER_BUFFER + SIZE_OF_NODE;
+    setValue(address, index, 'i32');
+    C._ts_node_first_named_child_for_byte_wasm(this.tree[0]);
+    return unmarshalNode(this.tree);
   }
 
   get childCount() {
@@ -448,6 +536,11 @@ class Node {
     marshalNode(this);
     C._ts_node_prev_named_sibling_wasm(this.tree[0]);
     return unmarshalNode(this.tree);
+  }
+
+  get descendantCount() {
+    marshalNode(this);
+    return C._ts_node_descendant_count_wasm(this.tree[0]);
   }
 
   get parent() {
@@ -608,19 +701,29 @@ class TreeCursor {
     return C._ts_tree_cursor_end_index_wasm(this.tree[0]);
   }
 
-  currentNode() {
+  get currentNode() {
     marshalTreeCursor(this);
     C._ts_tree_cursor_current_node_wasm(this.tree[0]);
     return unmarshalNode(this.tree);
   }
 
-  currentFieldId() {
+  get currentFieldId() {
     marshalTreeCursor(this);
     return C._ts_tree_cursor_current_field_id_wasm(this.tree[0]);
   }
 
-  currentFieldName() {
-    return this.tree.language.fields[this.currentFieldId()];
+  get currentFieldName() {
+    return this.tree.language.fields[this.currentFieldId];
+  }
+
+  get currentDepth() {
+    marshalTreeCursor(this);
+    return C._ts_tree_cursor_current_depth_wasm(this.tree[0]);
+  }
+
+  get currentDescendantIndex() {
+    marshalTreeCursor(this);
+    return C._ts_tree_cursor_current_descendant_index_wasm(this.tree[0]);
   }
 
   gotoFirstChild() {
@@ -637,6 +740,22 @@ class TreeCursor {
     return result === 1;
   }
 
+  gotoFirstChildForIndex(goalIndex) {
+    marshalTreeCursor(this);
+    setValue(TRANSFER_BUFFER + SIZE_OF_CURSOR, goalIndex, 'i32');
+    const result = C._ts_tree_cursor_goto_first_child_for_index_wasm(this.tree[0]);
+    unmarshalTreeCursor(this);
+    return result === 1;
+  }
+
+  gotoFirstChildForPosition(goalPosition) {
+    marshalTreeCursor(this);
+    marshalPoint(TRANSFER_BUFFER + SIZE_OF_CURSOR, goalPosition);
+    const result = C._ts_tree_cursor_goto_first_child_for_position_wasm(this.tree[0]);
+    unmarshalTreeCursor(this);
+    return result === 1;
+  }
+
   gotoNextSibling() {
     marshalTreeCursor(this);
     const result = C._ts_tree_cursor_goto_next_sibling_wasm(this.tree[0]);
@@ -649,6 +768,12 @@ class TreeCursor {
     const result = C._ts_tree_cursor_goto_previous_sibling_wasm(this.tree[0]);
     unmarshalTreeCursor(this);
     return result === 1;
+  }
+
+  gotoDescendant(goalDescendantindex) {
+    marshalTreeCursor(this);
+    C._ts_tree_cursor_goto_descendant_wasm(this.tree[0], goalDescendantindex);
+    unmarshalTreeCursor(this);
   }
 
   gotoParent() {
@@ -815,6 +940,7 @@ class Language {
     const refutedProperties = new Array(patternCount);
     const predicates = new Array(patternCount);
     const textPredicates = new Array(patternCount);
+
     for (let i = 0; i < patternCount; i++) {
       const predicatesAddress = C._ts_query_predicates_for_pattern(
         address,
@@ -1141,15 +1267,18 @@ class Query {
     this[0] = 0;
   }
 
-  matches(node, startPosition, endPosition, options) {
-    if (!startPosition) startPosition = ZERO_POINT;
-    if (!endPosition) endPosition = ZERO_POINT;
-    if (!options) options = {};
-
-    let matchLimit = options.matchLimit;
-    if (typeof matchLimit === 'undefined') {
-      matchLimit = 0;
-    } else if (typeof matchLimit !== 'number') {
+  matches(
+    node,
+    {
+      startPosition = ZERO_POINT,
+      endPosition = ZERO_POINT,
+      startIndex = 0,
+      endIndex = 0,
+      matchLimit = 0xFFFFFFFF,
+      maxStartDepth = 0xFFFFFFFF,
+    } = {},
+  ) {
+    if (typeof matchLimit !== 'number') {
       throw new Error('Arguments must be numbers');
     }
 
@@ -1162,7 +1291,10 @@ class Query {
       startPosition.column,
       endPosition.row,
       endPosition.column,
+      startIndex,
+      endIndex,
       matchLimit,
+      maxStartDepth,
     );
 
     const rawCount = getValue(TRANSFER_BUFFER, 'i32');
@@ -1198,15 +1330,18 @@ class Query {
     return result;
   }
 
-  captures(node, startPosition, endPosition, options) {
-    if (!startPosition) startPosition = ZERO_POINT;
-    if (!endPosition) endPosition = ZERO_POINT;
-    if (!options) options = {};
-
-    let matchLimit = options.matchLimit;
-    if (typeof matchLimit === 'undefined') {
-      matchLimit = 0;
-    } else if (typeof matchLimit !== 'number') {
+  captures(
+    node,
+    {
+      startPosition = ZERO_POINT,
+      endPosition = ZERO_POINT,
+      startIndex = 0,
+      endIndex = 0,
+      matchLimit = 0xFFFFFFFF,
+      maxStartDepth = 0xFFFFFFFF,
+    } = {},
+  ) {
+    if (typeof matchLimit !== 'number') {
       throw new Error('Arguments must be numbers');
     }
 
@@ -1219,7 +1354,10 @@ class Query {
       startPosition.column,
       endPosition.row,
       endPosition.column,
+      startIndex,
+      endIndex,
       matchLimit,
+      maxStartDepth,
     );
 
     const count = getValue(TRANSFER_BUFFER, 'i32');
@@ -1259,6 +1397,14 @@ class Query {
 
   predicatesForPattern(patternIndex) {
     return this.predicates[patternIndex];
+  }
+
+  disableCapture(captureName) {
+    const captureNameLength = lengthBytesUTF8(captureName);
+    const captureNameAddress = C._malloc(captureNameLength + 1);
+    stringToUTF8(captureName, captureNameAddress, captureNameLength + 1);
+    C._ts_query_disable_capture(this[0], captureNameAddress, captureNameLength);
+    C._free(captureNameAddress);
   }
 
   didExceedMatchLimit() {
@@ -1361,10 +1507,11 @@ function marshalPoint(address, point) {
 }
 
 function unmarshalPoint(address) {
-  return {
-    row: getValue(address, 'i32'),
-    column: getValue(address + SIZE_OF_INT, 'i32'),
+  const result = {
+    row: getValue(address, 'i32') >>> 0,
+    column: getValue(address + SIZE_OF_INT, 'i32') >>> 0,
   };
+  return result;
 }
 
 function marshalRange(address, range) {
@@ -1378,8 +1525,8 @@ function unmarshalRange(address) {
   const result = {};
   result.startPosition = unmarshalPoint(address); address += SIZE_OF_POINT;
   result.endPosition = unmarshalPoint(address); address += SIZE_OF_POINT;
-  result.startIndex = getValue(address, 'i32'); address += SIZE_OF_INT;
-  result.endIndex = getValue(address, 'i32');
+  result.startIndex = getValue(address, 'i32') >>> 0; address += SIZE_OF_INT;
+  result.endIndex = getValue(address, 'i32') >>> 0;
   return result;
 }
 

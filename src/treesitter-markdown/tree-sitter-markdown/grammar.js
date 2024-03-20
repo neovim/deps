@@ -2,6 +2,8 @@
 // (https://spec.commonmark.org/0.30/#blocks-and-inlines)
 // For more information see README.md
 
+/// <reference types="tree-sitter-cli/dsl" />
+
 const common = require('../common/grammar.js');
 
 const PRECEDENCE_LEVEL_LINK = common.PRECEDENCE_LEVEL_LINK;
@@ -287,7 +289,7 @@ module.exports = grammar({
         // https://github.github.com/gfm/#blank-lines
         _blank_line: $ => seq($._blank_line_start, choice($._newline, $._eof)),
 
-        
+
         // CONTAINER BLOCKS
 
         // A block quote. This is the most basic example of a container block handled by the
@@ -395,7 +397,7 @@ module.exports = grammar({
         _word: $ => choice(
             new RegExp('[^' + PUNCTUATION_CHARACTERS_REGEX + ' \\t\\n\\r]+'),
             common.EXTENSION_TASK_LIST ? choice(
-                '[x]',
+                /\[[xX]\]/,
                 /\[[ \t]\]/,
             ) : choice()
         ),
@@ -403,10 +405,10 @@ module.exports = grammar({
         _whitespace: $ => /[ \t]+/,
 
         ...(common.EXTENSION_TASK_LIST ? {
-            task_list_marker_checked: $ => prec(1, '[x]'),
+            task_list_marker_checked: $ => prec(1, /\[[xX]\]/),
             task_list_marker_unchecked: $ => prec(1, /\[[ \t]\]/),
         } : {}),
-        
+
         ...(common.EXTENSION_PIPE_TABLE ? {
             pipe_table: $ => prec.right(seq(
                 $._pipe_table_start,
@@ -416,12 +418,12 @@ module.exports = grammar({
                 repeat(seq($._pipe_table_newline, optional($.pipe_table_row))),
                 choice($._newline, $._eof),
             )),
-            
+
             _pipe_table_newline: $ => seq(
                 $._pipe_table_line_ending,
                 optional($.block_continuation)
             ),
-            
+
             pipe_table_delimiter_row: $ => seq(
                 optional(seq(
                     optional($._whitespace),
@@ -439,13 +441,13 @@ module.exports = grammar({
                     optional($._whitespace)
                 )),
             ),
-            
+
             pipe_table_delimiter_cell: $ => seq(
                 optional(alias(':', $.pipe_table_align_left)),
                 repeat1('-'),
                 optional(alias(':', $.pipe_table_align_right)),
             ),
-            
+
             pipe_table_row: $ => seq(
                 optional(seq(
                     optional($._whitespace),
@@ -454,9 +456,14 @@ module.exports = grammar({
                 choice(
                     seq(
                         repeat1(prec.right(seq(
-                            optional($._whitespace),
-                            optional($.pipe_table_cell),
-                            optional($._whitespace),
+                            choice(
+                                seq(
+                                    optional($._whitespace),
+                                    $.pipe_table_cell,
+                                    optional($._whitespace)
+                                ),
+                                alias($._whitespace, $.pipe_table_cell)
+                            ),
                             '|',
                         ))),
                         optional($._whitespace),
@@ -574,7 +581,7 @@ module.exports = grammar({
 
         $.minus_metadata,
         $.plus_metadata,
-        
+
         $._pipe_table_start,
         $._pipe_table_line_ending,
     ],

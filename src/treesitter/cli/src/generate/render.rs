@@ -263,7 +263,6 @@ impl Generator {
 
     fn add_pragmas(&mut self) {
         add_line!(self, "#if defined(__GNUC__) || defined(__clang__)");
-        add_line!(self, "#pragma GCC diagnostic push");
         add_line!(
             self,
             "#pragma GCC diagnostic ignored \"-Wmissing-field-initializers\""
@@ -871,6 +870,9 @@ impl Generator {
             line_break.push_str("  ");
         }
 
+        // parenthesis needed if we add the `!eof` condition to explicitly avoid confusion with
+        // precedence of `&&` and `||`
+        let (mut need_open_paren, mut need_close_paren) = (false, false);
         for (i, range) in ranges.iter().enumerate() {
             if is_included {
                 if i > 0 {
@@ -878,10 +880,19 @@ impl Generator {
                 }
                 if range.start == '\0' {
                     add!(self, "!eof && ");
+                    (need_open_paren, need_close_paren) = (true, true);
                 }
                 if range.end == range.start {
+                    if need_open_paren {
+                        add!(self, "(");
+                        need_open_paren = false;
+                    }
                     add!(self, "lookahead == ");
                     self.add_character(range.start);
+                    if need_close_paren && i == ranges.len() - 1 {
+                        add!(self, ")");
+                        need_close_paren = false;
+                    }
                 } else if range.end as u32 == range.start as u32 + 1 {
                     add!(self, "lookahead == ");
                     self.add_character(range.start);
@@ -1330,14 +1341,21 @@ impl Generator {
             add_line!(self, "");
         }
 
-        add_line!(self, "#ifdef _WIN32");
-        add_line!(self, "#define extern __declspec(dllexport)");
+        add_line!(self, "#ifdef TREE_SITTER_HIDE_SYMBOLS");
+        add_line!(self, "#define TS_PUBLIC");
+        add_line!(self, "#elif defined(_WIN32)");
+        add_line!(self, "#define TS_PUBLIC __declspec(dllexport)");
+        add_line!(self, "#else");
+        add_line!(
+            self,
+            "#define TS_PUBLIC __attribute__((visibility(\"default\")))"
+        );
         add_line!(self, "#endif");
         add_line!(self, "");
 
         add_line!(
             self,
-            "extern const TSLanguage *{language_function_name}(void) {{",
+            "TS_PUBLIC const TSLanguage *{language_function_name}() {{",
         );
         indent!(self);
         add_line!(self, "static const TSLanguage language = {{");

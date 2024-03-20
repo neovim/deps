@@ -827,6 +827,9 @@ extern int strerror_r(int __errnum, char *__buf,
                                             "__xpg_strerror_r")
     __attribute__((__nothrow__)) __attribute__((__nonnull__(2)));
 
+extern int _IO_vfprintf (_IO_FILE *__restrict, const char *__restrict,
+    __gnuc_va_list);
+
 int f([[a::b(c), d]] int x) {}
 
 [[gnu::always_inline]] [[gnu::hot]] [[gnu::const]] [[nodiscard]]
@@ -955,6 +958,25 @@ struct __attribute__((__packed__)) foo_t {
             (identifier)
             (argument_list
               (number_literal)))))))
+  (declaration
+    (storage_class_specifier)
+    (primitive_type)
+    (function_declarator
+      (identifier)
+      (parameter_list
+        (parameter_declaration
+          (type_identifier)
+          (abstract_pointer_declarator
+            (ms_pointer_modifier
+              (ms_restrict_modifier))))
+        (parameter_declaration
+          (type_qualifier)
+          (primitive_type)
+          (abstract_pointer_declarator
+            (ms_pointer_modifier
+              (ms_restrict_modifier))))
+        (parameter_declaration
+          (type_identifier)))))
   (function_definition
     (primitive_type)
     (function_declarator
@@ -1117,3 +1139,49 @@ struct __attribute__((__packed__)) foo_t {
       (field_declaration
         (primitive_type)
         (field_identifier)))))
+
+================================================================================
+More Assembly
+================================================================================
+
+int main() {
+  int var;
+  __asm__(
+    "nop;"
+    : [var] "=r"(var)
+    :
+    : "eax", "ra" "x"
+  );
+}
+
+--------------------------------------------------------------------------------
+
+(translation_unit
+  (function_definition
+    (primitive_type)
+    (function_declarator
+      (identifier)
+      (parameter_list))
+    (compound_statement
+      (declaration
+        (primitive_type)
+        (identifier))
+      (expression_statement
+        (gnu_asm_expression
+          (string_literal
+            (string_content))
+          (gnu_asm_output_operand_list
+            (gnu_asm_output_operand
+              (identifier)
+              (string_literal
+                (string_content))
+              (identifier)))
+          (gnu_asm_input_operand_list)
+          (gnu_asm_clobber_list
+            (string_literal
+              (string_content))
+            (concatenated_string
+              (string_literal
+                (string_content))
+              (string_literal
+                (string_content)))))))))

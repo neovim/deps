@@ -1,7 +1,14 @@
 # tree-sitter-markdown
-A markdown parser for [tree-sitter].
 
-![](https://github.com/MDeiml/tree-sitter-markdown/blob/split_parser/contrib/screenshot.png)
+[![CI][ci]](https://github.com/tree-sitter-grammars/tree-sitter-markdown/actions)
+[![discord][discord]](https://discord.gg/w7nTvsVJhm)
+[![matrix][matrix]](https://matrix.to/#/#tree-sitter-chat:matrix.org)
+[![npm][npm]](https://www.npmjs.com/package/@tree-sitter-grammars/tree-sitter-markdown)
+[![crates][crates]](https://crates.io/crates/tree-sitter-md)
+
+A Markdown parser for [tree-sitter].
+
+![screenshot](https://github.com/MDeiml/tree-sitter-markdown/blob/split_parser/contrib/screenshot.png)
 
 The parser is designed to read markdown according to the [CommonMark Spec],
 but some extensions to the spec from different sources such as [Github flavored
@@ -56,9 +63,18 @@ These parts are marked as `inline` nodes. Children of those inline nodes should
 be excluded from these ranges. For an example implementation see `lib.rs` in
 the `bindings` folder.
 
+### Usage with WASM
+
+Unfortunately using this parser with WASM/web-tree-sitter does not work out of the box at the moment. This is because the parser uses some C functions that are not exported by tree-sitter by default. To fix this you can statically link the parser to tree-sitter. See also https://github.com/tree-sitter/tree-sitter/issues/949, https://github.com/MDeiml/tree-sitter-markdown/issues/126, and https://github.com/MDeiml/tree-sitter-markdown/issues/93
+
 [CommonMark Spec]: https://spec.commonmark.org/
 [Github flavored markdown]: https://github.github.com/gfm/
 [tree-sitter]: https://tree-sitter.github.io/tree-sitter/
 [neovim]: https://neovim.io/
 [helix]: https://helix-editor.com/
 [CONTRIBUTING.md]: https://github.com/MDeiml/tree-sitter-markdown/blob/split_parser/CONTRIBUTING.md
+[ci]: https://img.shields.io/github/actions/workflow/status/tree-sitter-grammars/tree-sitter-markdown/ci.yml?logo=github&label=CI
+[discord]: https://img.shields.io/discord/1063097320771698699?logo=discord&label=discord
+[matrix]: https://img.shields.io/matrix/tree-sitter-chat%3Amatrix.org?logo=matrix&label=matrix
+[npm]: https://img.shields.io/npm/v/%40tree-sitter-grammars%2Ftree-sitter-markdown?logo=npm
+[crates]: https://img.shields.io/crates/v/tree-sitter-md?logo=rust

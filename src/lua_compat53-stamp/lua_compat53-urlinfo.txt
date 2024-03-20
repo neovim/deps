@@ -1,0 +1,12 @@
+# This is a generated file and its contents are an internal implementation detail.
+# The download step will be re-executed if anything in this file changes.
+# No other meaning or use of this file is supported.
+
+method=url
+command=/usr/local/bin/cmake;-P;/home/runner/work/deps/deps/neovim/deps/build/src/lua_compat53-stamp/download-lua_compat53.cmake;COMMAND;/usr/local/bin/cmake;-P;/home/runner/work/deps/deps/neovim/deps/build/src/lua_compat53-stamp/verify-lua_compat53.cmake;COMMAND;/usr/local/bin/cmake;-P;/home/runner/work/deps/deps/neovim/deps/build/src/lua_compat53-stamp/extract-lua_compat53.cmake
+source_dir=/home/runner/work/deps/deps/neovim/deps/build/src/lua_compat53
+work_dir=/home/runner/work/deps/deps/neovim/deps/build/src
+url(s)=https://github.com/lunarmodules/lua-compat-5.3/archive/v0.13.tar.gz
+hash=SHA256=f5dc30e7b1fda856ee4d392be457642c1f0c259264a9b9bfbcb680302ce88fc2
+no_extract=
+

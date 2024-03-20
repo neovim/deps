@@ -1,10 +1,10 @@
 [package]
 name = "tree-sitter"
+version.workspace = true
 description = "Rust bindings to the Tree-sitter parsing library"
-version = "0.20.10"
 authors.workspace = true
 edition.workspace = true
-rust-version.workspace = true
+rust-version = "1.65"
 readme = "binding_rust/README.md"
 homepage.workspace = true
 repository.workspace = true
@@ -21,6 +21,7 @@ include = [
   "/src/*.h",
   "/src/*.c",
   "/src/unicode/*",
+  "/src/wasm/*",
   "/include/tree_sitter/api.h",
 ]
 

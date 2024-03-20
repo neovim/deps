@@ -50,11 +50,11 @@ Known issues
 - `column_heading` currently only recognizes tilde `~` preceded by space (i.e.
   `foo ~` not `foo~`). This covers 99% of :help files.
 - `column_heading` children should be plaintext, but currently are parsed as `$._atom`.
+- `modeline` must be preceded by a blank line.
 
 TODO
 ----
 
-- `line_modeline` ?
 - `tag_heading` : line(s) containing only tags, typically implies a "heading"
   before a block.
 
@@ -64,19 +64,23 @@ Release
 Steps to perform a release:
 
 1. Bump and tag the version:
-   ```
+   ```bash
    npm version patch -m "release %s"
    ```
    Choose `patch`/`minor`/`major` to indicate query compatibility:
      - `patch` for bugfixes (no changes to queries needed)
      - `minor` for added nodes (queries may need changes to use new nodes but will not error)
      - `major` for removed or renamed nodes (queries will error if not adapted), other breaking changes
+
+   Ensure that `Cargo.toml`, `pyproject.toml`, and `Makefile` also have the same version.
 2. Bump to prerelease, without creating a tag:
-   ```
-   npm version --no-git-tag-version prerelease --preid dev && git add package*.json && git commit -m bump
+   ```bash
+   npm version --no-git-tag-version prerelease --preid dev
+   git add package*.json Cargo.toml pyproject.toml Makefile
+   git commit -m bump
    ```
 3. Push:
-   ```
-   git push --follow-tags
+   ```bash
+   git push && git push --tags
    ```
 4. Release the tagged commit: https://github.com/neovim/tree-sitter-vimdoc/releases/new

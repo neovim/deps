@@ -28,8 +28,8 @@ Then, add a language as a dependency:
 
 ```toml
 [dependencies]
-tree-sitter = "0.20.10"
-tree-sitter-rust = "0.20.3"
+tree-sitter = "0.21.0"
+tree-sitter-rust = "0.20.4"
 ```
 
 To then use a language, you assign them to the parser.
@@ -92,7 +92,7 @@ let tree = parser.parse_with(&mut |_byte: u32, position: Point| -> &[u8] {
         if column < lines[row].as_bytes().len() {
             &lines[row].as_bytes()[column..]
         } else {
-            "\n".as_bytes()
+            b"\n"
         }
     } else {
         &[]

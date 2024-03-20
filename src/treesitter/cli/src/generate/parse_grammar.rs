@@ -92,7 +92,7 @@ pub(crate) struct GrammarJSON {
 }
 
 pub(crate) fn parse_grammar(input: &str) -> Result<InputGrammar> {
-    let grammar_json: GrammarJSON = serde_json::from_str(input)?;
+    let grammar_json = serde_json::from_str::<GrammarJSON>(input)?;
 
     let mut variables = Vec::with_capacity(grammar_json.rules.len());
     for (name, value) in grammar_json.rules {
@@ -166,9 +166,12 @@ fn parse_rule(json: RuleJSON) -> Rule {
                 f.chars()
                     .filter(|c| {
                         if *c == 'i' {
-                            *c != 'u' // silently ignore unicode flag
+                            true
                         } else {
-                            eprintln!("Warning: unsupported flag {c}");
+                            // silently ignore unicode flags
+                            if *c != 'u' && *c != 'v' {
+                                eprintln!("Warning: unsupported flag {c}");
+                            }
                             false
                         }
                     })

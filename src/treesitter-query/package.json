@@ -1,21 +1,51 @@
 {
   "name": "tree-sitter-query",
-  "version": "0.1.0",
-  "description": "",
+  "version": "0.2.0",
+  "description": "TS query grammar for tree-sitter",
+  "repository": "tree-sitter-grammars/tree-sitter-query",
+  "author": "Steven Sojka",
+  "maintainers": [
+    "Stephan Seitz"
+  ],
+  "license": "Apache-2.0",
   "main": "bindings/node",
+  "types": "bindings/node",
+  "keywords": [
+    "incremental",
+    "parsing",
+    "tree-sitter",
+    "query"
+  ],
+  "files": [
+    "grammar.js",
+    "binding.gyp",
+    "types/dsl.d.ts",
+    "bindings/node/*",
+    "queries/**",
+    "src/**"
+  ],
+  "dependencies": {
+    "node-addon-api": "^7.1.0"
+  },
+  "devDependencies": {
+    "tree-sitter-cli": "^0.21.0"
+  },
   "scripts": {
-    "build": "tree-sitter generate",
+    "build": "tree-sitter generate --no-bindings",
     "test": "tree-sitter test",
     "wasm": "tree-sitter build-wasm",
     "parse": "tree-sitter parse",
     "web": "tree-sitter web-ui"
   },
-  "author": "",
-  "license": "Apache-2.0",
-  "dependencies": {
-    "nan": "^2.17.0"
-  },
-  "devDependencies": {
-    "tree-sitter-cli": "^0.20.7"
-  }
+  "tree-sitter": [
+    {
+      "scope": "source.query",
+      "injection-regex": "^query$",
+      "highlights": "queries/query/highlights.scm",
+      "injections": "queries/query/injections.scm",
+      "file-types": [
+        "scm"
+      ]
+    }
+  ]
 }

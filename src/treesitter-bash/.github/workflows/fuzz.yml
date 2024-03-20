@@ -14,9 +14,5 @@ jobs:
     name: Parser fuzzing
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: vigoux/tree-sitter-fuzz-action@v1
-        with:
-          language: bash
-          external-scanner: src/scanner.c
-          time: 60
+      - uses: actions/checkout@v4
+      - uses: tree-sitter/fuzz-action@v4

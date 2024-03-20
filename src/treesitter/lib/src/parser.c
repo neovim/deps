@@ -1,3 +1,5 @@
+#define _POSIX_C_SOURCE 200112L
+
 #include <time.h>
 #include <assert.h>
 #include <stdio.h>
@@ -19,7 +21,7 @@
 #include "./stack.h"
 #include "./subtree.h"
 #include "./tree.h"
-#include "./wasm.h"
+#include "./wasm_store.h"
 
 #define LOG(...)                                                                            \
   if (self->lexer.logger.log || self->dot_graph_file) {                                     \
@@ -562,7 +564,6 @@ static Subtree ts_parser__lex(
       current_position.extent.column
     );
     ts_lexer_start(&self->lexer);
-    found_token = false;
     if (ts_language_is_wasm(self->language)) {
       found_token = ts_wasm_store_call_lex_main(self->wasm_store, lex_mode.lex_state);
     } else {
@@ -1479,7 +1480,7 @@ static void ts_parser__handle_error(
   ts_stack_record_summary(self->stack, version, MAX_SUMMARY_DEPTH);
 
   // Begin recovery with the current lookahead node, rather than waiting for the
-  // next turn of the parse loop. This ensures that the tree accounts for the the
+  // next turn of the parse loop. This ensures that the tree accounts for the
   // current lookahead token's "lookahead bytes" value, which describes how far
   // the lexer needed to look ahead beyond the content of the token in order to
   // recognize it.

@@ -231,6 +231,7 @@ module.exports = grammar({
     function_definition: $ => seq(
       optional($.ms_call_modifier),
       $._declaration_specifiers,
+      optional($.ms_call_modifier),
       field('declarator', $._declarator),
       field('body', $.compound_statement),
     ),
@@ -247,6 +248,7 @@ module.exports = grammar({
       $._declaration_specifiers,
       commaSep1(field('declarator', choice(
         seq(
+          optional($.ms_call_modifier),
           $._declaration_declarator,
           optional($.gnu_asm_expression),
         ),
@@ -398,21 +400,25 @@ module.exports = grammar({
 
     parenthesized_declarator: $ => prec.dynamic(PREC.PAREN_DECLARATOR, seq(
       '(',
+      optional($.ms_call_modifier),
       $._declarator,
       ')',
     )),
     parenthesized_field_declarator: $ => prec.dynamic(PREC.PAREN_DECLARATOR, seq(
       '(',
+      optional($.ms_call_modifier),
       $._field_declarator,
       ')',
     )),
     parenthesized_type_declarator: $ => prec.dynamic(PREC.PAREN_DECLARATOR, seq(
       '(',
+      optional($.ms_call_modifier),
       $._type_declarator,
       ')',
     )),
     abstract_parenthesized_declarator: $ => prec(1, seq(
       '(',
+      optional($.ms_call_modifier),
       $._abstract_declarator,
       ')',
     )),
@@ -453,6 +459,7 @@ module.exports = grammar({
       field('declarator', $._type_declarator),
     ))),
     abstract_pointer_declarator: $ => prec.dynamic(1, prec.right(seq('*',
+      repeat($.ms_pointer_modifier),
       repeat($.type_qualifier),
       field('declarator', optional($._abstract_declarator)),
     ))),
@@ -467,7 +474,8 @@ module.exports = grammar({
           $.identifier,
           alias($.preproc_call_expression, $.call_expression),
         )),
-      )),
+      ),
+    ),
 
     _function_declaration_declarator: $ => prec.right(1,
       seq(
@@ -959,7 +967,7 @@ module.exports = grammar({
     conditional_expression: $ => prec.right(PREC.CONDITIONAL, seq(
       field('condition', $._expression),
       '?',
-      optional(field('consequence', $._expression)),
+      optional(field('consequence', choice($._expression, $.comma_expression))),
       ':',
       field('alternative', $._expression),
     )),
@@ -1155,7 +1163,7 @@ module.exports = grammar({
 
     gnu_asm_clobber_list: $ => seq(
       ':',
-      commaSep(field('register', $.string_literal)),
+      commaSep(field('register', $._string)),
     ),
 
     gnu_asm_goto_list: $ => seq(

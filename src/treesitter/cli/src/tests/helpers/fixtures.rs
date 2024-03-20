@@ -4,8 +4,10 @@ use std::path::{Path, PathBuf};
 use std::{env, fs};
 use tree_sitter::Language;
 use tree_sitter_highlight::HighlightConfiguration;
-use tree_sitter_loader::Loader;
+use tree_sitter_loader::{CompileConfig, Loader};
 use tree_sitter_tags::TagsConfiguration;
+
+use crate::generate::ALLOC_HEADER;
 
 include!("./dirs.rs");
 
@@ -32,13 +34,10 @@ pub fn scratch_dir() -> &'static Path {
 }
 
 pub fn get_language(name: &str) -> Language {
-    TEST_LOADER
-        .load_language_at_path(
-            &GRAMMARS_DIR.join(name).join("src"),
-            &[&HEADER_DIR, &GRAMMARS_DIR.join(name).join("src")],
-            None,
-        )
-        .unwrap()
+    let src_dir = GRAMMARS_DIR.join(name).join("src");
+    let mut config = CompileConfig::new(&src_dir, None, None);
+    config.header_paths.push(&HEADER_DIR);
+    TEST_LOADER.load_language_at_path(config).unwrap()
 }
 
 pub fn get_language_queries_path(language_name: &str) -> PathBuf {
@@ -107,14 +106,19 @@ pub fn get_test_language(name: &str, parser_code: &str, path: Option<&Path>) -> 
 
     let header_path = src_dir.join("tree_sitter");
     fs::create_dir_all(&header_path).unwrap();
-    fs::write(header_path.join("parser.h"), tree_sitter::PARSER_HEADER)
-        .with_context(|| {
-            format!(
-                "Failed to write {:?}",
-                header_path.join("parser.h").file_name().unwrap()
-            )
-        })
-        .unwrap();
+
+    [
+        ("alloc.h", ALLOC_HEADER),
+        ("array.h", tree_sitter::ARRAY_HEADER),
+        ("parser.h", tree_sitter::PARSER_HEADER),
+    ]
+    .iter()
+    .for_each(|(file, content)| {
+        let file = header_path.join(file);
+        fs::write(&file, content)
+            .with_context(|| format!("Failed to write {:?}", file.file_name().unwrap()))
+            .unwrap();
+    });
 
     let paths_to_check = if let Some(scanner_path) = &scanner_path {
         vec![parser_path, scanner_path.clone()]
@@ -122,7 +126,9 @@ pub fn get_test_language(name: &str, parser_code: &str, path: Option<&Path>) -> 
         vec![parser_path]
     };
 
-    TEST_LOADER
-        .load_language_at_path_with_name(&src_dir, &[&HEADER_DIR], name, Some(&paths_to_check))
-        .unwrap()
+    let mut config = CompileConfig::new(&src_dir, Some(&paths_to_check), None);
+    config.header_paths = vec![&HEADER_DIR];
+    config.name = name.to_string();
+
+    TEST_LOADER.load_language_at_path_with_name(config).unwrap()
 }

@@ -7,6 +7,9 @@
 // https://tree-sitter.github.io/tree-sitter/creating-parsers
 // - Rules starting with underscore are hidden in the syntax tree.
 
+/// <reference types="tree-sitter-cli/dsl" />
+// @ts-check
+
 const _uppercase_word = /[A-Z0-9.()][-A-Z0-9.()_]+/;
 const _li_token = /[-•][ ]+/;
 
@@ -23,6 +26,7 @@ module.exports = grammar({
       seq(
         repeat($._blank),  // Eat blank lines at top of file.
         repeat($.block),
+        repeat($.modeline),
       ),
 
     _atom: ($) => choice(
@@ -165,6 +169,9 @@ module.exports = grammar({
       repeat($._atom),
       choice($.codeblock, '\n')
     ),
+
+    // Modeline: must start with "vim:" (optionally preceded by whitespace)
+    modeline: ($) => token(prec(2, /vim:[^\n]+\n/)),
 
     // "Column heading": plaintext followed by "~".
     // Intended for table column names per `:help help-writing`.
