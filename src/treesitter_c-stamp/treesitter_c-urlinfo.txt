@@ -1,0 +1,12 @@
+# This is a generated file and its contents are an internal implementation detail.
+# The download step will be re-executed if anything in this file changes.
+# No other meaning or use of this file is supported.
+
+method=url
+command=/usr/local/bin/cmake;-P;/home/runner/work/deps/deps/neovim/deps/build/src/treesitter_c-stamp/download-treesitter_c.cmake;COMMAND;/usr/local/bin/cmake;-P;/home/runner/work/deps/deps/neovim/deps/build/src/treesitter_c-stamp/verify-treesitter_c.cmake;COMMAND;/usr/local/bin/cmake;-P;/home/runner/work/deps/deps/neovim/deps/build/src/treesitter_c-stamp/extract-treesitter_c.cmake
+source_dir=/home/runner/work/deps/deps/neovim/deps/build/src/treesitter_c
+work_dir=/home/runner/work/deps/deps/neovim/deps/build/src
+url(s)=https://github.com/tree-sitter/tree-sitter-c/archive/v0.21.0.tar.gz
+hash=SHA256=6f0f5d1b71cf8ffd8a37fb638c6022fa1245bd630150b538547d52128ce0ea7e
+no_extract=
+

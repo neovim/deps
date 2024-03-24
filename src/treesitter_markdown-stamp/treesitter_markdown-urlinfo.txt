@@ -1,0 +1,12 @@
+# This is a generated file and its contents are an internal implementation detail.
+# The download step will be re-executed if anything in this file changes.
+# No other meaning or use of this file is supported.
+
+method=url
+command=/usr/local/bin/cmake;-P;/home/runner/work/deps/deps/neovim/deps/build/src/treesitter_markdown-stamp/download-treesitter_markdown.cmake;COMMAND;/usr/local/bin/cmake;-P;/home/runner/work/deps/deps/neovim/deps/build/src/treesitter_markdown-stamp/verify-treesitter_markdown.cmake;COMMAND;/usr/local/bin/cmake;-P;/home/runner/work/deps/deps/neovim/deps/build/src/treesitter_markdown-stamp/extract-treesitter_markdown.cmake
+source_dir=/home/runner/work/deps/deps/neovim/deps/build/src/treesitter_markdown
+work_dir=/home/runner/work/deps/deps/neovim/deps/build/src
+url(s)=https://github.com/MDeiml/tree-sitter-markdown/archive/v0.2.1.tar.gz
+hash=SHA256=d5dee1f57807a633062d03e19ad59d9b5e28f882da1ebe69a2e31f1df5b308ca
+no_extract=
+
