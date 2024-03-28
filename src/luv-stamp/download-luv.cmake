@@ -71,14 +71,6 @@ function(sleep_before_download attempt)
   execute_process(COMMAND "${CMAKE_COMMAND}" -E sleep "${sleep_seconds}")
 endfunction()
 
-if("/home/runner/work/deps/deps/neovim/deps/build/downloads/luv/luv-1.48.0-2.tar.gz" STREQUAL "")
-  message(FATAL_ERROR "LOCAL can't be empty")
-endif()
-
-if("https://github.com/luvit/luv/releases/download/1.48.0-2/luv-1.48.0-2.tar.gz" STREQUAL "")
-  message(FATAL_ERROR "REMOTE can't be empty")
-endif()
-
 if(EXISTS "/home/runner/work/deps/deps/neovim/deps/build/downloads/luv/luv-1.48.0-2.tar.gz")
   check_file_hash(has_hash hash_is_good)
   if(has_hash)
@@ -115,7 +107,7 @@ foreach(i RANGE ${retry_number})
   if(status_code IN_LIST download_retry_codes)
     sleep_before_download(${i})
   endif()
-  foreach(url https://github.com/luvit/luv/releases/download/1.48.0-2/luv-1.48.0-2.tar.gz)
+  foreach(url IN ITEMS [====[https://github.com/luvit/luv/releases/download/1.48.0-2/luv-1.48.0-2.tar.gz]====])
     if(NOT url IN_LIST skip_url_list)
       message(STATUS "Using src='${url}'")
 
