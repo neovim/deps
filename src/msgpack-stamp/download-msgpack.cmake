@@ -22,16 +22,16 @@ function(check_file_hash has_hash hash_is_good)
   set("${has_hash}" TRUE PARENT_SCOPE)
 
   message(STATUS "verifying file...
-       file='/home/runner/work/deps/deps/neovim/deps/build/downloads/msgpack/c-6.0.0.tar.gz'")
+       file='/home/runner/work/deps/deps/neovim/deps/build/downloads/msgpack/c-6.0.1.tar.gz'")
 
-  file("SHA256" "/home/runner/work/deps/deps/neovim/deps/build/downloads/msgpack/c-6.0.0.tar.gz" actual_value)
+  file("SHA256" "/home/runner/work/deps/deps/neovim/deps/build/downloads/msgpack/c-6.0.1.tar.gz" actual_value)
 
-  if(NOT "${actual_value}" STREQUAL "af6f3cf25edb220aa2140b09bb5bdd73ddf00938194bd94ebe5c92090cccb466")
+  if(NOT "${actual_value}" STREQUAL "58d5fe49d0ee2b374d60a61aabf8028b2c92004e6f11bff04e74b639fc8ad541")
     set("${hash_is_good}" FALSE PARENT_SCOPE)
     message(STATUS "SHA256 hash of
-    /home/runner/work/deps/deps/neovim/deps/build/downloads/msgpack/c-6.0.0.tar.gz
+    /home/runner/work/deps/deps/neovim/deps/build/downloads/msgpack/c-6.0.1.tar.gz
   does not match expected value
-    expected: 'af6f3cf25edb220aa2140b09bb5bdd73ddf00938194bd94ebe5c92090cccb466'
+    expected: '58d5fe49d0ee2b374d60a61aabf8028b2c92004e6f11bff04e74b639fc8ad541'
       actual: '${actual_value}'")
   else()
     set("${hash_is_good}" TRUE PARENT_SCOPE)
@@ -71,32 +71,32 @@ function(sleep_before_download attempt)
   execute_process(COMMAND "${CMAKE_COMMAND}" -E sleep "${sleep_seconds}")
 endfunction()
 
-if(EXISTS "/home/runner/work/deps/deps/neovim/deps/build/downloads/msgpack/c-6.0.0.tar.gz")
+if(EXISTS "/home/runner/work/deps/deps/neovim/deps/build/downloads/msgpack/c-6.0.1.tar.gz")
   check_file_hash(has_hash hash_is_good)
   if(has_hash)
     if(hash_is_good)
       message(STATUS "File already exists and hash match (skip download):
-  file='/home/runner/work/deps/deps/neovim/deps/build/downloads/msgpack/c-6.0.0.tar.gz'
-  SHA256='af6f3cf25edb220aa2140b09bb5bdd73ddf00938194bd94ebe5c92090cccb466'"
+  file='/home/runner/work/deps/deps/neovim/deps/build/downloads/msgpack/c-6.0.1.tar.gz'
+  SHA256='58d5fe49d0ee2b374d60a61aabf8028b2c92004e6f11bff04e74b639fc8ad541'"
       )
       return()
     else()
       message(STATUS "File already exists but hash mismatch. Removing...")
-      file(REMOVE "/home/runner/work/deps/deps/neovim/deps/build/downloads/msgpack/c-6.0.0.tar.gz")
+      file(REMOVE "/home/runner/work/deps/deps/neovim/deps/build/downloads/msgpack/c-6.0.1.tar.gz")
     endif()
   else()
     message(STATUS "File already exists but no hash specified (use URL_HASH):
-  file='/home/runner/work/deps/deps/neovim/deps/build/downloads/msgpack/c-6.0.0.tar.gz'
+  file='/home/runner/work/deps/deps/neovim/deps/build/downloads/msgpack/c-6.0.1.tar.gz'
 Old file will be removed and new file downloaded from URL."
     )
-    file(REMOVE "/home/runner/work/deps/deps/neovim/deps/build/downloads/msgpack/c-6.0.0.tar.gz")
+    file(REMOVE "/home/runner/work/deps/deps/neovim/deps/build/downloads/msgpack/c-6.0.1.tar.gz")
   endif()
 endif()
 
 set(retry_number 5)
 
 message(STATUS "Downloading...
-   dst='/home/runner/work/deps/deps/neovim/deps/build/downloads/msgpack/c-6.0.0.tar.gz'
+   dst='/home/runner/work/deps/deps/neovim/deps/build/downloads/msgpack/c-6.0.1.tar.gz'
    timeout='none'
    inactivity timeout='none'"
 )
@@ -107,7 +107,7 @@ foreach(i RANGE ${retry_number})
   if(status_code IN_LIST download_retry_codes)
     sleep_before_download(${i})
   endif()
-  foreach(url IN ITEMS [====[https://github.com/msgpack/msgpack-c/archive/c-6.0.0.tar.gz]====])
+  foreach(url IN ITEMS [====[https://github.com/msgpack/msgpack-c/archive/c-6.0.1.tar.gz]====])
     if(NOT url IN_LIST skip_url_list)
       message(STATUS "Using src='${url}'")
 
@@ -118,7 +118,7 @@ foreach(i RANGE ${retry_number})
 
       file(
         DOWNLOAD
-        "${url}" "/home/runner/work/deps/deps/neovim/deps/build/downloads/msgpack/c-6.0.0.tar.gz"
+        "${url}" "/home/runner/work/deps/deps/neovim/deps/build/downloads/msgpack/c-6.0.1.tar.gz"
         
         # no TIMEOUT
         # no INACTIVITY_TIMEOUT
@@ -135,7 +135,7 @@ foreach(i RANGE ${retry_number})
         check_file_hash(has_hash hash_is_good)
         if(has_hash AND NOT hash_is_good)
           message(STATUS "Hash mismatch, removing...")
-          file(REMOVE "/home/runner/work/deps/deps/neovim/deps/build/downloads/msgpack/c-6.0.0.tar.gz")
+          file(REMOVE "/home/runner/work/deps/deps/neovim/deps/build/downloads/msgpack/c-6.0.1.tar.gz")
         else()
           message(STATUS "Downloading... done")
           return()

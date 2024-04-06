@@ -20,12 +20,13 @@ if [ "${ARCH}" == "32" ]
 then
     export BIT32="ON"
     export ARCH_FLAG="-m32"
+    ZLIB32="-DZLIB_LIBRARY=/usr/lib32/libz.a"
 else
     export BIT32="OFF"
     export ARCH_FLAG="-m64"
 fi
 
-cmake -DMSGPACK_32BIT=${BIT32} -DBUILD_SHARED_LIBS=${SHARED} -DMSGPACK_CHAR_SIGN=${CHAR_SIGN} -DCMAKE_CXX_FLAGS="${ARCH_FLAG} ${CXXFLAGS} ${SAN}" -DCMAKE_C_FLAGS="${CFLAGS} ${SAN}" ..
+cmake -DMSGPACK_BUILD_TESTS=ON -DMSGPACK_32BIT=${BIT32} -DBUILD_SHARED_LIBS=${SHARED} -DMSGPACK_CHAR_SIGN=${CHAR_SIGN} -DCMAKE_CXX_FLAGS="${ARCH_FLAG} ${CXXFLAGS} ${SAN}" -DCMAKE_C_FLAGS="${CFLAGS} ${SAN}" ${ZLIB32} ..
 
 ret=$?
 if [ $ret -ne 0 ]
@@ -33,7 +34,7 @@ then
     exit $ret
 fi
 
-make
+make VERBOSE=1
 
 ret=$?
 if [ $ret -ne 0 ]
@@ -41,7 +42,7 @@ then
     exit $ret
 fi
 
-ctest -VV
+ctest -VVr
 
 ret=$?
 if [ $ret -ne 0 ]
@@ -60,17 +61,8 @@ fi
 
 if [ "${ARCH}" != "32" ] && [ `uname` = "Linux" ]
 then
-    ctest -T memcheck | tee memcheck.log
-
-    ret=${PIPESTATUS[0]}
-    if [ $ret -ne 0 ]
-    then
-        exit $ret
-    fi
-    cat memcheck.log | grep "Memory Leak" > /dev/null
-    ret=$?
-    if [ $ret -eq 0 ]
-    then
+    if ! ctest -T memcheck; then
+        find Testing/Temporary -name "MemoryChecker.*.log" -exec cat {} +
         exit 1
     fi
 fi

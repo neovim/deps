@@ -1,3 +1,7 @@
+# 2024-04-02 version 6.0.1
+  * Improve CI environment (#1061, #1091, #1109)
+  * Improve build system (#1060, #1069, #1108)
+
 # 2023-03-02 version 6.0.0
   * Remove C++ requirement if test is disabled (#1055)
 ## << breaking changes >>
