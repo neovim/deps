@@ -1,17 +1,21 @@
+use std::{
+    collections::HashSet,
+    env, fs,
+    path::{Path, PathBuf},
+};
+
 use anstyle::{AnsiColor, Color, Style};
 use anyhow::{anyhow, Context, Result};
 use clap::{crate_authors, Args, Command, FromArgMatches as _, Subcommand};
 use glob::glob;
 use regex::Regex;
-use std::collections::HashSet;
-use std::path::{Path, PathBuf};
-use std::{env, fs, u64};
 use tree_sitter::{ffi, Parser, Point};
-use tree_sitter_cli::test::TestOptions;
 use tree_sitter_cli::{
     generate, highlight, logger,
     parse::{self, ParseFileOptions, ParseOutput},
-    playground, query, tags, test, test_highlight, test_tags, util, wasm,
+    playground, query, tags, test,
+    test::TestOptions,
+    test_highlight, test_tags, util, wasm,
 };
 use tree_sitter_config::Config;
 use tree_sitter_highlight::Highlighter;
@@ -28,6 +32,7 @@ enum Commands {
     InitConfig(InitConfig),
     Generate(Generate),
     Build(Build),
+    BuildWasm(BuildWasm),
     Parse(Parse),
     Test(Test),
     Query(Query),
@@ -113,6 +118,19 @@ struct Build {
         help = "Build the parser with `TREE_SITTER_INTERNAL_BUILD` defined"
     )]
     pub internal_build: bool,
+}
+
+#[derive(Args)]
+#[command(about = "Compile a parser to WASM", alias = "bw")]
+struct BuildWasm {
+    #[arg(
+        short,
+        long,
+        help = "Run emscripten via docker even if it is installed locally"
+    )]
+    pub docker: bool,
+    #[arg(index = 1, num_args = 1, help = "The path to output the wasm file")]
+    pub path: Option<String>,
 }
 
 #[derive(Args)]
@@ -444,15 +462,11 @@ fn run() -> Result<()> {
             if build_options.wasm {
                 let grammar_path =
                     current_dir.join(build_options.path.as_deref().unwrap_or_default());
-                let (output_dir, output_path) = if let Some(ref path) = build_options.output {
-                    (current_dir.clone(), Some(current_dir.join(path)))
-                } else {
-                    (loader.parser_lib_path.clone(), None)
-                };
+                let output_path = build_options.output.map(|path| current_dir.join(path));
                 wasm::compile_language_to_wasm(
                     &loader,
                     &grammar_path,
-                    &output_dir,
+                    &current_dir,
                     output_path,
                     build_options.docker,
                 )?;
@@ -496,6 +510,18 @@ fn run() -> Result<()> {
                     .compile_parser_at_path(&grammar_path, output_path, flags)
                     .unwrap();
             }
+        }
+
+        Commands::BuildWasm(wasm_options) => {
+            eprintln!("`build-wasm` is deprecated and will be removed in v0.24.0. You should use `build --wasm` instead");
+            let grammar_path = current_dir.join(wasm_options.path.unwrap_or_default());
+            wasm::compile_language_to_wasm(
+                &loader,
+                &grammar_path,
+                &current_dir,
+                None,
+                wasm_options.docker,
+            )?;
         }
 
         Commands::Parse(parse_options) => {
@@ -844,8 +870,7 @@ fn run() -> Result<()> {
             let open_in_browser = !playground_options.quiet;
             let grammar_path = playground_options
                 .grammar_path
-                .map(PathBuf::from)
-                .unwrap_or(current_dir);
+                .map_or(current_dir, PathBuf::from);
             playground::serve(&grammar_path, open_in_browser)?;
         }
 

@@ -251,7 +251,7 @@ describe('Parser', () => {
 
     it('handles long input strings', () => {
       const repeatCount = 10000;
-      const inputString = '[' + '0,'.repeat(repeatCount) + ']';
+      const inputString = `[${Array(repeatCount).fill('0').join(',')}]`;
 
       tree = parser.parse(inputString);
       assert.equal(tree.rootNode.type, 'program');
@@ -324,7 +324,7 @@ describe('Parser', () => {
         '(source_file (const_item ' +
           'name: (identifier) ' +
           'type: (reference_type (lifetime (identifier)) type: (primitive_type)) ' +
-          'value: (raw_string_literal)))',
+          'value: (raw_string_literal (string_content))))',
       );
     }).timeout(5000);
 
