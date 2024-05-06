@@ -76,6 +76,7 @@ fn test_corpus_for_json(seed: usize) {
     test_language_corpus("json", seed, None, None);
 }
 
+#[ignore]
 #[test_with_seed(retry=10, seed=*START_SEED, seed_fn=new_seed)]
 fn test_corpus_for_php(seed: usize) {
     test_language_corpus("php", seed, None, Some("php"));
@@ -183,7 +184,7 @@ fn test_language_corpus(
             if actual_output != test.output {
                 println!("Incorrect initial parse for {test_name}");
                 print_diff_key();
-                print_diff(&actual_output, &test.output);
+                print_diff(&actual_output, &test.output, true);
                 println!();
                 return false;
             }
@@ -270,7 +271,7 @@ fn test_language_corpus(
                 if actual_output != test.output {
                     println!("Incorrect parse for {test_name} - seed {seed}");
                     print_diff_key();
-                    print_diff(&actual_output, &test.output);
+                    print_diff(&actual_output, &test.output, true);
                     println!();
                     return false;
                 }
@@ -393,7 +394,7 @@ fn test_feature_corpus_files() {
                         true
                     } else {
                         print_diff_key();
-                        print_diff(&actual_output, &test.output);
+                        print_diff(&actual_output, &test.output, true);
                         println!();
                         false
                     }

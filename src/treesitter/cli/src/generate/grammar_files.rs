@@ -60,7 +60,7 @@ const PACKAGE_SWIFT_TEMPLATE: &str = include_str!("./templates/Package.swift");
 struct LanguageConfiguration {}
 
 #[derive(Deserialize, Debug)]
-struct PackageJSON {
+pub struct PackageJSON {
     #[serde(rename = "tree-sitter")]
     tree_sitter: Option<Vec<LanguageConfiguration>>,
 }
@@ -243,7 +243,11 @@ pub fn generate_grammar_files(
         },
     )?;
 
-    let (_, package_json) = lookup_package_json_for_path(package_json_path_state.as_path())?;
+    let package_json = match lookup_package_json_for_path(package_json_path_state.as_path()) {
+        Ok((_, p)) => p,
+        Err(e) if generate_bindings => return Err(e),
+        _ => return Ok(()),
+    };
 
     // Do not create a grammar.js file in a repo with multiple language configs
     if !package_json.has_multiple_language_configs() {
@@ -404,26 +408,23 @@ pub fn generate_grammar_files(
     })?;
 
     // Generate Python bindings
-    missing_path(
-        bindings_dir
-            .join("python")
-            .join(format!("tree_sitter_{}", language_name.to_snake_case())),
-        create_dir,
-    )?
-    .apply(|path| {
-        missing_path(path.join("binding.c"), |path| {
+    missing_path(bindings_dir.join("python"), create_dir)?.apply(|path| {
+        let lang_path = path.join(format!("tree_sitter_{}", language_name.to_snake_case()));
+        missing_path(&lang_path, create_dir)?;
+
+        missing_path(lang_path.join("binding.c"), |path| {
             generate_file(path, PY_BINDING_C_TEMPLATE, language_name)
         })?;
 
-        missing_path(path.join("__init__.py"), |path| {
+        missing_path(lang_path.join("__init__.py"), |path| {
             generate_file(path, INIT_PY_TEMPLATE, language_name)
         })?;
 
-        missing_path(path.join("__init__.pyi"), |path| {
+        missing_path(lang_path.join("__init__.pyi"), |path| {
             generate_file(path, INIT_PYI_TEMPLATE, language_name)
         })?;
 
-        missing_path(path.join("py.typed"), |path| {
+        missing_path(lang_path.join("py.typed"), |path| {
             generate_file(path, "", language_name) // py.typed is empty
         })?;
 
@@ -439,14 +440,11 @@ pub fn generate_grammar_files(
     })?;
 
     // Generate Swift bindings
-    missing_path(
-        bindings_dir
-            .join("swift")
-            .join(format!("TreeSitter{}", language_name.to_upper_camel_case())),
-        create_dir,
-    )?
-    .apply(|path| {
-        missing_path(path.join(format!("{language_name}.h")), |path| {
+    missing_path(bindings_dir.join("swift"), create_dir)?.apply(|path| {
+        let lang_path = path.join(format!("TreeSitter{}", language_name.to_upper_camel_case()));
+        missing_path(&lang_path, create_dir)?;
+
+        missing_path(lang_path.join(format!("{language_name}.h")), |path| {
             generate_file(path, PARSER_NAME_H_TEMPLATE, language_name)
         })?;
 
@@ -460,7 +458,7 @@ pub fn generate_grammar_files(
     Ok(())
 }
 
-fn lookup_package_json_for_path(path: &Path) -> Result<(PathBuf, PackageJSON)> {
+pub fn lookup_package_json_for_path(path: &Path) -> Result<(PathBuf, PackageJSON)> {
     let mut pathbuf = path.to_owned();
     loop {
         let package_json = pathbuf
@@ -468,7 +466,9 @@ fn lookup_package_json_for_path(path: &Path) -> Result<(PathBuf, PackageJSON)> {
             .then(|| -> Result<PackageJSON> {
                 let file =
                     File::open(pathbuf.as_path()).with_context(|| "Failed to open package.json")?;
-                Ok(serde_json::from_reader(BufReader::new(file))?)
+                serde_json::from_reader(BufReader::new(file)).context(
+                    "Failed to parse package.json, is the `tree-sitter` section malformed?",
+                )
             })
             .transpose()?;
         if let Some(package_json) = package_json {
@@ -515,23 +515,29 @@ fn create_dir(path: &Path) -> Result<()> {
 }
 
 #[derive(PartialEq, Eq, Debug)]
-enum PathState {
-    Exists(PathBuf),
-    Missing(PathBuf),
+enum PathState<P>
+where
+    P: AsRef<Path>,
+{
+    Exists(P),
+    Missing(P),
 }
 
 #[allow(dead_code)]
-impl PathState {
+impl<P> PathState<P>
+where
+    P: AsRef<Path>,
+{
     fn exists(&self, mut action: impl FnMut(&Path) -> Result<()>) -> Result<&Self> {
         if let Self::Exists(path) = self {
-            action(path.as_path())?;
+            action(path.as_ref())?;
         }
         Ok(self)
     }
 
     fn missing(&self, mut action: impl FnMut(&Path) -> Result<()>) -> Result<&Self> {
         if let Self::Missing(path) = self {
-            action(path.as_path())?;
+            action(path.as_ref())?;
         }
         Ok(self)
     }
@@ -548,33 +554,37 @@ impl PathState {
 
     fn as_path(&self) -> &Path {
         match self {
-            Self::Exists(path) | Self::Missing(path) => path.as_path(),
+            Self::Exists(path) | Self::Missing(path) => path.as_ref(),
         }
     }
 }
 
-fn missing_path<F>(path: PathBuf, mut action: F) -> Result<PathState>
+fn missing_path<P, F>(path: P, mut action: F) -> Result<PathState<P>>
 where
+    P: AsRef<Path>,
     F: FnMut(&Path) -> Result<()>,
 {
-    if !path.exists() {
-        action(path.as_path())?;
+    let path_ref = path.as_ref();
+    if !path_ref.exists() {
+        action(path_ref)?;
         Ok(PathState::Missing(path))
     } else {
         Ok(PathState::Exists(path))
     }
 }
 
-fn missing_path_else<T, F>(path: PathBuf, mut action: T, mut else_action: F) -> Result<PathState>
+fn missing_path_else<P, T, F>(path: P, mut action: T, mut else_action: F) -> Result<PathState<P>>
 where
+    P: AsRef<Path>,
     T: FnMut(&Path) -> Result<()>,
     F: FnMut(&Path) -> Result<()>,
 {
-    if !path.exists() {
-        action(path.as_path())?;
+    let path_ref = path.as_ref();
+    if !path_ref.exists() {
+        action(path_ref)?;
         Ok(PathState::Missing(path))
     } else {
-        else_action(path.as_path())?;
+        else_action(path_ref)?;
         Ok(PathState::Exists(path))
     }
 }

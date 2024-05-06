@@ -22,16 +22,16 @@ function(check_file_hash has_hash hash_is_good)
   set("${has_hash}" TRUE PARENT_SCOPE)
 
   message(STATUS "verifying file...
-       file='/home/runner/work/deps/deps/neovim/deps/build/downloads/libvterm/v0.3.3.tar.gz'")
+       file='/home/runner/work/deps/deps/neovim/deps/build/downloads/libvterm/0a15c6e983b0db7ef8276e0792414a805d01bdaf.tar.gz'")
 
-  file("SHA256" "/home/runner/work/deps/deps/neovim/deps/build/downloads/libvterm/v0.3.3.tar.gz" actual_value)
+  file("SHA256" "/home/runner/work/deps/deps/neovim/deps/build/downloads/libvterm/0a15c6e983b0db7ef8276e0792414a805d01bdaf.tar.gz" actual_value)
 
-  if(NOT "${actual_value}" STREQUAL "0babe3ab42c354925dadede90d352f054aa9c4ae6842ea803a20c9741e172e56")
+  if(NOT "${actual_value}" STREQUAL "c4683e7a2d71c04781fd0ab7719a94202800e97a9e091514c16983bb732b0fa7")
     set("${hash_is_good}" FALSE PARENT_SCOPE)
     message(STATUS "SHA256 hash of
-    /home/runner/work/deps/deps/neovim/deps/build/downloads/libvterm/v0.3.3.tar.gz
+    /home/runner/work/deps/deps/neovim/deps/build/downloads/libvterm/0a15c6e983b0db7ef8276e0792414a805d01bdaf.tar.gz
   does not match expected value
-    expected: '0babe3ab42c354925dadede90d352f054aa9c4ae6842ea803a20c9741e172e56'
+    expected: 'c4683e7a2d71c04781fd0ab7719a94202800e97a9e091514c16983bb732b0fa7'
       actual: '${actual_value}'")
   else()
     set("${hash_is_good}" TRUE PARENT_SCOPE)
@@ -71,32 +71,32 @@ function(sleep_before_download attempt)
   execute_process(COMMAND "${CMAKE_COMMAND}" -E sleep "${sleep_seconds}")
 endfunction()
 
-if(EXISTS "/home/runner/work/deps/deps/neovim/deps/build/downloads/libvterm/v0.3.3.tar.gz")
+if(EXISTS "/home/runner/work/deps/deps/neovim/deps/build/downloads/libvterm/0a15c6e983b0db7ef8276e0792414a805d01bdaf.tar.gz")
   check_file_hash(has_hash hash_is_good)
   if(has_hash)
     if(hash_is_good)
       message(STATUS "File already exists and hash match (skip download):
-  file='/home/runner/work/deps/deps/neovim/deps/build/downloads/libvterm/v0.3.3.tar.gz'
-  SHA256='0babe3ab42c354925dadede90d352f054aa9c4ae6842ea803a20c9741e172e56'"
+  file='/home/runner/work/deps/deps/neovim/deps/build/downloads/libvterm/0a15c6e983b0db7ef8276e0792414a805d01bdaf.tar.gz'
+  SHA256='c4683e7a2d71c04781fd0ab7719a94202800e97a9e091514c16983bb732b0fa7'"
       )
       return()
     else()
       message(STATUS "File already exists but hash mismatch. Removing...")
-      file(REMOVE "/home/runner/work/deps/deps/neovim/deps/build/downloads/libvterm/v0.3.3.tar.gz")
+      file(REMOVE "/home/runner/work/deps/deps/neovim/deps/build/downloads/libvterm/0a15c6e983b0db7ef8276e0792414a805d01bdaf.tar.gz")
     endif()
   else()
     message(STATUS "File already exists but no hash specified (use URL_HASH):
-  file='/home/runner/work/deps/deps/neovim/deps/build/downloads/libvterm/v0.3.3.tar.gz'
+  file='/home/runner/work/deps/deps/neovim/deps/build/downloads/libvterm/0a15c6e983b0db7ef8276e0792414a805d01bdaf.tar.gz'
 Old file will be removed and new file downloaded from URL."
     )
-    file(REMOVE "/home/runner/work/deps/deps/neovim/deps/build/downloads/libvterm/v0.3.3.tar.gz")
+    file(REMOVE "/home/runner/work/deps/deps/neovim/deps/build/downloads/libvterm/0a15c6e983b0db7ef8276e0792414a805d01bdaf.tar.gz")
   endif()
 endif()
 
 set(retry_number 5)
 
 message(STATUS "Downloading...
-   dst='/home/runner/work/deps/deps/neovim/deps/build/downloads/libvterm/v0.3.3.tar.gz'
+   dst='/home/runner/work/deps/deps/neovim/deps/build/downloads/libvterm/0a15c6e983b0db7ef8276e0792414a805d01bdaf.tar.gz'
    timeout='none'
    inactivity timeout='none'"
 )
@@ -107,7 +107,7 @@ foreach(i RANGE ${retry_number})
   if(status_code IN_LIST download_retry_codes)
     sleep_before_download(${i})
   endif()
-  foreach(url IN ITEMS [====[https://github.com/neovim/libvterm/archive/v0.3.3.tar.gz]====])
+  foreach(url IN ITEMS [====[https://github.com/neovim/libvterm/archive/0a15c6e983b0db7ef8276e0792414a805d01bdaf.tar.gz]====])
     if(NOT url IN_LIST skip_url_list)
       message(STATUS "Using src='${url}'")
 
@@ -118,7 +118,7 @@ foreach(i RANGE ${retry_number})
 
       file(
         DOWNLOAD
-        "${url}" "/home/runner/work/deps/deps/neovim/deps/build/downloads/libvterm/v0.3.3.tar.gz"
+        "${url}" "/home/runner/work/deps/deps/neovim/deps/build/downloads/libvterm/0a15c6e983b0db7ef8276e0792414a805d01bdaf.tar.gz"
         
         # no TIMEOUT
         # no INACTIVITY_TIMEOUT
@@ -135,7 +135,7 @@ foreach(i RANGE ${retry_number})
         check_file_hash(has_hash hash_is_good)
         if(has_hash AND NOT hash_is_good)
           message(STATUS "Hash mismatch, removing...")
-          file(REMOVE "/home/runner/work/deps/deps/neovim/deps/build/downloads/libvterm/v0.3.3.tar.gz")
+          file(REMOVE "/home/runner/work/deps/deps/neovim/deps/build/downloads/libvterm/0a15c6e983b0db7ef8276e0792414a805d01bdaf.tar.gz")
         else()
           message(STATUS "Downloading... done")
           return()
