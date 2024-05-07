@@ -61,7 +61,7 @@ module.exports = grammar({
         /[0-7]{1,3}/,
         /x[0-9a-fA-F]{2}/,
         /u[0-9a-fA-F]{4}/,
-        /u{[0-9a-fA-F]+}/
+        /u\{[0-9a-fA-F]+\}/
       )
     )),
 
@@ -92,7 +92,10 @@ module.exports = grammar({
 
     named_node: $ => seq(
       "(",
-      field("name", $._node_identifier),
+      choice(
+        field("name", $._node_identifier),
+        seq(field("supertype", $.identifier), token.immediate('/'), field("name", $._immediate_identifier)),
+      ),
       optional(
         seq(
           optional("."),

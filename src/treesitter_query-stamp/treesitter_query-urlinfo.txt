@@ -6,7 +6,7 @@ method=url
 command=/usr/local/bin/cmake;-P;/home/runner/work/deps/deps/neovim/deps/build/src/treesitter_query-stamp/download-treesitter_query.cmake;COMMAND;/usr/local/bin/cmake;-P;/home/runner/work/deps/deps/neovim/deps/build/src/treesitter_query-stamp/verify-treesitter_query.cmake;COMMAND;/usr/local/bin/cmake;-P;/home/runner/work/deps/deps/neovim/deps/build/src/treesitter_query-stamp/extract-treesitter_query.cmake
 source_dir=/home/runner/work/deps/deps/neovim/deps/build/src/treesitter_query
 work_dir=/home/runner/work/deps/deps/neovim/deps/build/src
-url(s)=https://github.com/tree-sitter-grammars/tree-sitter-query/archive/v0.2.0.tar.gz
-hash=SHA256=5a0ee26c4af94adb9ab850a518613f75e7040354f5b049a5b85457ebf579ae8b
+url(s)=https://github.com/tree-sitter-grammars/tree-sitter-query/archive/v0.3.0.tar.gz
+hash=SHA256=f878ff37abcb83250e31a6569e997546f3dbab74dcb26683cb2d613f7568cfc0
 no_extract=
 
