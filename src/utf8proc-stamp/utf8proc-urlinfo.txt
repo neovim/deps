@@ -1,0 +1,12 @@
+# This is a generated file and its contents are an internal implementation detail.
+# The download step will be re-executed if anything in this file changes.
+# No other meaning or use of this file is supported.
+
+method=url
+command=/usr/local/bin/cmake;-P;/home/runner/work/deps/deps/neovim/deps/build/src/utf8proc-stamp/download-utf8proc.cmake;COMMAND;/usr/local/bin/cmake;-P;/home/runner/work/deps/deps/neovim/deps/build/src/utf8proc-stamp/verify-utf8proc.cmake;COMMAND;/usr/local/bin/cmake;-P;/home/runner/work/deps/deps/neovim/deps/build/src/utf8proc-stamp/extract-utf8proc.cmake
+source_dir=/home/runner/work/deps/deps/neovim/deps/build/src/utf8proc
+work_dir=/home/runner/work/deps/deps/neovim/deps/build/src
+url(s)=https://github.com/JuliaStrings/utf8proc/archive/v2.9.0.tar.gz
+hash=SHA256=18c1626e9fc5a2e192311e36b3010bfc698078f692888940f1fa150547abb0c1
+no_extract=
+
