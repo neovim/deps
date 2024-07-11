@@ -3,10 +3,10 @@
 # No other meaning or use of this file is supported.
 
 method=url
-command=/usr/local/bin/cmake;-P;/home/runner/work/deps/deps/neovim/deps/build/src/luv-stamp/download-luv.cmake;COMMAND;/usr/local/bin/cmake;-P;/home/runner/work/deps/deps/neovim/deps/build/src/luv-stamp/verify-luv.cmake;COMMAND;/usr/local/bin/cmake;-P;/home/runner/work/deps/deps/neovim/deps/build/src/luv-stamp/extract-luv.cmake
+command=/usr/local/bin/cmake;-DCMAKE_MESSAGE_LOG_LEVEL=VERBOSE;-P;/home/runner/work/deps/deps/neovim/deps/build/src/luv-stamp/download-luv.cmake;COMMAND;/usr/local/bin/cmake;-DCMAKE_MESSAGE_LOG_LEVEL=VERBOSE;-P;/home/runner/work/deps/deps/neovim/deps/build/src/luv-stamp/verify-luv.cmake;COMMAND;/usr/local/bin/cmake;-DCMAKE_MESSAGE_LOG_LEVEL=VERBOSE;-P;/home/runner/work/deps/deps/neovim/deps/build/src/luv-stamp/extract-luv.cmake
 source_dir=/home/runner/work/deps/deps/neovim/deps/build/src/luv
 work_dir=/home/runner/work/deps/deps/neovim/deps/build/src
 url(s)=https://github.com/luvit/luv/releases/download/1.48.0-2/luv-1.48.0-2.tar.gz
 hash=SHA256=2c3a1ddfebb4f6550293a40ee789f7122e97647eede51511f57203de48c03b7a
-no_extract=
+      no_extract=
 

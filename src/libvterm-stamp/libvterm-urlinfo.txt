@@ -3,10 +3,10 @@
 # No other meaning or use of this file is supported.
 
 method=url
-command=/usr/local/bin/cmake;-P;/home/runner/work/deps/deps/neovim/deps/build/src/libvterm-stamp/download-libvterm.cmake;COMMAND;/usr/local/bin/cmake;-P;/home/runner/work/deps/deps/neovim/deps/build/src/libvterm-stamp/verify-libvterm.cmake;COMMAND;/usr/local/bin/cmake;-P;/home/runner/work/deps/deps/neovim/deps/build/src/libvterm-stamp/extract-libvterm.cmake
+command=/usr/local/bin/cmake;-DCMAKE_MESSAGE_LOG_LEVEL=VERBOSE;-P;/home/runner/work/deps/deps/neovim/deps/build/src/libvterm-stamp/download-libvterm.cmake;COMMAND;/usr/local/bin/cmake;-DCMAKE_MESSAGE_LOG_LEVEL=VERBOSE;-P;/home/runner/work/deps/deps/neovim/deps/build/src/libvterm-stamp/verify-libvterm.cmake;COMMAND;/usr/local/bin/cmake;-DCMAKE_MESSAGE_LOG_LEVEL=VERBOSE;-P;/home/runner/work/deps/deps/neovim/deps/build/src/libvterm-stamp/extract-libvterm.cmake
 source_dir=/home/runner/work/deps/deps/neovim/deps/build/src/libvterm
 work_dir=/home/runner/work/deps/deps/neovim/deps/build/src
 url(s)=https://github.com/neovim/libvterm/archive/0a15c6e983b0db7ef8276e0792414a805d01bdaf.tar.gz
 hash=SHA256=c4683e7a2d71c04781fd0ab7719a94202800e97a9e091514c16983bb732b0fa7
-no_extract=
+      no_extract=
 

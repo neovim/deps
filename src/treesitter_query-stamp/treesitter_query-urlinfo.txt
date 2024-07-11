@@ -3,10 +3,10 @@
 # No other meaning or use of this file is supported.
 
 method=url
-command=/usr/local/bin/cmake;-P;/home/runner/work/deps/deps/neovim/deps/build/src/treesitter_query-stamp/download-treesitter_query.cmake;COMMAND;/usr/local/bin/cmake;-P;/home/runner/work/deps/deps/neovim/deps/build/src/treesitter_query-stamp/verify-treesitter_query.cmake;COMMAND;/usr/local/bin/cmake;-P;/home/runner/work/deps/deps/neovim/deps/build/src/treesitter_query-stamp/extract-treesitter_query.cmake
+command=/usr/local/bin/cmake;-DCMAKE_MESSAGE_LOG_LEVEL=VERBOSE;-P;/home/runner/work/deps/deps/neovim/deps/build/src/treesitter_query-stamp/download-treesitter_query.cmake;COMMAND;/usr/local/bin/cmake;-DCMAKE_MESSAGE_LOG_LEVEL=VERBOSE;-P;/home/runner/work/deps/deps/neovim/deps/build/src/treesitter_query-stamp/verify-treesitter_query.cmake;COMMAND;/usr/local/bin/cmake;-DCMAKE_MESSAGE_LOG_LEVEL=VERBOSE;-P;/home/runner/work/deps/deps/neovim/deps/build/src/treesitter_query-stamp/extract-treesitter_query.cmake
 source_dir=/home/runner/work/deps/deps/neovim/deps/build/src/treesitter_query
 work_dir=/home/runner/work/deps/deps/neovim/deps/build/src
 url(s)=https://github.com/tree-sitter-grammars/tree-sitter-query/archive/v0.4.0.tar.gz
 hash=SHA256=d3a423ab66dc62b2969625e280116678a8a22582b5ff087795222108db2f6a6e
-no_extract=
+      no_extract=
 
