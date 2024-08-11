@@ -1,6 +1,0 @@
-# This is a generated file and its contents are an internal implementation detail.
-# The update step will be re-executed if anything in this file changes.
-# No other meaning or use of this file is supported.
-
-command=/usr/local/bin/cmake;-E;copy;/home/runner/work/deps/deps/neovim/cmake.deps/cmake/LibvtermCMakeLists.txt;/home/runner/work/deps/deps/neovim/deps/build/src/libvterm/CMakeLists.txt
-work_dir=/home/runner/work/deps/deps/neovim/deps/build/src/libvterm
