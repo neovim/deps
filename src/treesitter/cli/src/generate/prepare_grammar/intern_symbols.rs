@@ -18,13 +18,13 @@ pub(super) fn intern_symbols(grammar: &InputGrammar) -> Result<InternedGrammar> 
         variables.push(Variable {
             name: variable.name.clone(),
             kind: variable_type_for_name(&variable.name),
-            rule: interner.intern_rule(&variable.rule)?,
+            rule: interner.intern_rule(&variable.rule, Some(&variable.name))?,
         });
     }
 
     let mut external_tokens = Vec::with_capacity(grammar.external_tokens.len());
     for external_token in &grammar.external_tokens {
-        let rule = interner.intern_rule(external_token)?;
+        let rule = interner.intern_rule(external_token, None)?;
         let (name, kind) = if let Rule::NamedSymbol(name) = external_token {
             (name.clone(), variable_type_for_name(name))
         } else {
@@ -35,7 +35,7 @@ pub(super) fn intern_symbols(grammar: &InputGrammar) -> Result<InternedGrammar> 
 
     let mut extra_symbols = Vec::with_capacity(grammar.extra_symbols.len());
     for extra_token in &grammar.extra_symbols {
-        extra_symbols.push(interner.intern_rule(extra_token)?);
+        extra_symbols.push(interner.intern_rule(extra_token, None)?);
     }
 
     let mut supertype_symbols = Vec::with_capacity(grammar.supertype_symbols.len());
@@ -99,33 +99,33 @@ struct Interner<'a> {
 }
 
 impl<'a> Interner<'a> {
-    fn intern_rule(&self, rule: &Rule) -> Result<Rule> {
+    fn intern_rule(&self, rule: &Rule, name: Option<&str>) -> Result<Rule> {
         match rule {
             Rule::Choice(elements) => {
+                self.check_single(elements, name);
                 let mut result = Vec::with_capacity(elements.len());
                 for element in elements {
-                    result.push(self.intern_rule(element)?);
+                    result.push(self.intern_rule(element, name)?);
                 }
                 Ok(Rule::Choice(result))
             }
             Rule::Seq(elements) => {
+                self.check_single(elements, name);
                 let mut result = Vec::with_capacity(elements.len());
                 for element in elements {
-                    result.push(self.intern_rule(element)?);
+                    result.push(self.intern_rule(element, name)?);
                 }
                 Ok(Rule::Seq(result))
             }
-            Rule::Repeat(content) => Ok(Rule::Repeat(Box::new(self.intern_rule(content)?))),
+            Rule::Repeat(content) => Ok(Rule::Repeat(Box::new(self.intern_rule(content, name)?))),
             Rule::Metadata { rule, params } => Ok(Rule::Metadata {
-                rule: Box::new(self.intern_rule(rule)?),
+                rule: Box::new(self.intern_rule(rule, name)?),
                 params: params.clone(),
             }),
-
             Rule::NamedSymbol(name) => self.intern_name(name).map_or_else(
                 || Err(anyhow!("Undefined symbol `{name}`")),
                 |symbol| Ok(Rule::Symbol(symbol)),
             ),
-
             _ => Ok(rule.clone()),
         }
     }
@@ -146,6 +146,17 @@ impl<'a> Interner<'a> {
         }
 
         None
+    }
+
+    // In the case of a seq or choice rule of 1 element in a hidden rule, weird
+    // inconsistent behavior with queries can occur. So we should warn the user about it.
+    fn check_single(&self, elements: &[Rule], name: Option<&str>) {
+        if elements.len() == 1 && matches!(elements[0], Rule::String(_) | Rule::Pattern(_, _)) {
+            eprintln!(
+                "Warning: rule {} is just a `seq` or `choice` rule with a single element. This is unnecessary.",
+                name.unwrap_or_default()
+            );
+        }
     }
 }
 

@@ -25,12 +25,11 @@ harness = false
 wasm = ["tree-sitter/wasm", "tree-sitter-loader/wasm"]
 
 [dependencies]
-ansi_term.workspace = true
 anstyle.workspace = true
 anyhow.workspace = true
 clap.workspace = true
+ctor.workspace = true
 ctrlc.workspace = true
-difference.workspace = true
 dirs.workspace = true
 filetime.workspace = true
 glob.workspace = true
@@ -41,6 +40,7 @@ indoc.workspace = true
 lazy_static.workspace = true
 log.workspace = true
 memchr.workspace = true
+rand.workspace = true
 regex.workspace = true
 regex-syntax.workspace = true
 rustc-hash.workspace = true
@@ -48,6 +48,7 @@ semver.workspace = true
 serde.workspace = true
 serde_derive.workspace = true
 serde_json.workspace = true
+similar.workspace = true
 smallbitvec.workspace = true
 tiny_http.workspace = true
 walkdir.workspace = true
@@ -60,11 +61,12 @@ tree-sitter-highlight.workspace = true
 tree-sitter-loader.workspace = true
 tree-sitter-tags.workspace = true
 
+[target."cfg(windows)".dependencies]
+url = "2.5.2"
+
 [dev-dependencies]
 tree_sitter_proc_macro = { path = "src/tests/proc_macro", package = "tree-sitter-tests-proc-macro" }
 
-rand.workspace = true
 tempfile.workspace = true
 pretty_assertions.workspace = true
-ctor.workspace = true
 unindent.workspace = true

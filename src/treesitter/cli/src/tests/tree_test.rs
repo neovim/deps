@@ -2,8 +2,8 @@ use std::str;
 
 use tree_sitter::{InputEdit, Parser, Point, Range, Tree};
 
-use super::helpers::{edits::invert_edit, fixtures::get_language};
-use crate::parse::{perform_edit, Edit};
+use super::helpers::fixtures::get_language;
+use crate::{fuzz::edits::Edit, parse::perform_edit, tests::invert_edit};
 
 #[test]
 fn test_tree_edit() {
@@ -724,7 +724,7 @@ fn get_changed_ranges(
     edit: &Edit,
 ) -> Vec<Range> {
     perform_edit(tree, source_code, edit).unwrap();
-    let new_tree = parser.parse(&source_code, Some(tree)).unwrap();
+    let new_tree = parser.parse(source_code, Some(tree)).unwrap();
     let result = tree.changed_ranges(&new_tree).collect();
     *tree = new_tree;
     result

@@ -56,6 +56,9 @@ export PATH=$PATH:./node_modules/.bin
 Once you have the CLI installed, create a file called `grammar.js` with the following contents:
 
 ```js
+/// <reference types="tree-sitter-cli/dsl" />
+// @ts-check
+
 module.exports = grammar({
   name: 'YOUR_LANGUAGE_NAME',
 
@@ -586,6 +589,10 @@ Possible resolutions:
   4:  Add a conflict for these rules: `binary_expression` `unary_expression`
 ```
 
+Note: The • character in the error message indicates where exactly during
+parsing the conflict occurs, or in other words, where the parser is encountering
+ambiguity.
+
 For an expression like `-a * b`, it's not clear whether the `-` operator applies to the `a * b` or just to the `a`. This is where the `prec` function [described above](#the-grammar-dsl) comes into play. By wrapping a rule with `prec`, we can indicate that certain sequence of symbols should *bind to each other more tightly* than others. For example, the `'-', $._expression` sequence in `unary_expression` should bind more tightly than the `$._expression, '+', $._expression` sequence in `binary_expression`:
 
 ```js
@@ -855,6 +862,7 @@ This function is responsible for recognizing external tokens. It should return `
 * **`uint32_t (*get_column)(TSLexer *)`** - A function for querying the current column position of the lexer. It returns the number of codepoints since the start of the current line. The codepoint position is recalculated on every call to this function by reading from the start of the line.
 * **`bool (*is_at_included_range_start)(const TSLexer *)`** - A function for checking whether the parser has just skipped some characters in the document. When parsing an embedded document using the `ts_parser_set_included_ranges` function (described in the [multi-language document section][multi-language-section]), the scanner may want to apply some special behavior when moving to a disjoint part of the document. For example, in [EJS documents][ejs], the JavaScript parser uses this function to enable inserting automatic semicolon tokens in between the code directives, delimited by `<%` and `%>`.
 * **`bool (*eof)(const TSLexer *)`** - A function for determining whether the lexer is at the end of the file. The value of `lookahead` will be `0` at the end of a file, but this function should be used instead of checking for that value because the `0` or "NUL" value is also a valid character that could be present in the file being parsed.
+- **`void (*log)(const TSLexer *, const char * format, ...)`** - A `printf`-like function for logging. The log is viewable through e.g. `tree-sitter parse --debug` or the browser's console after checking the `log` option in the [Playground](./playground).
 
 The third argument to the `scan` function is an array of booleans that indicates which of external tokens are currently expected by the parser. You should only look for a given token if it is valid according to this array. At the same time, you cannot backtrack, so you may need to combine certain pieces of logic.
 

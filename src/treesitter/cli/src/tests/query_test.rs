@@ -13,11 +13,13 @@ use super::helpers::{
     allocations,
     fixtures::{get_language, get_test_language},
     query_helpers::{assert_query_matches, Match, Pattern},
-    ITERATION_COUNT,
 };
 use crate::{
     generate::generate_parser_for_grammar,
-    tests::helpers::query_helpers::{collect_captures, collect_matches},
+    tests::{
+        helpers::query_helpers::{collect_captures, collect_matches},
+        ITERATION_COUNT,
+    },
 };
 
 lazy_static! {
@@ -3638,30 +3640,27 @@ fn test_query_text_callback_returns_chunks() {
 }
 
 #[test]
-fn test_query_start_byte_for_pattern() {
+fn test_query_start_end_byte_for_pattern() {
     let language = get_language("javascript");
 
-    let patterns_1 = r#"
+    let patterns_1 = indoc! {r#"
         "+" @operator
         "-" @operator
         "*" @operator
         "=" @operator
         "=>" @operator
-    "#
-    .trim_start();
+    "#};
 
-    let patterns_2 = "
+    let patterns_2 = indoc! {"
         (identifier) @a
         (string) @b
-    "
-    .trim_start();
+    "};
 
-    let patterns_3 = "
+    let patterns_3 = indoc! {"
         ((identifier) @b (#match? @b i))
         (function_declaration name: (identifier) @c)
         (method_definition name: (property_identifier) @d)
-    "
-    .trim_start();
+    "};
 
     let mut source = String::new();
     source += patterns_1;
@@ -3671,10 +3670,19 @@ fn test_query_start_byte_for_pattern() {
     let query = Query::new(&language, &source).unwrap();
 
     assert_eq!(query.start_byte_for_pattern(0), 0);
+    assert_eq!(query.end_byte_for_pattern(0), "\"+\" @operator\n".len());
     assert_eq!(query.start_byte_for_pattern(5), patterns_1.len());
+    assert_eq!(
+        query.end_byte_for_pattern(5),
+        patterns_1.len() + "(identifier) @a\n".len()
+    );
     assert_eq!(
         query.start_byte_for_pattern(7),
         patterns_1.len() + patterns_2.len()
+    );
+    assert_eq!(
+        query.end_byte_for_pattern(7),
+        patterns_1.len() + patterns_2.len() + "((identifier) @b (#match? @b i))\n".len()
     );
 }
 
@@ -5106,4 +5114,35 @@ fn test_query_compiler_oob_access() {
     let language = get_language("java");
     // UBSAN should not report any OOB access
     assert!(Query::new(&language, "(package_declaration _ (_) @name _)").is_ok());
+}
+
+#[test]
+fn test_query_wildcard_with_immediate_first_child() {
+    let language = get_language("javascript");
+    let query = Query::new(&language, "(_ . (identifier) @firstChild)").unwrap();
+    let source = "function name(one, two, three) { }";
+
+    assert_query_matches(
+        &language,
+        &query,
+        source,
+        &[
+            (0, vec![("firstChild", "name")]),
+            (0, vec![("firstChild", "one")]),
+        ],
+    );
+}
+
+#[test]
+fn test_query_on_empty_source_code() {
+    let language = get_language("javascript");
+    let source_code = "";
+    let query = r#"(program) @program"#;
+    let query = Query::new(&language, query).unwrap();
+    assert_query_matches(
+        &language,
+        &query,
+        source_code,
+        &[(0, vec![("program", "")])],
+    );
 }

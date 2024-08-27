@@ -26,16 +26,21 @@ include = [
 ]
 
 [features]
+default = ["std"]
+std = ["regex/std", "regex/perf", "regex-syntax/unicode"]
 wasm = ["wasmtime-c-api"]
 
 [dependencies]
-regex.workspace = true
+regex = { version = "1.10.6", default-features = false, features = ["unicode"] }
+regex-syntax = { version = "0.8.4", default-features = false }
+tree-sitter-language = { version = "0.1", path = "language" }
 
 [dependencies.wasmtime-c-api]
-version = "19"
+version = "24.0.0"
 optional = true
 package = "wasmtime-c-api-impl"
 default-features = false
+features = ["cranelift"]
 
 [build-dependencies]
 bindgen = { version = "0.69.4", optional = true }

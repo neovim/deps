@@ -11,6 +11,10 @@ use glob::glob;
 use regex::Regex;
 use tree_sitter::{ffi, Parser, Point};
 use tree_sitter_cli::{
+    fuzz::{
+        fuzz_language_corpus, FuzzOptions, EDIT_COUNT, ITERATION_COUNT, LOG_ENABLED,
+        LOG_GRAPH_ENABLED, START_SEED,
+    },
     generate::{self, lookup_package_json_for_path},
     highlight, logger,
     parse::{self, ParseFileOptions, ParseOutput},
@@ -36,6 +40,7 @@ enum Commands {
     BuildWasm(BuildWasm),
     Parse(Parse),
     Test(Test),
+    Fuzz(Fuzz),
     Query(Query),
     Highlight(Highlight),
     Tags(Tags),
@@ -92,7 +97,8 @@ struct Generate {
         long,
         value_name = "EXECUTABLE",
         env = "TREE_SITTER_JS_RUNTIME",
-        help = "The path to the JavaScript runtime to use for generating parsers"
+        default_value = "node",
+        help = "The name or path of the JavaScript runtime to use for generating parsers"
     )]
     pub js_runtime: Option<String>,
 }
@@ -114,11 +120,8 @@ struct Build {
     pub path: Option<String>,
     #[arg(long, help = "Make the parser reuse the same allocator as the library")]
     pub reuse_allocator: bool,
-    #[arg(
-        long,
-        help = "Build the parser with `TREE_SITTER_INTERNAL_BUILD` defined"
-    )]
-    pub internal_build: bool,
+    #[arg(long, short = '0', help = "Compile a parser in debug mode")]
+    pub debug: bool,
 }
 
 #[derive(Args)]
@@ -249,6 +252,27 @@ struct Test {
     pub open_log: bool,
     #[arg(long, help = "The path to an alternative config.json file")]
     pub config_path: Option<PathBuf>,
+    #[arg(long, help = "Force showing fields in test diffs")]
+    pub show_fields: bool,
+}
+
+#[derive(Args)]
+#[command(about = "Fuzz a parser", alias = "f")]
+struct Fuzz {
+    #[arg(long, short, help = "List of test names to skip")]
+    pub skip: Option<Vec<String>>,
+    #[arg(long, help = "Subdirectory to the language")]
+    pub subdir: Option<String>,
+    #[arg(long, short, help = "Maximum number of edits to perform per fuzz test")]
+    pub edits: Option<usize>,
+    #[arg(long, short, help = "Number of fuzzing iterations to run per test")]
+    pub iterations: Option<usize>,
+    #[arg(long, short, help = "Regex pattern to filter tests")]
+    pub filter: Option<Regex>,
+    #[arg(long, short, help = "Enable logging of graphs and input")]
+    pub log_graphs: bool,
+    #[arg(long, short, help = "Enable parser logging")]
+    pub log: bool,
 }
 
 #[derive(Args)]
@@ -459,7 +483,7 @@ fn run() -> Result<()> {
                 if let Some(path) = generate_options.libdir {
                     loader = loader::Loader::with_parser_lib_path(PathBuf::from(path));
                 }
-                loader.use_debug_build(generate_options.debug_build);
+                loader.debug_build(generate_options.debug_build);
                 loader.languages_at_path(&current_dir)?;
             }
         }
@@ -502,15 +526,14 @@ fn run() -> Result<()> {
                         .with_extension(env::consts::DLL_EXTENSION)
                 };
 
-                let flags: &[&str] =
-                    match (build_options.reuse_allocator, build_options.internal_build) {
-                        (true, true) => {
-                            &["TREE_SITTER_REUSE_ALLOCATOR", "TREE_SITTER_INTERNAL_BUILD"]
-                        }
-                        (true, false) => &["TREE_SITTER_REUSE_ALLOCATOR"],
-                        (false, true) => &["TREE_SITTER_INTERNAL_BUILD"],
-                        (false, false) => &[],
-                    };
+                let flags: &[&str] = match (build_options.reuse_allocator, build_options.debug) {
+                    (true, true) => &["TREE_SITTER_REUSE_ALLOCATOR", "TREE_SITTER_DEBUG"],
+                    (true, false) => &["TREE_SITTER_REUSE_ALLOCATOR"],
+                    (false, true) => &["TREE_SITTER_DEBUG"],
+                    (false, false) => &[],
+                };
+
+                loader.debug_build(build_options.debug);
 
                 let config = Config::load(None)?;
                 let loader_config = config.get()?;
@@ -563,20 +586,15 @@ fn run() -> Result<()> {
             let cancellation_flag = util::cancel_on_signal();
             let mut parser = Parser::new();
 
-            if parse_options.debug {
-                // For augmenting debug logging in external scanners
-                env::set_var("TREE_SITTER_DEBUG", "1");
-            }
-
-            loader.use_debug_build(parse_options.debug_build);
+            loader.debug_build(parse_options.debug_build);
 
             #[cfg(feature = "wasm")]
             if parse_options.wasm {
                 let engine = tree_sitter::wasmtime::Engine::default();
                 parser
-                    .set_wasm_store(tree_sitter::WasmStore::new(engine.clone()).unwrap())
+                    .set_wasm_store(tree_sitter::WasmStore::new(&engine).unwrap())
                     .unwrap();
-                loader.use_wasm(engine);
+                loader.use_wasm(&engine);
             }
 
             let timeout = parse_options.timeout.unwrap_or_default();
@@ -663,12 +681,8 @@ fn run() -> Result<()> {
 
         Commands::Test(test_options) => {
             let config = Config::load(test_options.config_path)?;
-            if test_options.debug {
-                // For augmenting debug logging in external scanners
-                env::set_var("TREE_SITTER_DEBUG", "1");
-            }
 
-            loader.use_debug_build(test_options.debug_build);
+            loader.debug_build(test_options.debug_build);
 
             let mut parser = Parser::new();
 
@@ -676,9 +690,9 @@ fn run() -> Result<()> {
             if test_options.wasm {
                 let engine = tree_sitter::wasmtime::Engine::default();
                 parser
-                    .set_wasm_store(tree_sitter::WasmStore::new(engine.clone()).unwrap())
+                    .set_wasm_store(tree_sitter::WasmStore::new(&engine).unwrap())
                     .unwrap();
-                loader.use_wasm(engine);
+                loader.use_wasm(&engine);
             }
 
             let languages = loader.languages_at_path(&current_dir)?;
@@ -705,6 +719,7 @@ fn run() -> Result<()> {
                     languages: languages.iter().map(|(l, n)| (n.as_str(), l)).collect(),
                     color,
                     test_num: 1,
+                    show_fields: test_options.show_fields,
                 };
 
                 test::run_tests_at_path(&mut parser, &mut opts)?;
@@ -740,6 +755,33 @@ fn run() -> Result<()> {
                     color,
                 )?;
             }
+        }
+
+        Commands::Fuzz(fuzz_options) => {
+            loader.sanitize_build(true);
+
+            let languages = loader.languages_at_path(&current_dir)?;
+            let (language, language_name) = &languages
+                .first()
+                .ok_or_else(|| anyhow!("No language found"))?;
+
+            let mut fuzz_options = FuzzOptions {
+                skipped: fuzz_options.skip,
+                subdir: fuzz_options.subdir,
+                edits: fuzz_options.edits.unwrap_or(*EDIT_COUNT),
+                iterations: fuzz_options.iterations.unwrap_or(*ITERATION_COUNT),
+                filter: fuzz_options.filter,
+                log_graphs: fuzz_options.log_graphs || *LOG_GRAPH_ENABLED,
+                log: fuzz_options.log || *LOG_ENABLED,
+            };
+
+            fuzz_language_corpus(
+                language,
+                language_name,
+                *START_SEED,
+                &current_dir,
+                &mut fuzz_options,
+            );
         }
 
         Commands::Query(query_options) => {

@@ -8,13 +8,14 @@ use tree_sitter_proc_macro::retry;
 
 use super::helpers::{
     allocations,
-    edits::{invert_edit, ReadRecorder},
+    edits::ReadRecorder,
     fixtures::{get_language, get_test_language},
 };
 use crate::{
+    fuzz::edits::Edit,
     generate::{generate_parser_for_grammar, load_grammar_file},
-    parse::{perform_edit, Edit},
-    tests::helpers::fixtures::fixtures_dir,
+    parse::perform_edit,
+    tests::{helpers::fixtures::fixtures_dir, invert_edit},
 };
 
 #[test]
@@ -220,10 +221,7 @@ fn test_parsing_text_with_byte_order_mark() {
 
     // Parse UTF16 text with a BOM
     let tree = parser
-        .parse_utf16(
-            &"\u{FEFF}fn a() {}".encode_utf16().collect::<Vec<_>>(),
-            None,
-        )
+        .parse_utf16("\u{FEFF}fn a() {}".encode_utf16().collect::<Vec<_>>(), None)
         .unwrap();
     assert_eq!(
         tree.root_node().to_sexp(),
@@ -1422,6 +1420,30 @@ if foo && bar || baz {}
     perform_edit(&mut tree, &mut input, &edit).unwrap();
 
     parser.parse(&input, Some(&tree)).unwrap();
+}
+
+#[test]
+fn test_parsing_with_scanner_logging() {
+    let dir = fixtures_dir().join("test_grammars").join("external_tokens");
+    let grammar_json = load_grammar_file(&dir.join("grammar.js"), None).unwrap();
+    let (grammar_name, parser_code) = generate_parser_for_grammar(&grammar_json).unwrap();
+
+    let mut parser = Parser::new();
+    parser
+        .set_language(&get_test_language(&grammar_name, &parser_code, Some(&dir)))
+        .unwrap();
+
+    let mut found = false;
+    parser.set_logger(Some(Box::new(|log_type, message| {
+        if log_type == LogType::Lex && message == "Found a percent string" {
+            found = true;
+        }
+    })));
+
+    let source_code = "x + %(sup (external) scanner?)";
+
+    parser.parse(source_code, None).unwrap();
+    assert!(found);
 }
 
 const fn simple_range(start: usize, end: usize) -> Range {

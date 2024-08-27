@@ -7,15 +7,15 @@ use std::{
     str,
 };
 
-use ansi_term::Colour;
+use anstyle::{AnsiColor, Color, Style};
 use anyhow::{anyhow, Context, Result};
-use difference::{Changeset, Difference};
 use indoc::indoc;
 use lazy_static::lazy_static;
 use regex::{
     bytes::{Regex as ByteRegex, RegexBuilder as ByteRegexBuilder},
     Regex,
 };
+use similar::{ChangeTag, TextDiff};
 use tree_sitter::{format_sexp, Language, LogType, Parser, Query};
 use walkdir::WalkDir;
 
@@ -106,6 +106,7 @@ pub struct TestOptions<'a> {
     pub languages: BTreeMap<&'a str, &'a Language>,
     pub color: bool,
     pub test_num: usize,
+    pub show_fields: bool,
 }
 
 pub fn run_tests_at_path(parser: &mut Parser, opts: &mut TestOptions) -> Result<()> {
@@ -240,7 +241,7 @@ pub fn get_tmp_test_file(target_test: u32, color: bool) -> Result<(PathBuf, Vec<
 
     println!(
         "{target_test}. {}\n",
-        opt_color(color, Colour::Green, test_name)
+        paint(color.then_some(AnsiColor::Green), test_name)
     );
 
     Ok((test_path, languages))
@@ -270,49 +271,54 @@ pub fn check_queries_at_path(language: &Language, path: &Path) -> Result<()> {
 pub fn print_diff_key() {
     println!(
         "\ncorrect / {} / {}",
-        Colour::Green.paint("expected"),
-        Colour::Red.paint("unexpected")
+        paint(Some(AnsiColor::Green), "expected"),
+        paint(Some(AnsiColor::Red), "unexpected")
     );
 }
 
 pub fn print_diff(actual: &str, expected: &str, use_color: bool) {
-    let changeset = Changeset::new(actual, expected, "\n");
-    for diff in &changeset.diffs {
-        match diff {
-            Difference::Same(part) => {
+    let diff = TextDiff::from_lines(actual, expected);
+    for diff in diff.iter_all_changes() {
+        match diff.tag() {
+            ChangeTag::Equal => {
                 if use_color {
-                    print!("{part}{}", changeset.split);
+                    print!("{diff}");
                 } else {
-                    print!("correct:\n{part}{}", changeset.split);
+                    print!(" {diff}");
                 }
             }
-            Difference::Add(part) => {
+            ChangeTag::Insert => {
                 if use_color {
-                    print!("{}{}", Colour::Green.paint(part), changeset.split);
+                    print!("{}", paint(Some(AnsiColor::Green), diff.as_str().unwrap()));
                 } else {
-                    print!("expected:\n{part}{}", changeset.split);
+                    print!("+{diff}");
+                }
+                if diff.missing_newline() {
+                    println!();
                 }
             }
-            Difference::Rem(part) => {
+            ChangeTag::Delete => {
                 if use_color {
-                    print!("{}{}", Colour::Red.paint(part), changeset.split);
+                    print!("{}", paint(Some(AnsiColor::Red), diff.as_str().unwrap()));
                 } else {
-                    print!("unexpected:\n{part}{}", changeset.split);
+                    print!("-{diff}");
+                }
+                if diff.missing_newline() {
+                    println!();
                 }
             }
         }
     }
+
     println!();
 }
 
-pub fn opt_color(use_color: bool, color: ansi_term::Colour, text: &str) -> String {
-    if use_color {
-        color.paint(text).to_string()
-    } else {
-        text.to_string()
-    }
+pub fn paint(color: Option<AnsiColor>, text: &str) -> String {
+    let style = Style::new().fg_color(color.map(Color::Ansi));
+    format!("{style}{text}{style:#}")
 }
 
+/// This will return false if we want to "fail fast". It will bail and not parse any more tests.
 #[allow(clippy::too_many_arguments)]
 fn run_tests(
     parser: &mut Parser,
@@ -339,7 +345,7 @@ fn run_tests(
                 println!(
                     "{:>3}.  {}",
                     opts.test_num,
-                    opt_color(opts.color, Colour::Yellow, &name),
+                    paint(opts.color.then_some(AnsiColor::Yellow), &name),
                 );
                 return Ok(true);
             }
@@ -348,7 +354,7 @@ fn run_tests(
                 println!(
                     "{:>3}.  {}",
                     opts.test_num,
-                    opt_color(opts.color, Colour::Purple, &name)
+                    paint(opts.color.then_some(AnsiColor::Magenta), &name),
                 );
                 return Ok(true);
             }
@@ -368,13 +374,13 @@ fn run_tests(
                         println!(
                             "{:>3}.  {}",
                             opts.test_num,
-                            opt_color(opts.color, Colour::Green, &name)
+                            paint(opts.color.then_some(AnsiColor::Green), &name)
                         );
                     } else {
                         println!(
                             "{:>3}.  {}",
                             opts.test_num,
-                            opt_color(opts.color, Colour::Red, &name)
+                            paint(opts.color.then_some(AnsiColor::Red), &name)
                         );
                     }
 
@@ -383,7 +389,7 @@ fn run_tests(
                     }
                 } else {
                     let mut actual = tree.root_node().to_sexp();
-                    if !has_fields {
+                    if !(opts.show_fields || has_fields) {
                         actual = strip_sexp_fields(&actual);
                     }
 
@@ -391,7 +397,7 @@ fn run_tests(
                         println!(
                             "{:>3}. ✓ {}",
                             opts.test_num,
-                            opt_color(opts.color, Colour::Green, &name),
+                            paint(opts.color.then_some(AnsiColor::Green), &name)
                         );
                         if opts.update {
                             let input = String::from_utf8(input.clone()).unwrap();
@@ -437,28 +443,27 @@ fn run_tests(
                                 println!(
                                     "{:>3}. ✓ {}",
                                     opts.test_num,
-                                    opt_color(opts.color, Colour::Blue, &name)
+                                    paint(opts.color.then_some(AnsiColor::Blue), &name),
                                 );
                             }
                         } else {
                             println!(
                                 "{:>3}. ✗ {}",
                                 opts.test_num,
-                                opt_color(opts.color, Colour::Red, &name)
+                                paint(opts.color.then_some(AnsiColor::Red), &name),
                             );
                         }
                         failures.push((name.clone(), actual, output.clone()));
 
                         if attributes.fail_fast {
-                            // return value of false means to fail fast
                             return Ok(false);
                         }
-
-                        if i == attributes.languages.len() - 1 {
-                            // reset back to first language
-                            parser.set_language(opts.languages.values().next().unwrap())?;
-                        }
                     }
+                }
+
+                if i == attributes.languages.len() - 1 {
+                    // reset to the first language
+                    parser.set_language(opts.languages.values().next().unwrap())?;
                 }
             }
             opts.test_num += 1;

@@ -1,5 +1,9 @@
 #![doc = include_str!("../README.md")]
 
+#[cfg(any(feature = "tree-sitter-highlight", feature = "tree-sitter-tags"))]
+use std::ops::Range;
+#[cfg(feature = "tree-sitter-highlight")]
+use std::sync::Mutex;
 use std::{
     collections::HashMap,
     env,
@@ -7,22 +11,28 @@ use std::{
     fs,
     io::{BufRead, BufReader},
     mem,
-    ops::Range,
     path::{Path, PathBuf},
     process::Command,
-    sync::Mutex,
     time::SystemTime,
 };
 
-use anyhow::{anyhow, Context, Error, Result};
+#[cfg(any(feature = "tree-sitter-highlight", feature = "tree-sitter-tags"))]
+use anyhow::Error;
+use anyhow::{anyhow, Context, Result};
 use fs4::FileExt;
 use indoc::indoc;
 use libloading::{Library, Symbol};
 use once_cell::unsync::OnceCell;
 use regex::{Regex, RegexBuilder};
 use serde::{Deserialize, Deserializer, Serialize};
-use tree_sitter::{Language, QueryError, QueryErrorKind};
+use tree_sitter::Language;
+#[cfg(any(feature = "tree-sitter-highlight", feature = "tree-sitter-tags"))]
+use tree_sitter::QueryError;
+#[cfg(feature = "tree-sitter-highlight")]
+use tree_sitter::QueryErrorKind;
+#[cfg(feature = "tree-sitter-highlight")]
 use tree_sitter_highlight::HighlightConfiguration;
+#[cfg(feature = "tree-sitter-tags")]
 use tree_sitter_tags::{Error as TagsError, TagsConfiguration};
 
 pub const EMSCRIPTEN_TAG: &str = concat!("docker.io/emscripten/emsdk:", env!("EMSCRIPTEN_VERSION"));
@@ -98,9 +108,13 @@ pub struct LanguageConfiguration<'a> {
     pub tags_filenames: Option<Vec<String>>,
     pub language_name: String,
     language_id: usize,
+    #[cfg(feature = "tree-sitter-highlight")]
     highlight_config: OnceCell<Option<HighlightConfiguration>>,
+    #[cfg(feature = "tree-sitter-tags")]
     tags_config: OnceCell<Option<TagsConfiguration>>,
+    #[cfg(feature = "tree-sitter-highlight")]
     highlight_names: &'a Mutex<Vec<String>>,
+    #[cfg(feature = "tree-sitter-highlight")]
     use_all_highlight_names: bool,
 }
 
@@ -111,9 +125,12 @@ pub struct Loader {
     language_configuration_ids_by_file_type: HashMap<String, Vec<usize>>,
     language_configuration_in_current_path: Option<usize>,
     language_configuration_ids_by_first_line_regex: HashMap<String, Vec<usize>>,
+    #[cfg(feature = "tree-sitter-highlight")]
     highlight_names: Box<Mutex<Vec<String>>>,
+    #[cfg(feature = "tree-sitter-highlight")]
     use_all_highlight_names: bool,
     debug_build: bool,
+    sanitize_build: bool,
 
     #[cfg(feature = "wasm")]
     wasm_store: Mutex<Option<tree_sitter::WasmStore>>,
@@ -127,6 +144,7 @@ pub struct CompileConfig<'a> {
     pub external_files: Option<&'a [PathBuf]>,
     pub output_path: Option<PathBuf>,
     pub flags: &'a [&'a str],
+    pub sanitize: bool,
     pub name: String,
 }
 
@@ -145,6 +163,7 @@ impl<'a> CompileConfig<'a> {
             external_files: externals,
             output_path,
             flags: &[],
+            sanitize: false,
             name: String::new(),
         }
     }
@@ -174,15 +193,19 @@ impl Loader {
             language_configuration_ids_by_file_type: HashMap::new(),
             language_configuration_in_current_path: None,
             language_configuration_ids_by_first_line_regex: HashMap::new(),
+            #[cfg(feature = "tree-sitter-highlight")]
             highlight_names: Box::new(Mutex::new(Vec::new())),
+            #[cfg(feature = "tree-sitter-highlight")]
             use_all_highlight_names: true,
             debug_build: false,
+            sanitize_build: false,
 
             #[cfg(feature = "wasm")]
             wasm_store: Mutex::default(),
         }
     }
 
+    #[cfg(feature = "tree-sitter-highlight")]
     pub fn configure_highlights(&mut self, names: &[String]) {
         self.use_all_highlight_names = false;
         let mut highlights = self.highlight_names.lock().unwrap();
@@ -191,6 +214,7 @@ impl Loader {
     }
 
     #[must_use]
+    #[cfg(feature = "tree-sitter-highlight")]
     pub fn highlight_names(&self) -> Vec<String> {
         self.highlight_names.lock().unwrap().clone()
     }
@@ -411,10 +435,19 @@ impl Loader {
         struct GrammarJSON {
             name: String,
         }
-        let mut grammar_file =
-            fs::File::open(grammar_path).with_context(|| "Failed to read grammar.json")?;
+        let mut grammar_file = fs::File::open(&grammar_path).with_context(|| {
+            format!(
+                "Failed to read grammar.json file at the following path:\n{:?}",
+                &grammar_path
+            )
+        })?;
         let grammar_json: GrammarJSON = serde_json::from_reader(BufReader::new(&mut grammar_file))
-            .with_context(|| "Failed to parse grammar.json")?;
+            .with_context(|| {
+                format!(
+                    "Failed to parse grammar.json file at the following path:\n{:?}",
+                    &grammar_path
+                )
+            })?;
 
         config.name = grammar_json.name;
 
@@ -429,6 +462,11 @@ impl Loader {
         );
         if self.debug_build {
             lib_name.push_str(".debug._");
+        }
+
+        if self.sanitize_build {
+            lib_name.push_str(".sanitize._");
+            config.sanitize = true;
         }
 
         if config.output_path.is_none() {
@@ -569,6 +607,7 @@ impl Loader {
             .cargo_warnings(false)
             .target(BUILD_TARGET)
             .host(BUILD_HOST)
+            .debug(self.debug_build)
             .file(&config.parser_path)
             .includes(&config.header_paths);
 
@@ -608,7 +647,7 @@ impl Loader {
             command.args(cc_config.get_files());
             command.arg("-link").arg(out);
         } else {
-            command.args(["-Werror=implicit-function-declaration", "-g"]);
+            command.arg("-Werror=implicit-function-declaration");
             if cfg!(any(target_os = "macos", target_os = "ios")) {
                 command.arg("-dynamiclib");
                 // TODO: remove when supported
@@ -870,6 +909,7 @@ impl Loader {
     }
 
     #[must_use]
+    #[cfg(feature = "tree-sitter-highlight")]
     pub fn highlight_config_for_injection_string<'a>(
         &'a self,
         string: &str,
@@ -1022,9 +1062,13 @@ impl Loader {
                         locals_filenames: config_json.locals.into_vec(),
                         tags_filenames: config_json.tags.into_vec(),
                         highlights_filenames: config_json.highlights.into_vec(),
+                        #[cfg(feature = "tree-sitter-highlight")]
                         highlight_config: OnceCell::new(),
+                        #[cfg(feature = "tree-sitter-tags")]
                         tags_config: OnceCell::new(),
+                        #[cfg(feature = "tree-sitter-highlight")]
                         highlight_names: &self.highlight_names,
+                        #[cfg(feature = "tree-sitter-highlight")]
                         use_all_highlight_names: self.use_all_highlight_names,
                     };
 
@@ -1079,9 +1123,13 @@ impl Loader {
                 locals_filenames: None,
                 highlights_filenames: None,
                 tags_filenames: None,
+                #[cfg(feature = "tree-sitter-highlight")]
                 highlight_config: OnceCell::new(),
+                #[cfg(feature = "tree-sitter-tags")]
                 tags_config: OnceCell::new(),
+                #[cfg(feature = "tree-sitter-highlight")]
                 highlight_names: &self.highlight_names,
+                #[cfg(feature = "tree-sitter-highlight")]
                 use_all_highlight_names: self.use_all_highlight_names,
             };
             self.language_configurations.push(unsafe {
@@ -1141,12 +1189,16 @@ impl Loader {
         }
     }
 
-    pub fn use_debug_build(&mut self, flag: bool) {
+    pub fn debug_build(&mut self, flag: bool) {
         self.debug_build = flag;
     }
 
+    pub fn sanitize_build(&mut self, flag: bool) {
+        self.sanitize_build = flag;
+    }
+
     #[cfg(feature = "wasm")]
-    pub fn use_wasm(&mut self, engine: tree_sitter::wasmtime::Engine) {
+    pub fn use_wasm(&mut self, engine: &tree_sitter::wasmtime::Engine) {
         *self.wasm_store.lock().unwrap() = Some(tree_sitter::WasmStore::new(engine).unwrap());
     }
 
@@ -1164,6 +1216,7 @@ impl Loader {
 }
 
 impl<'a> LanguageConfiguration<'a> {
+    #[cfg(feature = "tree-sitter-highlight")]
     pub fn highlight_config(
         &self,
         language: Language,
@@ -1174,14 +1227,14 @@ impl<'a> LanguageConfiguration<'a> {
                 Some(
                     paths
                         .iter()
-                        .filter(|p| p.ends_with("highlights.scm"))
+                        .filter(|p| p.ends_with("tree-sitter-highlights.scm"))
                         .cloned()
                         .collect::<Vec<_>>(),
                 ),
                 Some(
                     paths
                         .iter()
-                        .filter(|p| p.ends_with("tags.scm"))
+                        .filter(|p| p.ends_with("tree-sitter-tags.scm"))
                         .cloned()
                         .collect::<Vec<_>>(),
                 ),
@@ -1203,7 +1256,7 @@ impl<'a> LanguageConfiguration<'a> {
                     } else {
                         self.highlights_filenames.as_deref()
                     },
-                    "highlights.scm",
+                    "tree-sitter-highlights.scm",
                 )?;
                 let (injections_query, injection_ranges) = self.read_queries(
                     if injections_filenames.is_some() {
@@ -1275,11 +1328,12 @@ impl<'a> LanguageConfiguration<'a> {
             .map(Option::as_ref)
     }
 
+    #[cfg(feature = "tree-sitter-tags")]
     pub fn tags_config(&self, language: Language) -> Result<Option<&TagsConfiguration>> {
         self.tags_config
             .get_or_try_init(|| {
                 let (tags_query, tags_ranges) =
-                    self.read_queries(self.tags_filenames.as_deref(), "tags.scm")?;
+                    self.read_queries(self.tags_filenames.as_deref(), "tree-sitter-tags.scm")?;
                 let (locals_query, locals_ranges) =
                     self.read_queries(self.locals_filenames.as_deref(), "locals.scm")?;
                 if tags_query.is_empty() {
@@ -1313,6 +1367,7 @@ impl<'a> LanguageConfiguration<'a> {
             .map(Option::as_ref)
     }
 
+    #[cfg(any(feature = "tree-sitter-highlight", feature = "tree-sitter-tags"))]
     fn include_path_in_query_error(
         mut error: QueryError,
         ranges: &[(String, Range<usize>)],
@@ -1326,12 +1381,13 @@ impl<'a> LanguageConfiguration<'a> {
             .unwrap_or_else(|| ranges.last().unwrap());
         error.offset = offset_within_section - range.start;
         error.row = source[range.start..offset_within_section]
-            .matches(|c| c == '\n')
+            .matches('\n')
             .count();
         Error::from(error).context(format!("Error in query file {path:?}"))
     }
 
     #[allow(clippy::type_complexity)]
+    #[cfg(any(feature = "tree-sitter-highlight", feature = "tree-sitter-tags"))]
     fn read_queries(
         &self,
         paths: Option<&[String]>,
@@ -1349,7 +1405,9 @@ impl<'a> LanguageConfiguration<'a> {
             }
         } else {
             // highlights.scm is needed to test highlights, and tags.scm to test tags
-            if default_path == "highlights.scm" || default_path == "tags.scm" {
+            if default_path == "tree-sitter-highlights.scm"
+                || default_path == "tree-sitter-tags.scm"
+            {
                 eprintln!(
                     indoc! {"
                         Warning: you should add a `{}` entry pointing to the highlights path in `tree-sitter` language list in the grammar's package.json
