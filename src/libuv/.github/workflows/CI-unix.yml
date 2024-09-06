@@ -17,7 +17,7 @@ jobs:
   build-linux:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: configure
         run: |
           ./autogen.sh
@@ -30,8 +30,13 @@ jobs:
   build-android:
     runs-on: ubuntu-latest
     container: reactnativecommunity/react-native-android:2020-5-20
+    # Work around an issue where the node from actions/checkout is too new
+    # to run inside the long-in-the-tooth react-nactive-android container
+    # image.
+    env:
+      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - name: Envinfo
         run: npx envinfo
       - name: Configure android arm64
@@ -46,9 +51,9 @@ jobs:
           ls -lh build
 
   build-macos:
-    runs-on: macos-11
+    runs-on: macos-12
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - name: Envinfo
         run: npx envinfo
       - name: Setup
@@ -81,9 +86,9 @@ jobs:
           make -C build-auto -j4
 
   build-ios:
-    runs-on: macos-11
+    runs-on: macos-12
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - name: Configure
         run: |
           mkdir build-ios
@@ -120,7 +125,7 @@ jobs:
           - {target: ppc64 (u64 slots),   toolchain: gcc-powerpc64-linux-gnu,   cc: powerpc64-linux-gnu-gcc,    qemu: qemu-ppc64-static}
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - name: Install QEMU
         # this ensure install latest qemu on ubuntu, apt get version is old
         env:
