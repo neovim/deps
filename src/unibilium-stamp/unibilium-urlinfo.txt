@@ -6,7 +6,7 @@ method=url
 command=/usr/local/bin/cmake;-DCMAKE_MESSAGE_LOG_LEVEL=VERBOSE;-P;/home/runner/work/deps/deps/neovim/deps/build/src/unibilium-stamp/download-unibilium.cmake;COMMAND;/usr/local/bin/cmake;-DCMAKE_MESSAGE_LOG_LEVEL=VERBOSE;-P;/home/runner/work/deps/deps/neovim/deps/build/src/unibilium-stamp/verify-unibilium.cmake;COMMAND;/usr/local/bin/cmake;-DCMAKE_MESSAGE_LOG_LEVEL=VERBOSE;-P;/home/runner/work/deps/deps/neovim/deps/build/src/unibilium-stamp/extract-unibilium.cmake
 source_dir=/home/runner/work/deps/deps/neovim/deps/build/src/unibilium
 work_dir=/home/runner/work/deps/deps/neovim/deps/build/src
-url(s)=https://github.com/neovim/unibilium/archive/d72c3598e7ac5d1ebf86ee268b8b4ed95c0fa628.tar.gz
-hash=SHA256=9c4747c862ab5e3076dcf8fa8f0ea7a6b50f20ec5905618b9536655596797487
+url(s)=https://github.com/neovim/unibilium/archive/ab28a2ddb86a144194a798bcf1fef1ab4f981ab7.tar.gz
+hash=SHA256=7c0386fc48452632868e0dcb8e7ed140d67a3da79e39ceee54c1ba7a495ad625
       no_extract=
 

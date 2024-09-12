@@ -107,7 +107,7 @@ foreach(i RANGE ${retry_number})
   if(status_code IN_LIST download_retry_codes)
     sleep_before_download(${i})
   endif()
-  foreach(url IN ITEMS [====[https://github.com/MDeiml/tree-sitter-markdown/archive/v0.2.3.tar.gz]====])
+  foreach(url IN ITEMS [====[https://github.com/tree-sitter-grammars/tree-sitter-markdown/archive/v0.2.3.tar.gz]====])
     if(NOT url IN_LIST skip_url_list)
       message(VERBOSE "Using src='${url}'")
 
