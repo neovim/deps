@@ -4,15 +4,11 @@
 
 /// <reference types="tree-sitter-cli/dsl" />
 
-const common = require('../common/grammar.js');
+const common = require('../common/common');
 
 const PRECEDENCE_LEVEL_LINK = common.PRECEDENCE_LEVEL_LINK;
 
 const PUNCTUATION_CHARACTERS_REGEX = '!-/:-@\\[-`\\{-~';
-const PUNCTUATION_CHARACTERS_ARRAY = [
-    '!', '"', '#', '$', '%', '&', "'", '(', ')', '*', '+', ',', '-', '.', '/', ':', ';', '<',
-    '=', '>', '?', '@', '[', '\\', ']', '^', '_', '`', '{', '|', '}', '~'
-];
 
 module.exports = grammar({
     name: 'markdown',
@@ -28,7 +24,7 @@ module.exports = grammar({
         ),
 
         ...common.rules,
-        _last_token_punctuation: $ => choice(), // needed for compatability wiht common rules
+        _last_token_punctuation: $ => choice(), // needed for compatability with common rules
 
         // BLOCK STRUCTURE
 
