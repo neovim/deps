@@ -22,16 +22,16 @@ function(check_file_hash has_hash hash_is_good)
   set("${has_hash}" TRUE PARENT_SCOPE)
 
   message(VERBOSE "verifying file...
-       file='/home/runner/work/deps/deps/neovim/deps/build/downloads/libuv/0a00e80c3686b93eccb9a801954e86bd7d7fe6ab.tar.gz'")
+       file='/home/runner/work/deps/deps/neovim/deps/build/downloads/libuv/v1.49.0.tar.gz'")
 
-  file("SHA256" "/home/runner/work/deps/deps/neovim/deps/build/downloads/libuv/0a00e80c3686b93eccb9a801954e86bd7d7fe6ab.tar.gz" actual_value)
+  file("SHA256" "/home/runner/work/deps/deps/neovim/deps/build/downloads/libuv/v1.49.0.tar.gz" actual_value)
 
-  if(NOT "${actual_value}" STREQUAL "8d240ad56f779ebca94a249b2a2c71725d89182e732cf53c1f6d85098cc9bcb3")
+  if(NOT "${actual_value}" STREQUAL "a10656a0865e2cff7a1b523fa47d0f5a9c65be963157301f814d1cc5dbd4dc1d")
     set("${hash_is_good}" FALSE PARENT_SCOPE)
     message(VERBOSE "SHA256 hash of
-    /home/runner/work/deps/deps/neovim/deps/build/downloads/libuv/0a00e80c3686b93eccb9a801954e86bd7d7fe6ab.tar.gz
+    /home/runner/work/deps/deps/neovim/deps/build/downloads/libuv/v1.49.0.tar.gz
   does not match expected value
-    expected: '8d240ad56f779ebca94a249b2a2c71725d89182e732cf53c1f6d85098cc9bcb3'
+    expected: 'a10656a0865e2cff7a1b523fa47d0f5a9c65be963157301f814d1cc5dbd4dc1d'
       actual: '${actual_value}'")
   else()
     set("${hash_is_good}" TRUE PARENT_SCOPE)
@@ -71,32 +71,32 @@ function(sleep_before_download attempt)
   execute_process(COMMAND "${CMAKE_COMMAND}" -E sleep "${sleep_seconds}")
 endfunction()
 
-if(EXISTS "/home/runner/work/deps/deps/neovim/deps/build/downloads/libuv/0a00e80c3686b93eccb9a801954e86bd7d7fe6ab.tar.gz")
+if(EXISTS "/home/runner/work/deps/deps/neovim/deps/build/downloads/libuv/v1.49.0.tar.gz")
   check_file_hash(has_hash hash_is_good)
   if(has_hash)
     if(hash_is_good)
       message(VERBOSE "File already exists and hash match (skip download):
-  file='/home/runner/work/deps/deps/neovim/deps/build/downloads/libuv/0a00e80c3686b93eccb9a801954e86bd7d7fe6ab.tar.gz'
-  SHA256='8d240ad56f779ebca94a249b2a2c71725d89182e732cf53c1f6d85098cc9bcb3'"
+  file='/home/runner/work/deps/deps/neovim/deps/build/downloads/libuv/v1.49.0.tar.gz'
+  SHA256='a10656a0865e2cff7a1b523fa47d0f5a9c65be963157301f814d1cc5dbd4dc1d'"
       )
       return()
     else()
       message(VERBOSE "File already exists but hash mismatch. Removing...")
-      file(REMOVE "/home/runner/work/deps/deps/neovim/deps/build/downloads/libuv/0a00e80c3686b93eccb9a801954e86bd7d7fe6ab.tar.gz")
+      file(REMOVE "/home/runner/work/deps/deps/neovim/deps/build/downloads/libuv/v1.49.0.tar.gz")
     endif()
   else()
     message(VERBOSE "File already exists but no hash specified (use URL_HASH):
-  file='/home/runner/work/deps/deps/neovim/deps/build/downloads/libuv/0a00e80c3686b93eccb9a801954e86bd7d7fe6ab.tar.gz'
+  file='/home/runner/work/deps/deps/neovim/deps/build/downloads/libuv/v1.49.0.tar.gz'
 Old file will be removed and new file downloaded from URL."
     )
-    file(REMOVE "/home/runner/work/deps/deps/neovim/deps/build/downloads/libuv/0a00e80c3686b93eccb9a801954e86bd7d7fe6ab.tar.gz")
+    file(REMOVE "/home/runner/work/deps/deps/neovim/deps/build/downloads/libuv/v1.49.0.tar.gz")
   endif()
 endif()
 
 set(retry_number 5)
 
 message(VERBOSE "Downloading...
-   dst='/home/runner/work/deps/deps/neovim/deps/build/downloads/libuv/0a00e80c3686b93eccb9a801954e86bd7d7fe6ab.tar.gz'
+   dst='/home/runner/work/deps/deps/neovim/deps/build/downloads/libuv/v1.49.0.tar.gz'
    timeout='none'
    inactivity timeout='none'"
 )
@@ -107,7 +107,7 @@ foreach(i RANGE ${retry_number})
   if(status_code IN_LIST download_retry_codes)
     sleep_before_download(${i})
   endif()
-  foreach(url IN ITEMS [====[https://github.com/libuv/libuv/archive/0a00e80c3686b93eccb9a801954e86bd7d7fe6ab.tar.gz]====])
+  foreach(url IN ITEMS [====[https://github.com/libuv/libuv/archive/v1.49.0.tar.gz]====])
     if(NOT url IN_LIST skip_url_list)
       message(VERBOSE "Using src='${url}'")
 
@@ -119,7 +119,7 @@ foreach(i RANGE ${retry_number})
 
       file(
         DOWNLOAD
-        "${url}" "/home/runner/work/deps/deps/neovim/deps/build/downloads/libuv/0a00e80c3686b93eccb9a801954e86bd7d7fe6ab.tar.gz"
+        "${url}" "/home/runner/work/deps/deps/neovim/deps/build/downloads/libuv/v1.49.0.tar.gz"
         
         # no TIMEOUT
         # no INACTIVITY_TIMEOUT
@@ -136,7 +136,7 @@ foreach(i RANGE ${retry_number})
         check_file_hash(has_hash hash_is_good)
         if(has_hash AND NOT hash_is_good)
           message(VERBOSE "Hash mismatch, removing...")
-          file(REMOVE "/home/runner/work/deps/deps/neovim/deps/build/downloads/libuv/0a00e80c3686b93eccb9a801954e86bd7d7fe6ab.tar.gz")
+          file(REMOVE "/home/runner/work/deps/deps/neovim/deps/build/downloads/libuv/v1.49.0.tar.gz")
         else()
           message(VERBOSE "Downloading... done")
           return()
