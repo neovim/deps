@@ -375,9 +375,13 @@ static inline TSNode ts_node__descendant_for_byte_range(
       uint32_t node_end = iterator.position.bytes;
 
       // The end of this node must extend far enough forward to touch
-      // the end of the range and exceed the start of the range.
+      // the end of the range
       if (node_end < range_end) continue;
-      if (node_end <= range_start) continue;
+
+      // ...and exceed the start of the range, unless the node itself is
+      // empty, in which case it must at least be equal to the start of the range.
+      bool is_empty = ts_node_start_byte(child) == node_end;
+      if (is_empty ? node_end < range_start : node_end <= range_start) continue;
 
       // The start of this node must extend far enough backward to
       // touch the start of the range.
@@ -414,9 +418,15 @@ static inline TSNode ts_node__descendant_for_point_range(
       TSPoint node_end = iterator.position.extent;
 
       // The end of this node must extend far enough forward to touch
-      // the end of the range and exceed the start of the range.
+      // the end of the range
       if (point_lt(node_end, range_end)) continue;
-      if (point_lte(node_end, range_start)) continue;
+
+      // ...and exceed the start of the range, unless the node itself is
+      // empty, in which case it must at least be equal to the start of the range.
+      bool is_empty =  point_eq(ts_node_start_point(child), node_end);
+      if (is_empty ? point_lt(node_end, range_start) : point_lte(node_end, range_start)) {
+        continue;
+      }
 
       // The start of this node must extend far enough backward to
       // touch the start of the range.
@@ -547,9 +557,9 @@ TSNode ts_node_parent(TSNode self) {
   return node;
 }
 
-TSNode ts_node_child_containing_descendant(TSNode self, TSNode subnode) {
-  uint32_t start_byte = ts_node_start_byte(subnode);
-  uint32_t end_byte = ts_node_end_byte(subnode);
+TSNode ts_node_child_containing_descendant(TSNode self, TSNode descendant) {
+  uint32_t start_byte = ts_node_start_byte(descendant);
+  uint32_t end_byte = ts_node_end_byte(descendant);
 
   do {
     NodeChildIterator iter = ts_node_iterate_children(&self);
@@ -557,7 +567,7 @@ TSNode ts_node_child_containing_descendant(TSNode self, TSNode subnode) {
       if (
         !ts_node_child_iterator_next(&iter, &self)
         || ts_node_start_byte(self) > start_byte
-        || self.id == subnode.id
+        || self.id == descendant.id
       ) {
         return ts_node__null();
       }
@@ -568,14 +578,54 @@ TSNode ts_node_child_containing_descendant(TSNode self, TSNode subnode) {
       TSNode old = self;
       // While the next sibling is a zero-width token
       while (ts_node_child_iterator_next_sibling_is_empty_adjacent(&iter, self)) {
-        TSNode current_node = ts_node_child_containing_descendant(self, subnode);
+        TSNode current_node = ts_node_child_containing_descendant(self, descendant);
         // If the target child is in self, return it
         if (!ts_node_is_null(current_node)) {
           return current_node;
         }
         ts_node_child_iterator_next(&iter, &self);
-        if (self.id == subnode.id) {
+        if (self.id == descendant.id) {
           return ts_node__null();
+        }
+      }
+      self = old;
+    } while (iter.position.bytes < end_byte || ts_node_child_count(self) == 0);
+  } while (!ts_node__is_relevant(self, true));
+
+  return self;
+}
+
+TSNode ts_node_child_with_descendant(TSNode self, TSNode descendant) {
+  uint32_t start_byte = ts_node_start_byte(descendant);
+  uint32_t end_byte = ts_node_end_byte(descendant);
+
+  do {
+    NodeChildIterator iter = ts_node_iterate_children(&self);
+    do {
+      if (
+        !ts_node_child_iterator_next(&iter, &self)
+        || ts_node_start_byte(self) > start_byte
+      ) {
+        return ts_node__null();
+      }
+      if (self.id == descendant.id) {
+        return self;
+      }
+
+      // Here we check the current self node and *all* of its zero-width token siblings that follow.
+      // If any of these nodes contain the target subnode, we return that node. Otherwise, we restore the node we started at
+      // for the loop condition, and that will continue with the next *non-zero-width* sibling.
+      TSNode old = self;
+      // While the next sibling is a zero-width token
+      while (ts_node_child_iterator_next_sibling_is_empty_adjacent(&iter, self)) {
+        TSNode current_node = ts_node_child_with_descendant(self, descendant);
+        // If the target child is in self, return it
+        if (!ts_node_is_null(current_node)) {
+          return current_node;
+        }
+        ts_node_child_iterator_next(&iter, &self);
+        if (self.id == descendant.id) {
+          return self;
         }
       }
       self = old;

@@ -1,14 +1,12 @@
 use tree_sitter::{Node, Parser, Point, Tree};
+use tree_sitter_generate::{generate_parser_for_grammar, load_grammar_file};
 
 use super::{
     get_random_edit,
     helpers::fixtures::{fixtures_dir, get_language, get_test_language},
     Rand,
 };
-use crate::{
-    generate::{generate_parser_for_grammar, load_grammar_file},
-    parse::perform_edit,
-};
+use crate::parse::perform_edit;
 
 const JSON_EXAMPLE: &str = r#"
 
@@ -171,20 +169,22 @@ fn test_node_child() {
     assert_eq!(tree.root_node().parent(), None);
 
     assert_eq!(
-        tree.root_node()
-            .child_containing_descendant(null_node)
-            .unwrap(),
+        tree.root_node().child_with_descendant(null_node).unwrap(),
         array_node
     );
     assert_eq!(
-        array_node.child_containing_descendant(null_node).unwrap(),
+        array_node.child_with_descendant(null_node).unwrap(),
         object_node
     );
     assert_eq!(
-        object_node.child_containing_descendant(null_node).unwrap(),
+        object_node.child_with_descendant(null_node).unwrap(),
         pair_node
     );
-    assert_eq!(pair_node.child_containing_descendant(null_node), None);
+    assert_eq!(
+        pair_node.child_with_descendant(null_node).unwrap(),
+        null_node
+    );
+    assert_eq!(null_node.child_with_descendant(null_node), None);
 }
 
 #[test]
@@ -286,10 +286,14 @@ fn test_parent_of_zero_width_node() {
     assert_eq!(block_parent.to_string(), "(function_definition name: (identifier) parameters: (parameters (identifier)) body: (block))");
 
     assert_eq!(
-        root.child_containing_descendant(block).unwrap(),
+        root.child_with_descendant(block).unwrap(),
         function_definition
     );
-    assert_eq!(function_definition.child_containing_descendant(block), None);
+    assert_eq!(
+        function_definition.child_with_descendant(block).unwrap(),
+        block
+    );
+    assert_eq!(block.child_with_descendant(block), None);
 
     let code = "<script></script>";
     parser.set_language(&get_language("html")).unwrap();
@@ -469,20 +473,22 @@ fn test_node_named_child() {
     assert_eq!(tree.root_node().parent(), None);
 
     assert_eq!(
-        tree.root_node()
-            .child_containing_descendant(null_node)
-            .unwrap(),
+        tree.root_node().child_with_descendant(null_node).unwrap(),
         array_node
     );
     assert_eq!(
-        array_node.child_containing_descendant(null_node).unwrap(),
+        array_node.child_with_descendant(null_node).unwrap(),
         object_node
     );
     assert_eq!(
-        object_node.child_containing_descendant(null_node).unwrap(),
+        object_node.child_with_descendant(null_node).unwrap(),
         pair_node
     );
-    assert_eq!(pair_node.child_containing_descendant(null_node), None);
+    assert_eq!(
+        pair_node.child_with_descendant(null_node).unwrap(),
+        null_node
+    );
+    assert_eq!(null_node.child_with_descendant(null_node), None);
 }
 
 #[test]
@@ -658,6 +664,26 @@ fn test_node_descendant_for_range() {
     assert_eq!(pair_node.end_byte(), string_index + 9);
     assert_eq!(pair_node.start_position(), Point::new(6, 4));
     assert_eq!(pair_node.end_position(), Point::new(6, 13));
+
+    // Zero-width token
+    {
+        let code = "<script></script>";
+        let mut parser = Parser::new();
+        parser.set_language(&get_language("html")).unwrap();
+
+        let tree = parser.parse(code, None).unwrap();
+        let root = tree.root_node();
+
+        let child = root
+            .named_descendant_for_point_range(Point::new(0, 8), Point::new(0, 8))
+            .unwrap();
+        assert_eq!(child.kind(), "raw_text");
+
+        let child2 = root.named_descendant_for_byte_range(8, 8).unwrap();
+        assert_eq!(child2.kind(), "raw_text");
+
+        assert_eq!(child, child2);
+    }
 }
 
 #[test]

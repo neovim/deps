@@ -27,6 +27,7 @@ use std::os::fd::AsRawFd;
 #[cfg(all(windows, feature = "std"))]
 use std::os::windows::io::AsRawHandle;
 
+use streaming_iterator::{StreamingIterator, StreamingIteratorMut};
 use tree_sitter_language::LanguageFn;
 
 #[cfg(feature = "wasm")]
@@ -50,7 +51,6 @@ pub const LANGUAGE_VERSION: usize = ffi::TREE_SITTER_LANGUAGE_VERSION as usize;
 pub const MIN_COMPATIBLE_LANGUAGE_VERSION: usize =
     ffi::TREE_SITTER_MIN_COMPATIBLE_LANGUAGE_VERSION as usize;
 
-pub const ARRAY_HEADER: &str = include_str!("../src/array.h");
 pub const PARSER_HEADER: &str = include_str!("../src/parser.h");
 
 /// An opaque object that defines how to parse a particular language. The code
@@ -202,23 +202,25 @@ pub struct QueryMatch<'cursor, 'tree> {
 }
 
 /// A sequence of [`QueryMatch`]es associated with a given [`QueryCursor`].
-pub struct QueryMatches<'query, 'cursor, T: TextProvider<I>, I: AsRef<[u8]>> {
+pub struct QueryMatches<'query, 'tree: 'query, T: TextProvider<I>, I: AsRef<[u8]>> {
     ptr: *mut ffi::TSQueryCursor,
     query: &'query Query,
     text_provider: T,
     buffer1: Vec<u8>,
     buffer2: Vec<u8>,
-    _phantom: PhantomData<(&'cursor (), I)>,
+    current_match: Option<QueryMatch<'query, 'tree>>,
+    _phantom: PhantomData<(&'tree (), I)>,
 }
 
 /// A sequence of [`QueryCapture`]s associated with a given [`QueryCursor`].
-pub struct QueryCaptures<'query, 'cursor, T: TextProvider<I>, I: AsRef<[u8]>> {
+pub struct QueryCaptures<'query, 'tree: 'query, T: TextProvider<I>, I: AsRef<[u8]>> {
     ptr: *mut ffi::TSQueryCursor,
     query: &'query Query,
     text_provider: T,
     buffer1: Vec<u8>,
     buffer2: Vec<u8>,
-    _phantom: PhantomData<(&'cursor (), I)>,
+    current_match: Option<(QueryMatch<'query, 'tree>, usize)>,
+    _phantom: PhantomData<(&'tree (), I)>,
 }
 
 pub trait TextProvider<I>
@@ -549,13 +551,14 @@ impl Parser {
     /// want to pipe these graphs directly to a `dot(1)` process in order to
     /// generate SVG output.
     #[doc(alias = "ts_parser_print_dot_graphs")]
+    #[cfg(not(target_os = "wasi"))]
     #[cfg(feature = "std")]
     pub fn print_dot_graphs(
         &mut self,
-        #[cfg(any(unix, target_os = "wasi"))] file: &impl AsRawFd,
+        #[cfg(unix)] file: &impl AsRawFd,
         #[cfg(windows)] file: &impl AsRawHandle,
     ) {
-        #[cfg(any(unix, target_os = "wasi"))]
+        #[cfg(unix)]
         {
             let fd = file.as_raw_fd();
             unsafe {
@@ -947,13 +950,14 @@ impl Tree {
     /// graph directly to a `dot(1)` process in order to generate SVG
     /// output.
     #[doc(alias = "ts_tree_print_dot_graph")]
+    #[cfg(not(target_os = "wasi"))]
     #[cfg(feature = "std")]
     pub fn print_dot_graph(
         &self,
-        #[cfg(any(unix, target_os = "wasi"))] file: &impl AsRawFd,
+        #[cfg(unix)] file: &impl AsRawFd,
         #[cfg(windows)] file: &impl AsRawHandle,
     ) {
-        #[cfg(any(unix, target_os = "wasi"))]
+        #[cfg(unix)]
         {
             let fd = file.as_raw_fd();
             unsafe { ffi::ts_tree_print_dot_graph(self.0.as_ptr(), fd) }
@@ -1355,11 +1359,24 @@ impl<'tree> Node<'tree> {
         Self::new(unsafe { ffi::ts_node_parent(self.0) })
     }
 
-    /// Get this node's child that contains `descendant`.
+    /// Get this node's child containing `descendant`. This will not return
+    /// the descendant if it is a direct child of `self`, for that use
+    /// [`Node::child_contains_descendant`].
     #[doc(alias = "ts_node_child_containing_descendant")]
     #[must_use]
+    #[deprecated(since = "0.24.0", note = "Prefer child_with_descendant instead")]
     pub fn child_containing_descendant(&self, descendant: Self) -> Option<Self> {
         Self::new(unsafe { ffi::ts_node_child_containing_descendant(self.0, descendant.0) })
+    }
+
+    /// Get the node that contains `descendant`.
+    ///
+    /// Note that this can return `descendant` itself, unlike the deprecated function
+    /// [`Node::child_containing_descendant`].
+    #[doc(alias = "ts_node_child_with_descendant")]
+    #[must_use]
+    pub fn child_with_descendant(&self, descendant: Self) -> Option<Self> {
+        Self::new(unsafe { ffi::ts_node_child_with_descendant(self.0, descendant.0) })
     }
 
     /// Get this node's next sibling.
@@ -2434,6 +2451,7 @@ impl QueryCursor {
             text_provider,
             buffer1: Vec::default(),
             buffer2: Vec::default(),
+            current_match: None,
             _phantom: PhantomData,
         }
     }
@@ -2458,6 +2476,7 @@ impl QueryCursor {
             text_provider,
             buffer1: Vec::default(),
             buffer2: Vec::default(),
+            current_match: None,
             _phantom: PhantomData,
         }
     }
@@ -2523,7 +2542,7 @@ impl<'tree> QueryMatch<'_, 'tree> {
     }
 
     #[doc(alias = "ts_query_cursor_remove_match")]
-    pub fn remove(self) {
+    pub fn remove(&self) {
         unsafe { ffi::ts_query_cursor_remove_match(self.cursor, self.id) }
     }
 
@@ -2552,7 +2571,7 @@ impl<'tree> QueryMatch<'_, 'tree> {
         }
     }
 
-    fn satisfies_text_predicates<I: AsRef<[u8]>>(
+    pub fn satisfies_text_predicates<I: AsRef<[u8]>>(
         &self,
         query: &Query,
         buffer1: &mut Vec<u8>,
@@ -2670,13 +2689,16 @@ impl QueryProperty {
     }
 }
 
-impl<'query, 'tree: 'query, T: TextProvider<I>, I: AsRef<[u8]>> Iterator
+/// Provide StreamingIterator instead of traditional one as the underlying object in the C library
+/// gets updated on each iteration. Created copies would have their internal state overwritten,
+/// leading to Undefined Behavior
+impl<'query, 'tree: 'query, T: TextProvider<I>, I: AsRef<[u8]>> StreamingIterator
     for QueryMatches<'query, 'tree, T, I>
 {
     type Item = QueryMatch<'query, 'tree>;
 
-    fn next(&mut self) -> Option<Self::Item> {
-        unsafe {
+    fn advance(&mut self) {
+        self.current_match = unsafe {
             loop {
                 let mut m = MaybeUninit::<ffi::TSQueryMatch>::uninit();
                 if ffi::ts_query_cursor_next_match(self.ptr, m.as_mut_ptr()) {
@@ -2687,23 +2709,35 @@ impl<'query, 'tree: 'query, T: TextProvider<I>, I: AsRef<[u8]>> Iterator
                         &mut self.buffer2,
                         &mut self.text_provider,
                     ) {
-                        return Some(result);
+                        break Some(result);
                     }
                 } else {
-                    return None;
+                    break None;
                 }
             }
-        }
+        };
+    }
+
+    fn get(&self) -> Option<&Self::Item> {
+        self.current_match.as_ref()
     }
 }
 
-impl<'query, 'tree: 'query, T: TextProvider<I>, I: AsRef<[u8]>> Iterator
+impl<'query, 'tree: 'query, T: TextProvider<I>, I: AsRef<[u8]>> StreamingIteratorMut
+    for QueryMatches<'query, 'tree, T, I>
+{
+    fn get_mut(&mut self) -> Option<&mut Self::Item> {
+        self.current_match.as_mut()
+    }
+}
+
+impl<'query, 'tree: 'query, T: TextProvider<I>, I: AsRef<[u8]>> StreamingIterator
     for QueryCaptures<'query, 'tree, T, I>
 {
     type Item = (QueryMatch<'query, 'tree>, usize);
 
-    fn next(&mut self) -> Option<Self::Item> {
-        unsafe {
+    fn advance(&mut self) {
+        self.current_match = unsafe {
             loop {
                 let mut capture_index = 0u32;
                 let mut m = MaybeUninit::<ffi::TSQueryMatch>::uninit();
@@ -2719,14 +2753,26 @@ impl<'query, 'tree: 'query, T: TextProvider<I>, I: AsRef<[u8]>> Iterator
                         &mut self.buffer2,
                         &mut self.text_provider,
                     ) {
-                        return Some((result, capture_index as usize));
+                        break Some((result, capture_index as usize));
                     }
                     result.remove();
                 } else {
-                    return None;
+                    break None;
                 }
             }
         }
+    }
+
+    fn get(&self) -> Option<&Self::Item> {
+        self.current_match.as_ref()
+    }
+}
+
+impl<'query, 'tree: 'query, T: TextProvider<I>, I: AsRef<[u8]>> StreamingIteratorMut
+    for QueryCaptures<'query, 'tree, T, I>
+{
+    fn get_mut(&mut self) -> Option<&mut Self::Item> {
+        self.current_match.as_mut()
     }
 }
 

@@ -4,6 +4,7 @@ use std::{
 };
 
 use tree_sitter::{IncludedRangesError, InputEdit, LogType, Parser, Point, Range};
+use tree_sitter_generate::{generate_parser_for_grammar, load_grammar_file};
 use tree_sitter_proc_macro::retry;
 
 use super::helpers::{
@@ -13,7 +14,6 @@ use super::helpers::{
 };
 use crate::{
     fuzz::edits::Edit,
-    generate::{generate_parser_for_grammar, load_grammar_file},
     parse::perform_edit,
     tests::{helpers::fixtures::fixtures_dir, invert_edit},
 };
@@ -124,7 +124,7 @@ fn test_parsing_with_custom_utf8_input() {
                 let row = position.row;
                 let column = position.column;
                 if row < lines.len() {
-                    if column < lines[row].as_bytes().len() {
+                    if column < lines[row].len() {
                         &lines[row].as_bytes()[column..]
                     } else {
                         b"\n"
@@ -499,6 +499,67 @@ h + i
         recorder.strings_read(),
         vec!["\nc1234 = do d\n       e + f\n       g\n"]
     );
+}
+
+#[test]
+fn test_parsing_after_editing_tree_that_depends_on_column_position() {
+    let dir = fixtures_dir()
+        .join("test_grammars")
+        .join("depends_on_column");
+
+    let grammar_json = load_grammar_file(&dir.join("grammar.js"), None).unwrap();
+    let (grammar_name, parser_code) = generate_parser_for_grammar(grammar_json.as_str()).unwrap();
+
+    let mut parser = Parser::new();
+    parser
+        .set_language(&get_test_language(&grammar_name, &parser_code, Some(&dir)))
+        .unwrap();
+
+    let mut code = b"\n x".to_vec();
+    let mut tree = parser.parse(&code, None).unwrap();
+    assert_eq!(tree.root_node().to_sexp(), "(x_is_at (odd_column))");
+
+    perform_edit(
+        &mut tree,
+        &mut code,
+        &Edit {
+            position: 1,
+            deleted_length: 0,
+            inserted_text: b" ".to_vec(),
+        },
+    )
+    .unwrap();
+
+    assert_eq!(code, b"\n  x");
+
+    let mut recorder = ReadRecorder::new(&code);
+    let mut tree = parser
+        .parse_with(&mut |i, _| recorder.read(i), Some(&tree))
+        .unwrap();
+
+    assert_eq!(tree.root_node().to_sexp(), "(x_is_at (even_column))",);
+    assert_eq!(recorder.strings_read(), vec!["\n  x"]);
+
+    perform_edit(
+        &mut tree,
+        &mut code,
+        &Edit {
+            position: 1,
+            deleted_length: 0,
+            inserted_text: b"\n".to_vec(),
+        },
+    )
+    .unwrap();
+
+    assert_eq!(code, b"\n\n  x");
+
+    let mut recorder = ReadRecorder::new(&code);
+    let tree = parser
+        .parse_with(&mut |i, _| recorder.read(i), Some(&tree))
+        .unwrap();
+
+    assert_eq!(tree.root_node().to_sexp(), "(x_is_at (even_column))",);
+    assert_eq!(recorder.strings_read(), vec!["\n\n  x"]);
 }
 
 #[test]
@@ -1391,7 +1452,7 @@ fn test_grammars_that_can_hang_on_eof() {
 
 #[test]
 fn test_parse_stack_recursive_merge_error_cost_calculation_bug() {
-    let source_code = r#"
+    let source_code = r"
 fn main() {
   if n == 1 {
   } else if n == 2 {
@@ -1404,7 +1465,7 @@ let y = if x == 5 { 10 } else { 15 };
 if foo && bar {}
 
 if foo && bar || baz {}
-"#;
+";
 
     let mut parser = Parser::new();
     parser.set_language(&get_language("rust")).unwrap();
