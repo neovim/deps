@@ -20,9 +20,7 @@ use tree_sitter_cli::{
         LOG_GRAPH_ENABLED, START_SEED,
     },
     highlight,
-    init::{
-        generate_grammar_files, lookup_package_json_for_path, migrate_package_json, JsonConfigOpts,
-    },
+    init::{generate_grammar_files, get_root_path, migrate_package_json, JsonConfigOpts},
     logger,
     parse::{self, ParseFileOptions, ParseOutput},
     playground, query, tags,
@@ -710,8 +708,7 @@ impl Build {
 
         if self.wasm {
             let output_path = self.output.map(|path| current_dir.join(path));
-            let root_path = lookup_package_json_for_path(&grammar_path.join("package.json"))
-                .map(|(p, _)| p.parent().unwrap().to_path_buf())?;
+            let root_path = get_root_path(&grammar_path.join("tree-sitter.json"))?;
             wasm::compile_language_to_wasm(
                 &loader,
                 Some(&root_path),
@@ -749,6 +746,7 @@ impl Build {
             };
 
             loader.debug_build(self.debug);
+            loader.force_rebuild(true);
 
             let config = Config::load(None)?;
             let loader_config = config.get()?;
@@ -1300,7 +1298,7 @@ fn run() -> Result<()> {
     let migrated = if !current_dir.join("tree-sitter.json").exists()
         && current_dir.join("package.json").exists()
     {
-        migrate_package_json(&current_dir).with_context(|| "Failed to migrate package.json")?
+        migrate_package_json(&current_dir).unwrap_or(false)
     } else {
         false
     };

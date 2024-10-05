@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use anyhow::{anyhow, Result};
 use serde::Deserialize;
 use serde_json::{Map, Value};
@@ -94,17 +96,78 @@ pub struct GrammarJSON {
     word: Option<String>,
 }
 
-pub(crate) fn parse_grammar(input: &str) -> Result<InputGrammar> {
-    let grammar_json = serde_json::from_str::<GrammarJSON>(input)?;
-
-    let mut variables = Vec::with_capacity(grammar_json.rules.len());
-    for (name, value) in grammar_json.rules {
-        variables.push(Variable {
-            name: name.clone(),
-            kind: VariableType::Named,
-            rule: parse_rule(serde_json::from_value(value)?),
-        });
+fn rule_is_referenced(rule: &Rule, target: &str) -> bool {
+    match rule {
+        Rule::NamedSymbol(name) => name == target,
+        Rule::Choice(rules) | Rule::Seq(rules) => {
+            rules.iter().any(|r| rule_is_referenced(r, target))
+        }
+        Rule::Metadata { rule, .. } => rule_is_referenced(rule, target),
+        Rule::Repeat(inner) => rule_is_referenced(inner, target),
+        Rule::Blank | Rule::String(_) | Rule::Pattern(_, _) | Rule::Symbol(_) => false,
     }
+}
+
+fn variable_is_used(
+    grammar_rules: &[(String, Rule)],
+    other_rules: (&[Rule], &[Rule]),
+    target_name: &str,
+    in_progress: &mut HashSet<String>,
+) -> bool {
+    let root = &grammar_rules.first().unwrap().0;
+    if target_name == root {
+        return true;
+    }
+
+    if other_rules
+        .0
+        .iter()
+        .chain(other_rules.1.iter())
+        .any(|rule| rule_is_referenced(rule, target_name))
+    {
+        return true;
+    }
+
+    in_progress.insert(target_name.to_string());
+    let result = grammar_rules
+        .iter()
+        .filter(|(key, _)| *key != target_name)
+        .any(|(name, rule)| {
+            if !rule_is_referenced(rule, target_name) || in_progress.contains(name) {
+                return false;
+            }
+            variable_is_used(grammar_rules, other_rules, name, in_progress)
+        });
+    in_progress.remove(target_name);
+
+    result
+}
+
+pub(crate) fn parse_grammar(input: &str) -> Result<InputGrammar> {
+    let mut grammar_json = serde_json::from_str::<GrammarJSON>(input)?;
+
+    let mut extra_symbols =
+        grammar_json
+            .extras
+            .into_iter()
+            .try_fold(Vec::new(), |mut acc, item| {
+                let rule = parse_rule(item);
+                if let Rule::String(ref value) = rule {
+                    if value.is_empty() {
+                        return Err(anyhow!(
+                            "Rules in the `extras` array must not contain empty strings"
+                        ));
+                    }
+                }
+                acc.push(rule);
+                Ok(acc)
+            })?;
+
+    let mut external_tokens = grammar_json
+        .externals
+        .into_iter()
+        .map(parse_rule)
+        .collect::<Vec<_>>();
 
     let mut precedence_orderings = Vec::with_capacity(grammar_json.precedences.len());
     for list in grammar_json.precedences {
@@ -123,23 +186,45 @@ pub(crate) fn parse_grammar(input: &str) -> Result<InputGrammar> {
         precedence_orderings.push(ordering);
     }
 
-    let extra_symbols = grammar_json
-        .extras
-        .into_iter()
-        .try_fold(Vec::new(), |mut acc, item| {
-            let rule = parse_rule(item);
-            if let Rule::String(ref value) = rule {
-                if value.is_empty() {
-                    return Err(anyhow!(
-                        "Rules in the `extras` array must not contain empty strings"
-                    ));
-                }
-            }
-            acc.push(rule);
-            Ok(acc)
-        })?;
+    let mut variables = Vec::with_capacity(grammar_json.rules.len());
 
-    let external_tokens = grammar_json.externals.into_iter().map(parse_rule).collect();
+    let rules = grammar_json
+        .rules
+        .into_iter()
+        .map(|(n, r)| Ok((n, parse_rule(serde_json::from_value(r)?))))
+        .collect::<Result<Vec<_>>>()?;
+
+    let mut in_progress = HashSet::new();
+
+    for (name, rule) in &rules {
+        if !variable_is_used(
+            &rules,
+            (&extra_symbols, &external_tokens),
+            name,
+            &mut in_progress,
+        ) && grammar_json.word.as_ref().map_or(true, |w| w != name)
+        {
+            grammar_json.conflicts.retain(|r| !r.contains(name));
+            grammar_json.supertypes.retain(|r| r != name);
+            grammar_json.inline.retain(|r| r != name);
+            extra_symbols.retain(|r| !rule_is_referenced(r, name));
+            external_tokens.retain(|r| !rule_is_referenced(r, name));
+            precedence_orderings.retain(|r| {
+                !r.iter().any(|e| {
+                    let PrecedenceEntry::Symbol(s) = e else {
+                        return false;
+                    };
+                    s == name
+                })
+            });
+            continue;
+        }
+        variables.push(Variable {
+            name: name.clone(),
+            kind: VariableType::Named,
+            rule: rule.clone(),
+        });
+    }
 
     Ok(InputGrammar {
         name: grammar_json.name,

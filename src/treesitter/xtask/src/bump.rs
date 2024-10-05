@@ -29,11 +29,14 @@ pub fn get_latest_tag(repo: &Repository) -> Result<String, Box<dyn std::error::E
 pub fn bump_versions() -> Result<(), Box<dyn std::error::Error>> {
     let repo = Repository::open(".")?;
     let latest_tag = get_latest_tag(&repo)?;
+    let current_version = Version::parse(&latest_tag)?;
     let latest_tag_sha = repo.revparse_single(&format!("v{latest_tag}"))?.id();
 
-    let workspace_toml_version = fetch_workspace_version()?;
+    let workspace_toml_version = Version::parse(&fetch_workspace_version()?)?;
 
-    if latest_tag != workspace_toml_version {
+    if current_version.major != workspace_toml_version.major
+        && current_version.minor != workspace_toml_version.minor
+    {
         eprintln!(
             indoc! {"
             Seems like the workspace Cargo.toml ({}) version does not match up with the latest git tag ({}).
@@ -48,7 +51,6 @@ pub fn bump_versions() -> Result<(), Box<dyn std::error::Error>> {
     revwalk.push_range(format!("{latest_tag_sha}..HEAD").as_str())?;
     let mut diff_options = DiffOptions::new();
 
-    let current_version = Version::parse(&latest_tag)?;
     let mut should_increment_patch = false;
     let mut should_increment_minor = false;
 
@@ -119,6 +121,7 @@ pub fn bump_versions() -> Result<(), Box<dyn std::error::Error>> {
     println!("Bumping from {current_version} to {version}");
     update_crates(&current_version, &version)?;
     update_makefile(&version)?;
+    update_cmake(&version)?;
     update_npm(&version)?;
     update_zig(&version)?;
     tag_next_version(&repo, &version)?;
@@ -146,6 +149,7 @@ fn tag_next_version(
         "cli/npm/package.json",
         "lib/binding_web/package.json",
         "Makefile",
+        "lib/CMakeLists.txt",
         "build.zig.zon",
     ] {
         index.add_path(Path::new(file))?;
@@ -200,6 +204,32 @@ fn update_makefile(next_version: &Version) -> Result<(), Box<dyn std::error::Err
     Ok(())
 }
 
+fn update_cmake(next_version: &Version) -> Result<(), Box<dyn std::error::Error>> {
+    let cmake = std::fs::read_to_string("lib/CMakeLists.txt")?;
+    let cmake = cmake
+        .lines()
+        .map(|line| {
+            if line.contains(" VERSION") {
+                let start_quote = line.find('"').unwrap();
+                let end_quote = line.rfind('"').unwrap();
+                format!(
+                    "{}{next_version}{}",
+                    &line[..start_quote + 1],
+                    &line[end_quote..]
+                )
+            } else {
+                line.to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+        + "\n";
+
+    std::fs::write("lib/CMakeLists.txt", cmake)?;
+
+    Ok(())
+}
+
 fn update_crates(
     current_version: &Version,
     next_version: &Version,
@@ -216,7 +246,9 @@ fn update_crates(
     cmd.arg("--no-git-commit")
         .arg("--yes")
         .arg("--force")
-        .arg("*");
+        .arg("tree-sitter{,-cli,-config,-generate,-loader,-highlight,-tags}")
+        .arg("--ignore-changes")
+        .arg("lib/language/*");
 
     let status = cmd.status()?;
 
