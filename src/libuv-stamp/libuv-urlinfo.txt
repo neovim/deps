@@ -6,7 +6,7 @@ method=url
 command=/usr/local/bin/cmake;-DCMAKE_MESSAGE_LOG_LEVEL=VERBOSE;-P;/home/runner/work/deps/deps/neovim/deps/build/src/libuv-stamp/download-libuv.cmake;COMMAND;/usr/local/bin/cmake;-DCMAKE_MESSAGE_LOG_LEVEL=VERBOSE;-P;/home/runner/work/deps/deps/neovim/deps/build/src/libuv-stamp/verify-libuv.cmake;COMMAND;/usr/local/bin/cmake;-DCMAKE_MESSAGE_LOG_LEVEL=VERBOSE;-P;/home/runner/work/deps/deps/neovim/deps/build/src/libuv-stamp/extract-libuv.cmake
 source_dir=/home/runner/work/deps/deps/neovim/deps/build/src/libuv
 work_dir=/home/runner/work/deps/deps/neovim/deps/build/src
-url(s)=https://github.com/libuv/libuv/archive/52a9243317f90cc15ce709a096dd3da134e40c63.tar.gz
-hash=SHA256=bd03c721a4c54eb7957af41f749b8c28474fc87d08fa928b612e81f686ccc60f
+url(s)=https://github.com/libuv/libuv/archive/v1.49.2.tar.gz
+hash=SHA256=388ffcf3370d4cf7c4b3a3205504eea06c4be5f9e80d2ab32d19f8235accc1cf
       no_extract=
 
