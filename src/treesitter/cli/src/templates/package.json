@@ -2,7 +2,7 @@
   "name": "tree-sitter-PARSER_NAME",
   "version": "PARSER_VERSION",
   "description": "PARSER_DESCRIPTION",
-  "repository": "github:tree-sitter/tree-sitter-PARSER_NAME",
+  "repository": "PARSER_URL",
   "license": "PARSER_LICENSE",
   "author": {
     "name": "PARSER_AUTHOR_NAME",
@@ -19,6 +19,7 @@
   ],
   "files": [
     "grammar.js",
+    "tree-sitter.json",
     "binding.gyp",
     "prebuilds/**",
     "bindings/node/*",
@@ -27,7 +28,7 @@
     "*.wasm"
   ],
   "dependencies": {
-    "node-addon-api": "^8.1.0",
+    "node-addon-api": "^8.2.1",
     "node-gyp-build": "^4.8.2"
   },
   "devDependencies": {
@@ -47,11 +48,5 @@
     "prestart": "tree-sitter build --wasm",
     "start": "tree-sitter playground",
     "test": "node --test bindings/node/*_test.js"
-  },
-  "tree-sitter": [
-    {
-      "scope": "source.LOWER_PARSER_NAME",
-      "injection-regex": "^LOWER_PARSER_NAME$"
-    }
-  ]
+  }
 }

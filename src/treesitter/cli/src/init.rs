@@ -1,6 +1,5 @@
 use std::{
-    fs::{self, File},
-    io::BufReader,
+    fs,
     path::{Path, PathBuf},
     str::{self, FromStr},
 };
@@ -76,7 +75,7 @@ const BINDING_GYP_TEMPLATE: &str = include_str!("./templates/binding.gyp");
 const BINDING_TEST_JS_TEMPLATE: &str = include_str!("./templates/binding_test.js");
 
 const MAKEFILE_TEMPLATE: &str = include_str!("./templates/makefile");
-const CMAKELISTS_TXT_TEMPLATE: &str = include_str!("./templates/cmakelists.txt");
+const CMAKELISTS_TXT_TEMPLATE: &str = include_str!("./templates/cmakelists.cmake");
 const PARSER_NAME_H_TEMPLATE: &str = include_str!("./templates/PARSER_NAME.h");
 const PARSER_NAME_PC_IN_TEMPLATE: &str = include_str!("./templates/PARSER_NAME.pc.in");
 
@@ -136,9 +135,9 @@ impl JsonConfigOpts {
                 name: self.name.clone(),
                 camelcase: Some(self.camelcase),
                 scope: self.scope,
-                path: PathBuf::from("."),
+                path: None,
                 external_files: PathsJSON::Empty,
-                file_types: None,
+                file_types: Some(self.file_types),
                 highlights: PathsJSON::Empty,
                 injections: PathsJSON::Empty,
                 locals: PathsJSON::Empty,
@@ -154,7 +153,7 @@ impl JsonConfigOpts {
                 authors: Some(vec![Author {
                     name: self.author,
                     email: self.email,
-                    url: None,
+                    url: self.url.map(|url| url.to_string()),
                 }]),
                 links: Some(Links {
                     repository: self.repository.unwrap_or_else(|| {
@@ -199,6 +198,7 @@ struct GenerateOpts<'a> {
     description: Option<&'a str>,
     repository: Option<&'a str>,
     version: &'a Version,
+    camel_parser_name: &'a str,
 }
 
 // TODO: remove in 0.25
@@ -211,9 +211,9 @@ pub fn migrate_package_json(repo_path: &Path) -> Result<bool> {
         root_path.join("tree-sitter.json"),
     );
 
-    let old_config = serde_json::from_reader::<_, PackageJSON>(
-        File::open(&package_json_path)
-            .with_context(|| format!("Failed to open package.json in {}", root_path.display()))?,
+    let old_config = serde_json::from_str::<PackageJSON>(
+        &fs::read_to_string(&package_json_path)
+            .with_context(|| format!("Failed to read package.json in {}", root_path.display()))?,
     )?;
 
     if old_config.tree_sitter.is_none() {
@@ -232,7 +232,7 @@ pub fn migrate_package_json(repo_path: &Path) -> Result<bool> {
                 name: name.clone(),
                 camelcase: Some(name.to_upper_camel_case()),
                 scope: l.scope.unwrap_or_else(|| format!("source.{name}")),
-                path: l.path,
+                path: Some(l.path),
                 external_files: l.external_files,
                 file_types: l.file_types,
                 highlights: l.highlights,
@@ -335,19 +335,19 @@ pub fn migrate_package_json(repo_path: &Path) -> Result<bool> {
 
     write_file(
         &tree_sitter_json_path,
-        serde_json::to_string_pretty(&new_config)?,
+        serde_json::to_string_pretty(&new_config)? + "\n",
     )?;
 
     // Remove the `tree-sitter` field in-place
-    let mut package_json = serde_json::from_reader::<_, Map<String, Value>>(
-        File::open(&package_json_path)
-            .with_context(|| format!("Failed to open package.json in {}", root_path.display()))?,
+    let mut package_json = serde_json::from_str::<Map<String, Value>>(
+        &fs::read_to_string(&package_json_path)
+            .with_context(|| format!("Failed to read package.json in {}", root_path.display()))?,
     )
     .unwrap();
     package_json.remove("tree-sitter");
     write_file(
         &root_path.join("package.json"),
-        serde_json::to_string_pretty(&package_json)?,
+        serde_json::to_string_pretty(&package_json)? + "\n",
     )?;
 
     println!("Warning: your package.json's `tree-sitter` field has been automatically migrated to the new `tree-sitter.json` config file");
@@ -361,7 +361,7 @@ pub fn migrate_package_json(repo_path: &Path) -> Result<bool> {
 pub fn generate_grammar_files(
     repo_path: &Path,
     language_name: &str,
-    _allow_update: bool,
+    allow_update: bool,
     opts: Option<JsonConfigOpts>,
 ) -> Result<()> {
     let dashed_language_name = language_name.to_kebab_case();
@@ -388,12 +388,16 @@ pub fn generate_grammar_files(
         },
     )?;
 
-    let tree_sitter_config = serde_json::from_reader::<_, TreeSitterJSON>(
-        File::open(tree_sitter_config.as_path())
-            .with_context(|| "Failed to open tree-sitter.json")?,
+    let tree_sitter_config = serde_json::from_str::<TreeSitterJSON>(
+        &fs::read_to_string(tree_sitter_config.as_path())
+            .with_context(|| "Failed to read tree-sitter.json")?,
     )?;
 
     let authors = tree_sitter_config.metadata.authors.as_ref();
+    let camel_name = tree_sitter_config.grammars[0]
+        .camelcase
+        .clone()
+        .unwrap_or_else(|| language_name.to_upper_camel_case());
 
     let generate_opts = GenerateOpts {
         author_name: authors
@@ -413,6 +417,7 @@ pub fn generate_grammar_files(
             .as_ref()
             .map(|l| l.repository.as_str()),
         version: &tree_sitter_config.metadata.version,
+        camel_parser_name: &camel_name,
     };
 
     // Create package.json
@@ -476,9 +481,18 @@ pub fn generate_grammar_files(
     // Generate Node bindings
     if tree_sitter_config.bindings.node {
         missing_path(bindings_dir.join("node"), create_dir)?.apply(|path| {
-            missing_path(path.join("index.js"), |path| {
-                generate_file(path, INDEX_JS_TEMPLATE, language_name, &generate_opts)
-            })?;
+            missing_path_else(
+                path.join("index.js"),
+                allow_update,
+                |path| generate_file(path, INDEX_JS_TEMPLATE, language_name, &generate_opts),
+                |path| {
+                    let contents = fs::read_to_string(path)?;
+                    if !contents.contains("bun") {
+                        generate_file(path, INDEX_JS_TEMPLATE, language_name, &generate_opts)?;
+                    }
+                    Ok(())
+                },
+            )?;
 
             missing_path(path.join("index.d.ts"), |path| {
                 generate_file(path, INDEX_D_TS_TEMPLATE, language_name, &generate_opts)
@@ -529,9 +543,20 @@ pub fn generate_grammar_files(
                 generate_file(path, MAKEFILE_TEMPLATE, language_name, &generate_opts)
             })?;
 
-            missing_path(repo_path.join("CMakeLists.txt"), |path| {
-                generate_file(path, CMAKELISTS_TXT_TEMPLATE, language_name, &generate_opts)
-            })?;
+            missing_path_else(
+                repo_path.join("CMakeLists.txt"),
+                allow_update,
+                |path| generate_file(path, CMAKELISTS_TXT_TEMPLATE, language_name, &generate_opts),
+                |path| {
+                    let contents = fs::read_to_string(path)?;
+                    let old = "add_custom_target(test";
+                    if contents.contains(old) {
+                        write_file(path, contents.replace(old, "add_custom_target(ts-test"))
+                    } else {
+                        Ok(())
+                    }
+                },
+            )?;
 
             Ok(())
         })?;
@@ -615,7 +640,7 @@ pub fn generate_grammar_files(
     // Generate Swift bindings
     if tree_sitter_config.bindings.swift {
         missing_path(bindings_dir.join("swift"), create_dir)?.apply(|path| {
-            let lang_path = path.join(format!("TreeSitter{}", language_name.to_upper_camel_case()));
+            let lang_path = path.join(format!("TreeSitter{camel_name}",));
             missing_path(&lang_path, create_dir)?;
 
             missing_path(lang_path.join(format!("{language_name}.h")), |path| {
@@ -623,18 +648,12 @@ pub fn generate_grammar_files(
             })?;
 
             missing_path(
-                path.join(format!(
-                    "TreeSitter{}Tests",
-                    language_name.to_upper_camel_case()
-                )),
+                path.join(format!("TreeSitter{camel_name}Tests",)),
                 create_dir,
             )?
             .apply(|path| {
                 missing_path(
-                    path.join(format!(
-                        "TreeSitter{}Tests.swift",
-                        language_name.to_upper_camel_case()
-                    )),
+                    path.join(format!("TreeSitter{camel_name}Tests.swift")),
                     |path| generate_file(path, TESTS_SWIFT_TEMPLATE, language_name, &generate_opts),
                 )?;
 
@@ -660,15 +679,14 @@ pub fn get_root_path(path: &Path) -> Result<PathBuf> {
         let json = pathbuf
             .exists()
             .then(|| {
-                let file = File::open(pathbuf.as_path())
-                    .with_context(|| format!("Failed to open {filename}"))?;
-                let reader = BufReader::new(file);
+                let contents = fs::read_to_string(pathbuf.as_path())
+                    .with_context(|| format!("Failed to read {filename}"))?;
                 if is_package_json {
-                    serde_json::from_reader::<_, Map<String, Value>>(reader)
+                    serde_json::from_str::<Map<String, Value>>(&contents)
                         .context(format!("Failed to parse {filename}"))
                         .map(|v| v.contains_key("tree-sitter"))
                 } else {
-                    serde_json::from_reader::<_, TreeSitterJSON>(reader)
+                    serde_json::from_str::<TreeSitterJSON>(&contents)
                         .context(format!("Failed to parse {filename}"))
                         .map(|_| true)
                 }
@@ -702,7 +720,7 @@ fn generate_file(
     let mut replacement = template
         .replace(
             CAMEL_PARSER_NAME_PLACEHOLDER,
-            &language_name.to_upper_camel_case(),
+            generate_opts.camel_parser_name,
         )
         .replace(
             UPPER_PARSER_NAME_PLACEHOLDER,
@@ -845,7 +863,7 @@ fn generate_file(
                 PARSER_DESCRIPTION_PLACEHOLDER,
                 &format!(
                     "{} grammar for tree-sitter",
-                    language_name.to_upper_camel_case()
+                    generate_opts.camel_parser_name,
                 ),
             )
         }
