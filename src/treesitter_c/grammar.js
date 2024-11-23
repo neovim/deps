@@ -302,7 +302,7 @@ module.exports = grammar({
     ),
 
     attribute_specifier: $ => seq(
-      '__attribute__',
+      choice('__attribute__', '__attribute'),
       '(',
       $.argument_list,
       ')',
@@ -623,6 +623,7 @@ module.exports = grammar({
           'long',
           'short',
         )),
+        repeat($.type_qualifier),
         field('type', optional(choice(
           prec.dynamic(-1, $._type_identifier),
           $.primitive_type,
@@ -770,6 +771,7 @@ module.exports = grammar({
         $._declarator,
         $._abstract_declarator,
       ))),
+      repeat($.attribute_specifier),
     ),
 
     // Statements
@@ -827,7 +829,7 @@ module.exports = grammar({
 
     // This is missing binary expressions, others were kept so that macro code can be parsed better and code examples
     _top_level_expression_statement: $ => seq(
-      $._expression_not_binary,
+      optional($._expression_not_binary),
       ';',
     ),
 
@@ -1143,6 +1145,7 @@ module.exports = grammar({
 
     gnu_asm_qualifier: _ => choice(
       'volatile',
+      '__volatile__',
       'inline',
       'goto',
     ),
@@ -1160,7 +1163,7 @@ module.exports = grammar({
       )),
       field('constraint', $.string_literal),
       '(',
-      field('value', $.identifier),
+      field('value', $.expression),
       ')',
     ),
 
@@ -1316,7 +1319,7 @@ module.exports = grammar({
       choice(
         /[^xuU]/,
         /\d{2,3}/,
-        /x[0-9a-fA-F]{2,}/,
+        /x[0-9a-fA-F]{1,4}/,
         /u[0-9a-fA-F]{4}/,
         /U[0-9a-fA-F]{8}/,
       ),
@@ -1333,7 +1336,6 @@ module.exports = grammar({
     null: _ => choice('NULL', 'nullptr'),
 
     identifier: _ =>
-      // eslint-disable-next-line max-len
       /(\p{XID_Start}|\$|_|\\u[0-9A-Fa-f]{4}|\\U[0-9A-Fa-f]{8})(\p{XID_Continue}|\$|\\u[0-9A-Fa-f]{4}|\\U[0-9A-Fa-f]{8})*/,
 
     _type_identifier: $ => alias(
@@ -1377,16 +1379,15 @@ module.exports.PREC = PREC;
  *
  * @param {number} precedence
  *
- * @return {RuleBuilders<string, string>}
+ * @returns {RuleBuilders<string, string>}
  */
 function preprocIf(suffix, content, precedence = 0) {
   /**
-    *
-    * @param {GrammarSymbols<string>} $
-    *
-    * @return {ChoiceRule}
-    *
-    */
+   *
+   * @param {GrammarSymbols<string>} $
+   *
+   * @returns {ChoiceRule}
+   */
   function alternativeBlock($) {
     return choice(
       suffix ? alias($['preproc_else' + suffix], $.preproc_else) : $.preproc_else,
@@ -1436,12 +1437,12 @@ function preprocIf(suffix, content, precedence = 0) {
 }
 
 /**
-  * Creates a preprocessor regex rule
-  *
-  * @param {RegExp|Rule|String} command
-  *
-  * @return {AliasRule}
-  */
+ * Creates a preprocessor regex rule
+ *
+ * @param {RegExp | Rule | string} command
+ *
+ * @returns {AliasRule}
+ */
 function preprocessor(command) {
   return alias(new RegExp('#[ \t]*' + command), '#' + command);
 }
@@ -1451,8 +1452,7 @@ function preprocessor(command) {
  *
  * @param {Rule} rule
  *
- * @return {ChoiceRule}
- *
+ * @returns {ChoiceRule}
  */
 function commaSep(rule) {
   return optional(commaSep1(rule));
@@ -1463,8 +1463,7 @@ function commaSep(rule) {
  *
  * @param {Rule} rule
  *
- * @return {SeqRule}
- *
+ * @returns {SeqRule}
  */
 function commaSep1(rule) {
   return seq(rule, repeat(seq(',', rule)));
