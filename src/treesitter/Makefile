@@ -2,7 +2,7 @@ ifeq ($(OS),Windows_NT)
 $(error Windows is not supported)
 endif
 
-VERSION := 0.24.4
+VERSION := 0.24.5
 DESCRIPTION := An incremental parsing system for programming tools
 HOMEPAGE_URL := https://tree-sitter.github.io/tree-sitter/
 
@@ -25,7 +25,7 @@ OBJ := $(SRC:.c=.o)
 
 # define default flags, and override to append mandatory flags
 ARFLAGS := rcs
-CFLAGS ?= -O3 -Wall -Wextra -Wshadow -pedantic
+CFLAGS ?= -O3 -Wall -Wextra -Wshadow -Wpedantic -Werror=incompatible-pointer-types
 override CFLAGS += -std=c11 -fPIC -fvisibility=hidden
 override CFLAGS += -Ilib/src -Ilib/src/wasm -Ilib/include
 
@@ -94,13 +94,13 @@ uninstall:
 ##### Dev targets #####
 
 test:
-	script/fetch-fixtures
-	script/generate-fixtures
-	script/test
+	cargo xtask fetch-fixtures
+	cargo xtask generate-fixtures
+	cargo xtask test
 
 test_wasm:
-	script/generate-fixtures-wasm
-	script/test-wasm
+	cargo xtask generate-fixtures-wasm
+	cargo xtask test-wasm
 
 lint:
 	cargo update --workspace --locked --quiet
