@@ -2,8 +2,8 @@ lpeg_url = https://www.inf.puc-rio.br/~roberto/lpeg/lpeg-1.1.0.tar.gz
 gettext_url = https://ftp.gnu.org/pub/gnu/gettext/gettext-0.20.1.tar.gz
 libiconv_url = https://ftp.gnu.org/pub/gnu/libiconv/libiconv-1.17.tar.gz
 
-busted_version = 2.1.1
-luacheck_version = 1.1.0
+busted_version = 2.2.0
+luacheck_version = 1.2.0
 
 all: lua-dev lpeg gettext libiconv
 
