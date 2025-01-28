@@ -14,8 +14,20 @@ let package = Package(
     targets: [
         .target(name: "TreeSitter",
                 path: "lib",
-                sources: ["src/lib.c"],
-                cSettings: [.headerSearchPath("src")]),
+                exclude: [
+                        "src/unicode/ICU_SHA",
+                        "src/unicode/README.md",
+                        "src/unicode/LICENSE",
+                        "src/wasm/stdlib-symbols.txt",
+                        "src/lib.c",
+                ],
+                sources: ["src"],
+                publicHeadersPath: "include",
+                cSettings: [
+                        .headerSearchPath("src"),
+                        .define("_POSIX_C_SOURCE", to: "200112L"),
+                        .define("_DEFAULT_SOURCE"),
+                ]),
     ],
     cLanguageStandard: .c11
 )

@@ -44,7 +44,7 @@ struct Minimizer<'a> {
     simple_aliases: &'a AliasMap,
 }
 
-impl<'a> Minimizer<'a> {
+impl Minimizer<'_> {
     fn remove_unit_reductions(&mut self) {
         let mut aliased_symbols = HashSet::new();
         for variable in &self.syntax_grammar.variables {
@@ -151,9 +151,7 @@ impl<'a> Minimizer<'a> {
             &mut group_ids_by_state_id,
             0,
             |left, right, groups| self.state_successors_differ(left, right, groups),
-        ) {
-            continue;
-        }
+        ) {}
 
         let error_group_index = state_ids_by_group_id
             .iter()
@@ -170,17 +168,12 @@ impl<'a> Minimizer<'a> {
         let mut new_states = Vec::with_capacity(state_ids_by_group_id.len());
         for state_ids in &state_ids_by_group_id {
             // Initialize the new state based on the first old state in the group.
-            let mut parse_state = ParseState::default();
-            mem::swap(&mut parse_state, &mut self.parse_table.states[state_ids[0]]);
+            let mut parse_state = mem::take(&mut self.parse_table.states[state_ids[0]]);
 
             // Extend the new state with all of the actions from the other old states
             // in the group.
             for state_id in &state_ids[1..] {
-                let mut other_parse_state = ParseState::default();
-                mem::swap(
-                    &mut other_parse_state,
-                    &mut self.parse_table.states[*state_id],
-                );
+                let other_parse_state = mem::take(&mut self.parse_table.states[*state_id]);
 
                 parse_state
                     .terminal_entries
@@ -188,6 +181,12 @@ impl<'a> Minimizer<'a> {
                 parse_state
                     .nonterminal_entries
                     .extend(other_parse_state.nonterminal_entries);
+                parse_state
+                    .reserved_words
+                    .insert_all(&other_parse_state.reserved_words);
+                for symbol in parse_state.terminal_entries.keys() {
+                    parse_state.reserved_words.remove(symbol);
+                }
             }
 
             // Update the new state's outgoing references using the new grouping.
@@ -216,24 +215,14 @@ impl<'a> Minimizer<'a> {
                 ) {
                     return true;
                 }
-            } else if self.token_conflicts(
-                left_state.id,
-                right_state.id,
-                right_state.terminal_entries.keys(),
-                *token,
-            ) {
+            } else if self.token_conflicts(left_state.id, right_state.id, right_state, *token) {
                 return true;
             }
         }
 
         for token in right_state.terminal_entries.keys() {
             if !left_state.terminal_entries.contains_key(token)
-                && self.token_conflicts(
-                    left_state.id,
-                    right_state.id,
-                    left_state.terminal_entries.keys(),
-                    *token,
-                )
+                && self.token_conflicts(left_state.id, right_state.id, left_state, *token)
             {
                 return true;
             }
@@ -271,7 +260,7 @@ impl<'a> Minimizer<'a> {
         for (symbol, s1) in &state1.nonterminal_entries {
             if let Some(s2) = state2.nonterminal_entries.get(symbol) {
                 match (s1, s2) {
-                    (GotoAction::ShiftExtra, GotoAction::ShiftExtra) => continue,
+                    (GotoAction::ShiftExtra, GotoAction::ShiftExtra) => {}
                     (GotoAction::Goto(s1), GotoAction::Goto(s2)) => {
                         let group1 = group_ids_by_state_id[*s1];
                         let group2 = group_ids_by_state_id[*s2];
@@ -350,11 +339,11 @@ impl<'a> Minimizer<'a> {
         false
     }
 
-    fn token_conflicts<'b>(
+    fn token_conflicts(
         &self,
         left_id: ParseStateId,
         right_id: ParseStateId,
-        existing_tokens: impl Iterator<Item = &'b Symbol>,
+        right_state: &ParseState,
         new_token: Symbol,
     ) -> bool {
         if new_token == Symbol::end_of_nonterminal_extra() {
@@ -370,6 +359,10 @@ impl<'a> Minimizer<'a> {
                 self.symbol_name(&new_token),
             );
             return true;
+        }
+
+        if right_state.reserved_words.contains(&new_token) {
+            return false;
         }
 
         // Do not add tokens which are both internal and external. Their validity could
@@ -388,23 +381,30 @@ impl<'a> Minimizer<'a> {
         }
 
         // Do not add a token if it conflicts with an existing token.
-        for token in existing_tokens {
-            if token.is_terminal()
-                && !(self.syntax_grammar.word_token == Some(*token)
-                    && self.keywords.contains(&new_token))
-                && !(self.syntax_grammar.word_token == Some(new_token)
-                    && self.keywords.contains(token))
-                && (self
+        for token in right_state.terminal_entries.keys().copied() {
+            if !token.is_terminal() {
+                continue;
+            }
+            if self.syntax_grammar.word_token == Some(token) && self.keywords.contains(&new_token) {
+                continue;
+            }
+            if self.syntax_grammar.word_token == Some(new_token) && self.keywords.contains(&token) {
+                continue;
+            }
+
+            if self
+                .token_conflict_map
+                .does_conflict(new_token.index, token.index)
+                || self
                     .token_conflict_map
-                    .does_conflict(new_token.index, token.index)
-                    || self
-                        .token_conflict_map
-                        .does_match_same_string(new_token.index, token.index))
+                    .does_match_same_string(new_token.index, token.index)
             {
                 info!(
-                    "split states {left_id} {right_id} - token {} conflicts with {}",
+                    "split states {} {} - token {} conflicts with {}",
+                    left_id,
+                    right_id,
                     self.symbol_name(&new_token),
-                    self.symbol_name(token),
+                    self.symbol_name(&token),
                 );
                 return true;
             }

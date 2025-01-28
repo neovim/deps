@@ -1,15 +1,18 @@
 use std::{
     cmp,
-    collections::{HashMap, HashSet},
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     fmt::Write,
     mem::swap,
 };
+
+use indoc::indoc;
 
 use super::{
     build_tables::Tables,
     grammars::{ExternalToken, LexicalGrammar, SyntaxGrammar, VariableType},
     nfa::CharacterSet,
-    rules::{Alias, AliasMap, Symbol, SymbolType},
+    node_types::ChildType,
+    rules::{Alias, AliasMap, Symbol, SymbolType, TokenSet},
     tables::{
         AdvanceAction, FieldLocation, GotoAction, LexState, LexTable, ParseAction, ParseTable,
         ParseTableEntry,
@@ -17,9 +20,11 @@ use super::{
 };
 
 const SMALL_STATE_THRESHOLD: usize = 64;
-const ABI_VERSION_MIN: usize = 13;
-const ABI_VERSION_MAX: usize = tree_sitter::LANGUAGE_VERSION;
-const ABI_VERSION_WITH_PRIMARY_STATES: usize = 14;
+pub const ABI_VERSION_MIN: usize = 14;
+pub const ABI_VERSION_MAX: usize = tree_sitter::LANGUAGE_VERSION;
+const ABI_VERSION_WITH_RESERVED_WORDS: usize = 15;
+const BUILD_VERSION: &str = env!("CARGO_PKG_VERSION");
+const BUILD_SHA: Option<&'static str> = option_env!("BUILD_SHA");
 
 macro_rules! add {
     ($this: tt, $($arg: tt)*) => {{
@@ -56,6 +61,7 @@ macro_rules! dedent {
     };
 }
 
+#[derive(Default)]
 struct Generator {
     buffer: String,
     indent_level: usize,
@@ -66,7 +72,6 @@ struct Generator {
     large_character_sets: Vec<(Option<Symbol>, CharacterSet)>,
     large_character_set_info: Vec<LargeCharacterSetInfo>,
     large_state_count: usize,
-    keyword_capture_token: Option<Symbol>,
     syntax_grammar: SyntaxGrammar,
     lexical_grammar: LexicalGrammar,
     default_aliases: AliasMap,
@@ -75,10 +80,13 @@ struct Generator {
     alias_ids: HashMap<Alias, String>,
     unique_aliases: Vec<Alias>,
     symbol_map: HashMap<Symbol, Symbol>,
+    reserved_word_sets: Vec<TokenSet>,
+    reserved_word_set_ids_by_parse_state: Vec<usize>,
     field_names: Vec<String>,
-
-    #[allow(unused)]
+    supertype_symbol_map: BTreeMap<Symbol, Vec<ChildType>>,
+    supertype_map: BTreeMap<String, Vec<ChildType>>,
     abi_version: usize,
+    metadata: Option<Metadata>,
 }
 
 struct LargeCharacterSetInfo {
@@ -86,9 +94,16 @@ struct LargeCharacterSetInfo {
     is_used: bool,
 }
 
+struct Metadata {
+    major_version: u8,
+    minor_version: u8,
+    patch_version: u8,
+}
+
 impl Generator {
     fn generate(mut self) -> String {
         self.init();
+        self.add_header();
         self.add_includes();
         self.add_pragmas();
         self.add_stats();
@@ -108,9 +123,10 @@ impl Generator {
         }
 
         self.add_non_terminal_alias_map();
+        self.add_primary_state_id_list();
 
-        if self.abi_version >= ABI_VERSION_WITH_PRIMARY_STATES {
-            self.add_primary_state_id_list();
+        if self.abi_version >= ABI_VERSION_WITH_RESERVED_WORDS && !self.supertype_map.is_empty() {
+            self.add_supertype_map();
         }
 
         let buffer_offset_before_lex_functions = self.buffer.len();
@@ -119,7 +135,7 @@ impl Generator {
         swap(&mut main_lex_table, &mut self.main_lex_table);
         self.add_lex_function("ts_lex", main_lex_table);
 
-        if self.keyword_capture_token.is_some() {
+        if self.syntax_grammar.word_token.is_some() {
             let mut keyword_lex_table = LexTable::default();
             swap(&mut keyword_lex_table, &mut self.keyword_lex_table);
             self.add_lex_function("ts_lex_keywords", keyword_lex_table);
@@ -135,7 +151,13 @@ impl Generator {
         }
         self.buffer.push_str(&lex_functions);
 
-        self.add_lex_modes_list();
+        self.add_lex_modes();
+
+        if self.abi_version >= ABI_VERSION_WITH_RESERVED_WORDS && self.reserved_word_sets.len() > 1
+        {
+            self.add_reserved_word_sets();
+        }
+
         self.add_parse_table();
 
         if !self.syntax_grammar.external_tokens.is_empty() {
@@ -216,33 +238,24 @@ impl Generator {
             for alias in &production_info.alias_sequence {
                 // Generate a mapping from aliases to C identifiers.
                 if let Some(alias) = &alias {
-                    let existing_symbol = self.parse_table.symbols.iter().copied().find(|symbol| {
-                        self.default_aliases.get(symbol).map_or_else(
-                            || {
-                                let (name, kind) = self.metadata_for_symbol(*symbol);
-                                name == alias.value && kind == alias.kind()
-                            },
-                            |default_alias| default_alias == alias,
-                        )
-                    });
-
                     // Some aliases match an existing symbol in the grammar.
-                    let alias_id = if let Some(existing_symbol) = existing_symbol {
-                        self.symbol_ids[&self.symbol_map[&existing_symbol]].clone()
-                    }
-                    // Other aliases don't match any existing symbol, and need their own
-                    // identifiers.
-                    else {
-                        if let Err(i) = self.unique_aliases.binary_search(alias) {
-                            self.unique_aliases.insert(i, alias.clone());
+                    let alias_id =
+                        if let Some(existing_symbol) = self.symbols_for_alias(alias).first() {
+                            self.symbol_ids[&self.symbol_map[existing_symbol]].clone()
                         }
+                        // Other aliases don't match any existing symbol, and need their own
+                        // identifiers.
+                        else {
+                            if let Err(i) = self.unique_aliases.binary_search(alias) {
+                                self.unique_aliases.insert(i, alias.clone());
+                            }
 
-                        if alias.is_named {
-                            format!("alias_sym_{}", self.sanitize_identifier(&alias.value))
-                        } else {
-                            format!("anon_alias_sym_{}", self.sanitize_identifier(&alias.value))
-                        }
-                    };
+                            if alias.is_named {
+                                format!("alias_sym_{}", self.sanitize_identifier(&alias.value))
+                            } else {
+                                format!("anon_alias_sym_{}", self.sanitize_identifier(&alias.value))
+                            }
+                        };
 
                     self.alias_ids.entry(alias.clone()).or_insert(alias_id);
                 }
@@ -266,6 +279,34 @@ impl Generator {
             });
         }
 
+        // Assign an id to each unique reserved word set
+        self.reserved_word_sets.push(TokenSet::new());
+        for state in &self.parse_table.states {
+            let id = if let Some(ix) = self
+                .reserved_word_sets
+                .iter()
+                .position(|set| *set == state.reserved_words)
+            {
+                ix
+            } else {
+                self.reserved_word_sets.push(state.reserved_words.clone());
+                self.reserved_word_sets.len() - 1
+            };
+            self.reserved_word_set_ids_by_parse_state.push(id);
+        }
+
+        if self.abi_version >= ABI_VERSION_WITH_RESERVED_WORDS {
+            for (supertype, subtypes) in &self.supertype_symbol_map {
+                if let Some(supertype) = self.symbol_ids.get(supertype) {
+                    self.supertype_map
+                        .entry(supertype.clone())
+                        .or_insert_with(|| subtypes.clone());
+                }
+            }
+
+            self.supertype_symbol_map.clear();
+        }
+
         // Determine which states should use the "small state" representation, and which should
         // use the normal array representation.
         let threshold = cmp::min(SMALL_STATE_THRESHOLD, self.parse_table.symbols.len() / 2);
@@ -278,6 +319,18 @@ impl Generator {
                 *i <= 1 || s.terminal_entries.len() + s.nonterminal_entries.len() > threshold
             })
             .count();
+    }
+
+    fn add_header(&mut self) {
+        let version = BUILD_SHA.map_or_else(
+            || BUILD_VERSION.to_string(),
+            |build_sha| format!("{BUILD_VERSION} ({build_sha})"),
+        );
+        add_line!(
+            self,
+            "/* Automatically generated by tree-sitter v{version} */",
+        );
+        add_line!(self, "");
     }
 
     fn add_includes(&mut self) {
@@ -341,7 +394,7 @@ impl Generator {
             self.parse_table.symbols.len()
         );
         add_line!(self, "#define ALIAS_COUNT {}", self.unique_aliases.len());
-        add_line!(self, "#define TOKEN_COUNT {}", token_count);
+        add_line!(self, "#define TOKEN_COUNT {token_count}");
         add_line!(
             self,
             "#define EXTERNAL_TOKEN_COUNT {}",
@@ -355,9 +408,20 @@ impl Generator {
         );
         add_line!(
             self,
+            "#define MAX_RESERVED_WORD_SET_SIZE {}",
+            self.reserved_word_sets
+                .iter()
+                .map(TokenSet::len)
+                .max()
+                .unwrap()
+        );
+
+        add_line!(
+            self,
             "#define PRODUCTION_ID_COUNT {}",
             self.parse_table.production_infos.len()
         );
+        add_line!(self, "#define SUPERTYPE_COUNT {}", self.supertype_map.len());
         add_line!(self, "");
     }
 
@@ -643,7 +707,7 @@ impl Generator {
 
         add_line!(
             self,
-            "static const TSFieldMapSlice ts_field_map_slices[PRODUCTION_ID_COUNT] = {{",
+            "static const TSMapSlice ts_field_map_slices[PRODUCTION_ID_COUNT] = {{",
         );
         indent!(self);
         for (production_id, (row_id, length)) in field_map_ids.into_iter().enumerate() {
@@ -673,6 +737,83 @@ impl Generator {
                     add!(self, ", .inherited = true");
                 }
                 add!(self, "}},\n");
+            }
+            dedent!(self);
+        }
+
+        dedent!(self);
+        add_line!(self, "}};");
+        add_line!(self, "");
+    }
+
+    fn add_supertype_map(&mut self) {
+        add_line!(
+            self,
+            "static const TSSymbol ts_supertype_symbols[SUPERTYPE_COUNT] = {{"
+        );
+        indent!(self);
+        for supertype in self.supertype_map.keys() {
+            add_line!(self, "{supertype},");
+        }
+        dedent!(self);
+        add_line!(self, "}};\n");
+
+        add_line!(
+            self,
+            "static const TSMapSlice ts_supertype_map_slices[] = {{",
+        );
+        indent!(self);
+        let mut row_id = 0;
+        let mut supertype_ids = vec![0];
+        let mut supertype_string_map = BTreeMap::new();
+        for (supertype, subtypes) in &self.supertype_map {
+            supertype_string_map.insert(
+                supertype,
+                subtypes
+                    .iter()
+                    .flat_map(|s| match s {
+                        ChildType::Normal(symbol) => vec![self.symbol_ids.get(symbol).cloned()],
+                        ChildType::Aliased(alias) => {
+                            self.alias_ids.get(alias).cloned().map_or_else(
+                                || {
+                                    self.symbols_for_alias(alias)
+                                        .into_iter()
+                                        .map(|s| self.symbol_ids.get(&s).cloned())
+                                        .collect()
+                                },
+                                |a| vec![Some(a)],
+                            )
+                        }
+                    })
+                    .flatten()
+                    .collect::<BTreeSet<String>>(),
+            );
+        }
+        for (supertype, subtypes) in &supertype_string_map {
+            let length = subtypes.len();
+            add_line!(
+                self,
+                "[{supertype}] = {{.index = {row_id}, .length = {length}}},",
+            );
+            row_id += length;
+            supertype_ids.push(row_id);
+        }
+        dedent!(self);
+        add_line!(self, "}};");
+        add_line!(self, "");
+
+        add_line!(
+            self,
+            "static const TSSymbol ts_supertype_map_entries[] = {{",
+        );
+        indent!(self);
+        for (i, (_, subtypes)) in supertype_string_map.iter().enumerate() {
+            let row_index = supertype_ids[i];
+            add_line!(self, "[{row_index}] =");
+            indent!(self);
+            for subtype in subtypes {
+                add_whitespace!(self);
+                add!(self, "{subtype},\n");
             }
             dedent!(self);
         }
@@ -739,7 +880,7 @@ impl Generator {
                 && chars.ranges().all(|r| {
                     let start = *r.start() as u32;
                     let end = *r.end() as u32;
-                    end <= start + 1 && end <= u16::MAX as u32
+                    end <= start + 1 && u16::try_from(end).is_ok()
                 })
             {
                 leading_simple_transition_count += 1;
@@ -857,7 +998,7 @@ impl Generator {
                 add!(
                     self,
                     "set_contains({}, {}, lookahead)",
-                    &char_set_info.constant_name,
+                    char_set_info.constant_name,
                     large_set.range_count(),
                 );
                 if check_eof {
@@ -922,7 +1063,6 @@ impl Generator {
                     }
                     self.add_character(end);
                     add!(self, ")");
-                    continue;
                 } else if end == start {
                     add!(self, "lookahead == ");
                     self.add_character(start);
@@ -971,11 +1111,7 @@ impl Generator {
             return;
         }
 
-        add_line!(
-            self,
-            "static TSCharacterRange {}[] = {{",
-            info.constant_name
-        );
+        add_line!(self, "const TSCharacterRange {}[] = {{", info.constant_name);
 
         indent!(self);
         for (ix, range) in characters.ranges().enumerate() {
@@ -1008,25 +1144,66 @@ impl Generator {
         }
     }
 
-    fn add_lex_modes_list(&mut self) {
+    fn add_lex_modes(&mut self) {
         add_line!(
             self,
-            "static const TSLexMode ts_lex_modes[STATE_COUNT] = {{"
+            "static const {} ts_lex_modes[STATE_COUNT] = {{",
+            if self.abi_version >= ABI_VERSION_WITH_RESERVED_WORDS {
+                "TSLexerMode"
+            } else {
+                "TSLexMode"
+            }
         );
         indent!(self);
         for (i, state) in self.parse_table.states.iter().enumerate() {
+            add_whitespace!(self);
+            add!(self, "[{i}] = {{");
             if state.is_end_of_non_terminal_extra() {
-                add_line!(self, "[{i}] = {{(TSStateId)(-1)}},");
-            } else if state.external_lex_state_id > 0 {
-                add_line!(
-                    self,
-                    "[{i}] = {{.lex_state = {}, .external_lex_state = {}}},",
-                    state.lex_state_id,
-                    state.external_lex_state_id
-                );
+                add!(self, "(TSStateId)(-1),");
             } else {
-                add_line!(self, "[{i}] = {{.lex_state = {}}},", state.lex_state_id);
+                add!(self, ".lex_state = {}", state.lex_state_id);
+
+                if state.external_lex_state_id > 0 {
+                    add!(
+                        self,
+                        ", .external_lex_state = {}",
+                        state.external_lex_state_id
+                    );
+                }
+
+                if self.abi_version >= ABI_VERSION_WITH_RESERVED_WORDS {
+                    let reserved_word_set_id = self.reserved_word_set_ids_by_parse_state[i];
+                    if reserved_word_set_id != 0 {
+                        add!(self, ", .reserved_word_set_id = {reserved_word_set_id}");
+                    }
+                }
             }
+
+            add!(self, "}},\n");
+        }
+        dedent!(self);
+        add_line!(self, "}};");
+        add_line!(self, "");
+    }
+
+    fn add_reserved_word_sets(&mut self) {
+        add_line!(
+            self,
+            "static const TSSymbol ts_reserved_words[{}][MAX_RESERVED_WORD_SET_SIZE] = {{",
+            self.reserved_word_sets.len(),
+        );
+        indent!(self);
+        for (id, set) in self.reserved_word_sets.iter().enumerate() {
+            if id == 0 {
+                continue;
+            }
+            add_line!(self, "[{id}] = {{");
+            indent!(self);
+            for token in set.iter() {
+                add_line!(self, "{},", self.symbol_ids[&token]);
+            }
+            dedent!(self);
+            add_line!(self, "}},");
         }
         dedent!(self);
         add_line!(self, "}};");
@@ -1080,7 +1257,7 @@ impl Generator {
         indent!(self);
         for i in 0..self.parse_table.external_lex_states.len() {
             if !self.parse_table.external_lex_states[i].is_empty() {
-                add_line!(self, "[{}] = {{", i);
+                add_line!(self, "[{i}] = {{");
                 indent!(self);
                 for token in self.parse_table.external_lex_states[i].iter() {
                     add_line!(
@@ -1102,6 +1279,7 @@ impl Generator {
         let mut parse_table_entries = HashMap::new();
         let mut next_parse_action_list_index = 0;
 
+        // Parse action lists zero is for the default value, when a symbol is not valid.
         self.get_parse_action_list_id(
             &ParseTableEntry {
                 actions: Vec::new(),
@@ -1127,7 +1305,7 @@ impl Generator {
             .enumerate()
             .take(self.large_state_count)
         {
-            add_line!(self, "[{i}] = {{");
+            add_line!(self, "[STATE({i})] = {{");
             indent!(self);
 
             // Ensure the entries are in a deterministic order, since they are
@@ -1159,9 +1337,11 @@ impl Generator {
                 );
                 add_line!(self, "[{}] = ACTIONS({entry_id}),", self.symbol_ids[symbol]);
             }
+
             dedent!(self);
             add_line!(self, "}},");
         }
+
         dedent!(self);
         add_line!(self, "}};");
         add_line!(self, "");
@@ -1170,11 +1350,11 @@ impl Generator {
             add_line!(self, "static const uint16_t ts_small_parse_table[] = {{");
             indent!(self);
 
-            let mut index = 0;
+            let mut next_table_index = 0;
             let mut small_state_indices = Vec::new();
             let mut symbols_by_value = HashMap::<(usize, SymbolType), Vec<Symbol>>::new();
             for state in self.parse_table.states.iter().skip(self.large_state_count) {
-                small_state_indices.push(index);
+                small_state_indices.push(next_table_index);
                 symbols_by_value.clear();
 
                 terminal_entries.clear();
@@ -1213,10 +1393,16 @@ impl Generator {
                     (symbols.len(), *kind, *value, symbols[0])
                 });
 
-                add_line!(self, "[{index}] = {},", values_with_symbols.len());
+                add_line!(
+                    self,
+                    "[{next_table_index}] = {},",
+                    values_with_symbols.len()
+                );
                 indent!(self);
+                next_table_index += 1;
 
                 for ((value, kind), symbols) in &mut values_with_symbols {
+                    next_table_index += 2 + symbols.len();
                     if *kind == SymbolType::NonTerminal {
                         add_line!(self, "STATE({value}), {},", symbols.len());
                     } else {
@@ -1232,11 +1418,6 @@ impl Generator {
                 }
 
                 dedent!(self);
-
-                index += 1 + values_with_symbols
-                    .iter()
-                    .map(|(_, symbols)| 2 + symbols.len())
-                    .sum::<usize>();
             }
 
             dedent!(self);
@@ -1365,7 +1546,7 @@ impl Generator {
         indent!(self);
         add_line!(self, "static const TSLanguage language = {{");
         indent!(self);
-        add_line!(self, ".version = LANGUAGE_VERSION,");
+        add_line!(self, ".abi_version = LANGUAGE_VERSION,");
 
         // Quantities
         add_line!(self, ".symbol_count = SYMBOL_COUNT,");
@@ -1375,6 +1556,9 @@ impl Generator {
         add_line!(self, ".state_count = STATE_COUNT,");
         add_line!(self, ".large_state_count = LARGE_STATE_COUNT,");
         add_line!(self, ".production_id_count = PRODUCTION_ID_COUNT,");
+        if self.abi_version >= ABI_VERSION_WITH_RESERVED_WORDS {
+            add_line!(self, ".supertype_count = SUPERTYPE_COUNT,");
+        }
         add_line!(self, ".field_count = FIELD_COUNT,");
         add_line!(
             self,
@@ -1396,6 +1580,11 @@ impl Generator {
             add_line!(self, ".field_map_slices = ts_field_map_slices,");
             add_line!(self, ".field_map_entries = ts_field_map_entries,");
         }
+        if !self.supertype_map.is_empty() && self.abi_version >= ABI_VERSION_WITH_RESERVED_WORDS {
+            add_line!(self, ".supertype_map_slices = ts_supertype_map_slices,");
+            add_line!(self, ".supertype_map_entries = ts_supertype_map_entries,");
+            add_line!(self, ".supertype_symbols = ts_supertype_symbols,");
+        }
         add_line!(self, ".symbol_metadata = ts_symbol_metadata,");
         add_line!(self, ".public_symbol_map = ts_symbol_map,");
         add_line!(self, ".alias_map = ts_non_terminal_alias_map,");
@@ -1404,9 +1593,9 @@ impl Generator {
         }
 
         // Lexing
-        add_line!(self, ".lex_modes = ts_lex_modes,");
+        add_line!(self, ".lex_modes = (const void*)ts_lex_modes,");
         add_line!(self, ".lex_fn = ts_lex,");
-        if let Some(keyword_capture_token) = self.keyword_capture_token {
+        if let Some(keyword_capture_token) = self.syntax_grammar.word_token {
             add_line!(self, ".keyword_lex_fn = ts_lex_keywords,");
             add_line!(
                 self,
@@ -1429,8 +1618,42 @@ impl Generator {
             add_line!(self, "}},");
         }
 
-        if self.abi_version >= ABI_VERSION_WITH_PRIMARY_STATES {
-            add_line!(self, ".primary_state_ids = ts_primary_state_ids,");
+        add_line!(self, ".primary_state_ids = ts_primary_state_ids,");
+
+        if self.abi_version >= ABI_VERSION_WITH_RESERVED_WORDS {
+            add_line!(self, ".name = \"{}\",", self.language_name);
+
+            if self.reserved_word_sets.len() > 1 {
+                add_line!(self, ".reserved_words = &ts_reserved_words[0][0],");
+            }
+
+            add_line!(
+                self,
+                ".max_reserved_word_set_size = {},",
+                self.reserved_word_sets
+                    .iter()
+                    .map(TokenSet::len)
+                    .max()
+                    .unwrap()
+            );
+
+            let Some(metadata) = &self.metadata else {
+                panic!(
+                    indoc! {"
+                        Metadata is required to generate ABI version {}.
+                        This means that your grammar doesn't have a tree-sitter.json config file with an appropriate version field in the metadata table.
+                    "},
+                    self.abi_version
+                );
+            };
+
+            add_line!(self, ".metadata = {{");
+            indent!(self);
+            add_line!(self, ".major_version = {},", metadata.major_version);
+            add_line!(self, ".minor_version = {},", metadata.minor_version);
+            add_line!(self, ".patch_version = {},", metadata.patch_version);
+            dedent!(self);
+            add_line!(self, "}},");
         }
 
         dedent!(self);
@@ -1530,6 +1753,23 @@ impl Generator {
                 (&token.name, token.kind)
             }
         }
+    }
+
+    fn symbols_for_alias(&self, alias: &Alias) -> Vec<Symbol> {
+        self.parse_table
+            .symbols
+            .iter()
+            .copied()
+            .filter(move |symbol| {
+                self.default_aliases.get(symbol).map_or_else(
+                    || {
+                        let (name, kind) = self.metadata_for_symbol(*symbol);
+                        name == alias.value && kind == alias.kind()
+                    },
+                    |default_alias| default_alias == alias,
+                )
+            })
+            .collect()
     }
 
     fn sanitize_identifier(&self, name: &str) -> String {
@@ -1699,6 +1939,8 @@ pub fn render_c_code(
     lexical_grammar: LexicalGrammar,
     default_aliases: AliasMap,
     abi_version: usize,
+    semantic_version: Option<(u8, u8, u8)>,
+    supertype_symbol_map: BTreeMap<Symbol, Vec<ChildType>>,
 ) -> String {
     assert!(
         (ABI_VERSION_MIN..=ABI_VERSION_MAX).contains(&abi_version),
@@ -1706,26 +1948,23 @@ pub fn render_c_code(
     );
 
     Generator {
-        buffer: String::new(),
-        indent_level: 0,
         language_name: name.to_string(),
-        large_state_count: 0,
         parse_table: tables.parse_table,
         main_lex_table: tables.main_lex_table,
         keyword_lex_table: tables.keyword_lex_table,
-        keyword_capture_token: tables.word_token,
         large_character_sets: tables.large_character_sets,
         large_character_set_info: Vec::new(),
         syntax_grammar,
         lexical_grammar,
         default_aliases,
-        symbol_ids: HashMap::new(),
-        symbol_order: HashMap::new(),
-        alias_ids: HashMap::new(),
-        symbol_map: HashMap::new(),
-        unique_aliases: Vec::new(),
-        field_names: Vec::new(),
         abi_version,
+        metadata: semantic_version.map(|(major_version, minor_version, patch_version)| Metadata {
+            major_version,
+            minor_version,
+            patch_version,
+        }),
+        supertype_symbol_map,
+        ..Default::default()
     }
     .generate()
 }

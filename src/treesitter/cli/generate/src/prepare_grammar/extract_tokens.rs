@@ -1,16 +1,40 @@
-use std::{collections::HashMap, mem};
+use std::collections::HashMap;
 
-use anyhow::{anyhow, Result};
+use anyhow::Result;
+use serde::Serialize;
+use thiserror::Error;
 
 use super::{ExtractedLexicalGrammar, ExtractedSyntaxGrammar, InternedGrammar};
 use crate::{
-    grammars::{ExternalToken, Variable, VariableType},
+    grammars::{ExternalToken, ReservedWordContext, Variable, VariableType},
     rules::{MetadataParams, Rule, Symbol, SymbolType},
 };
 
+pub type ExtractTokensResult<T> = Result<T, ExtractTokensError>;
+
+#[derive(Debug, Error, Serialize)]
+pub enum ExtractTokensError {
+    #[error(
+        "The rule `{0}` contains an empty string.
+
+Tree-sitter does not support syntactic rules that contain an empty string
+unless they are used only as the grammar's start rule.
+"
+    )]
+    EmptyString(String),
+    #[error("Rule '{0}' cannot be used as both an external token and a non-terminal rule")]
+    ExternalTokenNonTerminal(String),
+    #[error("Non-symbol rules cannot be used as external tokens")]
+    NonSymbolExternalToken,
+    #[error("Non-terminal symbol '{0}' cannot be used as the word token, because its rule is duplicated in '{1}'")]
+    NonTerminalWordToken(String, String),
+    #[error("Reserved words must be tokens")]
+    NonTokenReservedWord,
+}
+
 pub(super) fn extract_tokens(
     mut grammar: InternedGrammar,
-) -> Result<(ExtractedSyntaxGrammar, ExtractedLexicalGrammar)> {
+) -> ExtractTokensResult<(ExtractedSyntaxGrammar, ExtractedLexicalGrammar)> {
     let mut extractor = TokenExtractor {
         current_variable_name: String::new(),
         current_variable_token_count: 0,
@@ -110,10 +134,9 @@ pub(super) fn extract_tokens(
         let rule = symbol_replacer.replace_symbols_in_rule(&external_token.rule);
         if let Rule::Symbol(symbol) = rule {
             if symbol.is_non_terminal() {
-                return Err(anyhow!(
-                    "Rule '{}' cannot be used as both an external token and a non-terminal rule",
-                    &variables[symbol.index].name,
-                ));
+                Err(ExtractTokensError::ExternalTokenNonTerminal(
+                    variables[symbol.index].name.clone(),
+                ))?;
             }
 
             if symbol.is_external() {
@@ -130,9 +153,7 @@ pub(super) fn extract_tokens(
                 });
             }
         } else {
-            return Err(anyhow!(
-                "Non-symbol rules cannot be used as external tokens"
-            ));
+            Err(ExtractTokensError::NonSymbolExternalToken)?;
         }
     }
 
@@ -140,12 +161,40 @@ pub(super) fn extract_tokens(
     if let Some(token) = grammar.word_token {
         let token = symbol_replacer.replace_symbol(token);
         if token.is_non_terminal() {
-            return Err(anyhow!(
-                "Non-terminal symbol '{}' cannot be used as the word token",
-                &variables[token.index].name
-            ));
+            let word_token_variable = &variables[token.index];
+            let conflicting_variable = variables
+                .iter()
+                .enumerate()
+                .find(|(i, v)| *i != token.index && v.rule == word_token_variable.rule)
+                .expect("Failed to find a variable with the same rule as the word token");
+
+            Err(ExtractTokensError::NonTerminalWordToken(
+                word_token_variable.name.clone(),
+                conflicting_variable.1.name.clone(),
+            ))?;
         }
         word_token = Some(token);
+    }
+
+    let mut reserved_word_contexts = Vec::new();
+    for reserved_word_context in grammar.reserved_word_sets {
+        let mut reserved_words = Vec::new();
+        for reserved_rule in reserved_word_context.reserved_words {
+            if let Rule::Symbol(symbol) = reserved_rule {
+                reserved_words.push(symbol_replacer.replace_symbol(symbol));
+            } else if let Some(index) = lexical_variables
+                .iter()
+                .position(|v| v.rule == reserved_rule)
+            {
+                reserved_words.push(Symbol::terminal(index));
+            } else {
+                Err(ExtractTokensError::NonTokenReservedWord)?;
+            }
+        }
+        reserved_word_contexts.push(ReservedWordContext {
+            name: reserved_word_context.name,
+            reserved_words,
+        });
     }
 
     Ok((
@@ -158,6 +207,7 @@ pub(super) fn extract_tokens(
             external_tokens,
             word_token,
             precedence_orderings: grammar.precedence_orderings,
+            reserved_word_sets: reserved_word_contexts,
         },
         ExtractedLexicalGrammar {
             variables: lexical_variables,
@@ -183,18 +233,16 @@ impl TokenExtractor {
         &mut self,
         is_first: bool,
         variable: &mut Variable,
-    ) -> Result<()> {
+    ) -> ExtractTokensResult<()> {
         self.current_variable_name.clear();
         self.current_variable_name.push_str(&variable.name);
         self.current_variable_token_count = 0;
         self.is_first_rule = is_first;
-        let mut rule = Rule::Blank;
-        mem::swap(&mut rule, &mut variable.rule);
-        variable.rule = self.extract_tokens_in_rule(&rule)?;
+        variable.rule = self.extract_tokens_in_rule(&variable.rule)?;
         Ok(())
     }
 
-    fn extract_tokens_in_rule(&mut self, input: &Rule) -> Result<Rule> {
+    fn extract_tokens_in_rule(&mut self, input: &Rule) -> ExtractTokensResult<Rule> {
         match input {
             Rule::String(name) => Ok(self.extract_token(input, Some(name))?.into()),
             Rule::Pattern(..) => Ok(self.extract_token(input, None)?.into()),
@@ -229,19 +277,27 @@ impl TokenExtractor {
                 elements
                     .iter()
                     .map(|e| self.extract_tokens_in_rule(e))
-                    .collect::<Result<Vec<_>>>()?,
+                    .collect::<ExtractTokensResult<Vec<_>>>()?,
             )),
             Rule::Choice(elements) => Ok(Rule::Choice(
                 elements
                     .iter()
                     .map(|e| self.extract_tokens_in_rule(e))
-                    .collect::<Result<Vec<_>>>()?,
+                    .collect::<ExtractTokensResult<Vec<_>>>()?,
             )),
+            Rule::Reserved { rule, context_name } => Ok(Rule::Reserved {
+                rule: Box::new(self.extract_tokens_in_rule(rule)?),
+                context_name: context_name.clone(),
+            }),
             _ => Ok(input.clone()),
         }
     }
 
-    fn extract_token(&mut self, rule: &Rule, string_value: Option<&String>) -> Result<Symbol> {
+    fn extract_token(
+        &mut self,
+        rule: &Rule,
+        string_value: Option<&String>,
+    ) -> ExtractTokensResult<Symbol> {
         for (i, variable) in self.extracted_variables.iter_mut().enumerate() {
             if variable.rule == *rule {
                 self.extracted_usage_counts[i] += 1;
@@ -252,14 +308,9 @@ impl TokenExtractor {
         let index = self.extracted_variables.len();
         let variable = if let Some(string_value) = string_value {
             if string_value.is_empty() && !self.is_first_rule {
-                return Err(anyhow!(
-                    "The rule `{}` contains an empty string.
-
-Tree-sitter does not support syntactic rules that contain an empty string
-unless they are used only as the grammar's start rule.
-",
-                    self.current_variable_name
-                ));
+                Err(ExtractTokensError::EmptyString(
+                    self.current_variable_name.clone(),
+                ))?;
             }
             Variable {
                 name: string_value.clone(),
@@ -271,7 +322,7 @@ unless they are used only as the grammar's start rule.
             Variable {
                 name: format!(
                     "{}_token{}",
-                    &self.current_variable_name, self.current_variable_token_count
+                    self.current_variable_name, self.current_variable_token_count
                 ),
                 kind: VariableType::Auxiliary,
                 rule: rule.clone(),
@@ -304,6 +355,10 @@ impl SymbolReplacer {
             Rule::Metadata { rule, params } => Rule::Metadata {
                 params: params.clone(),
                 rule: Box::new(self.replace_symbols_in_rule(rule)),
+            },
+            Rule::Reserved { rule, context_name } => Rule::Reserved {
+                rule: Box::new(self.replace_symbols_in_rule(rule)),
+                context_name: context_name.clone(),
             },
             _ => rule.clone(),
         }

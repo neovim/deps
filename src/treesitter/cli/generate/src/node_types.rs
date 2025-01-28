@@ -3,8 +3,9 @@ use std::{
     collections::{BTreeMap, HashMap, HashSet},
 };
 
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use serde::Serialize;
+use thiserror::Error;
 
 use super::{
     grammars::{LexicalGrammar, SyntaxGrammar, VariableType},
@@ -38,6 +39,8 @@ pub struct NodeInfoJSON {
     named: bool,
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     root: bool,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    extra: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     fields: Option<BTreeMap<String, FieldInfoJSON>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -132,6 +135,14 @@ impl ChildQuantity {
     }
 }
 
+pub type VariableInfoResult<T> = Result<T, VariableInfoError>;
+
+#[derive(Debug, Error, Serialize)]
+pub enum VariableInfoError {
+    #[error("Grammar error: Supertype symbols must always have a single visible child, but `{0}` can have multiple")]
+    InvalidSupertype(String),
+}
+
 /// Compute a summary of the public-facing structure of each variable in the
 /// grammar. Each variable in the grammar corresponds to a distinct public-facing
 /// node type.
@@ -157,7 +168,7 @@ pub fn get_variable_info(
     syntax_grammar: &SyntaxGrammar,
     lexical_grammar: &LexicalGrammar,
     default_aliases: &AliasMap,
-) -> Result<Vec<VariableInfo>> {
+) -> VariableInfoResult<Vec<VariableInfo>> {
     let child_type_is_visible = |t: &ChildType| {
         variable_type_for_child_type(t, syntax_grammar, lexical_grammar) >= VariableType::Anonymous
     };
@@ -338,13 +349,7 @@ pub fn get_variable_info(
     for supertype_symbol in &syntax_grammar.supertype_symbols {
         if result[supertype_symbol.index].has_multi_step_production {
             let variable = &syntax_grammar.variables[supertype_symbol.index];
-            return Err(anyhow!(
-                concat!(
-                    "Grammar error: Supertype symbols must always ",
-                    "have a single visible child, but `{}` can have multiple"
-                ),
-                variable.name
-            ));
+            Err(VariableInfoError::InvalidSupertype(variable.name.clone()))?;
         }
     }
 
@@ -367,6 +372,76 @@ pub fn get_variable_info(
     }
 
     Ok(result)
+}
+
+fn get_aliases_by_symbol(
+    syntax_grammar: &SyntaxGrammar,
+    default_aliases: &AliasMap,
+) -> HashMap<Symbol, HashSet<Option<Alias>>> {
+    let mut aliases_by_symbol = HashMap::new();
+    for (symbol, alias) in default_aliases {
+        aliases_by_symbol.insert(*symbol, {
+            let mut aliases = HashSet::new();
+            aliases.insert(Some(alias.clone()));
+            aliases
+        });
+    }
+    for extra_symbol in &syntax_grammar.extra_symbols {
+        if !default_aliases.contains_key(extra_symbol) {
+            aliases_by_symbol
+                .entry(*extra_symbol)
+                .or_insert_with(HashSet::new)
+                .insert(None);
+        }
+    }
+    for variable in &syntax_grammar.variables {
+        for production in &variable.productions {
+            for step in &production.steps {
+                aliases_by_symbol
+                    .entry(step.symbol)
+                    .or_insert_with(HashSet::new)
+                    .insert(
+                        step.alias
+                            .as_ref()
+                            .or_else(|| default_aliases.get(&step.symbol))
+                            .cloned(),
+                    );
+            }
+        }
+    }
+    aliases_by_symbol.insert(
+        Symbol::non_terminal(0),
+        std::iter::once(&None).cloned().collect(),
+    );
+    aliases_by_symbol
+}
+
+pub fn get_supertype_symbol_map(
+    syntax_grammar: &SyntaxGrammar,
+    default_aliases: &AliasMap,
+    variable_info: &[VariableInfo],
+) -> BTreeMap<Symbol, Vec<ChildType>> {
+    let aliases_by_symbol = get_aliases_by_symbol(syntax_grammar, default_aliases);
+    let mut supertype_symbol_map = BTreeMap::new();
+
+    let mut symbols_by_alias = HashMap::new();
+    for (symbol, aliases) in &aliases_by_symbol {
+        for alias in aliases.iter().flatten() {
+            symbols_by_alias
+                .entry(alias)
+                .or_insert_with(Vec::new)
+                .push(*symbol);
+        }
+    }
+
+    for (i, info) in variable_info.iter().enumerate() {
+        let symbol = Symbol::non_terminal(i);
+        if syntax_grammar.supertype_symbols.contains(&symbol) {
+            let subtypes = info.children.types.clone();
+            supertype_symbol_map.insert(symbol, subtypes);
+        }
+    }
+    supertype_symbol_map
 }
 
 pub fn generate_node_types_json(
@@ -430,41 +505,7 @@ pub fn generate_node_types_json(
         }
     };
 
-    let mut aliases_by_symbol = HashMap::new();
-    for (symbol, alias) in default_aliases {
-        aliases_by_symbol.insert(*symbol, {
-            let mut aliases = HashSet::new();
-            aliases.insert(Some(alias.clone()));
-            aliases
-        });
-    }
-    for extra_symbol in &syntax_grammar.extra_symbols {
-        if !default_aliases.contains_key(extra_symbol) {
-            aliases_by_symbol
-                .entry(*extra_symbol)
-                .or_insert_with(HashSet::new)
-                .insert(None);
-        }
-    }
-    for variable in &syntax_grammar.variables {
-        for production in &variable.productions {
-            for step in &production.steps {
-                aliases_by_symbol
-                    .entry(step.symbol)
-                    .or_insert_with(HashSet::new)
-                    .insert(
-                        step.alias
-                            .as_ref()
-                            .or_else(|| default_aliases.get(&step.symbol))
-                            .cloned(),
-                    );
-            }
-        }
-    }
-    aliases_by_symbol.insert(
-        Symbol::non_terminal(0),
-        std::iter::once(&None).cloned().collect(),
-    );
+    let aliases_by_symbol = get_aliases_by_symbol(syntax_grammar, default_aliases);
 
     let mut subtype_map = Vec::new();
     for (i, info) in variable_info.iter().enumerate() {
@@ -478,6 +519,7 @@ pub fn generate_node_types_json(
                         kind: variable.name.clone(),
                         named: true,
                         root: false,
+                        extra: false,
                         fields: None,
                         children: None,
                         subtypes: None,
@@ -499,10 +541,7 @@ pub fn generate_node_types_json(
         } else if !syntax_grammar.variables_to_inline.contains(&symbol) {
             // If a rule is aliased under multiple names, then its information
             // contributes to multiple entries in the final JSON.
-            for alias in aliases_by_symbol
-                .get(&Symbol::non_terminal(i))
-                .unwrap_or(&HashSet::new())
-            {
+            for alias in aliases_by_symbol.get(&symbol).unwrap_or(&HashSet::new()) {
                 let kind;
                 let is_named;
                 if let Some(alias) = alias {
@@ -524,6 +563,7 @@ pub fn generate_node_types_json(
                         kind: kind.clone(),
                         named: is_named,
                         root: i == 0,
+                        extra: false,
                         fields: Some(BTreeMap::new()),
                         children: None,
                         subtypes: None,
@@ -577,7 +617,7 @@ pub fn generate_node_types_json(
         if node_type_json
             .children
             .as_ref()
-            .map_or(false, |c| c.types.is_empty())
+            .is_some_and(|c| c.types.is_empty())
         {
             node_type_json.children = None;
         }
@@ -628,6 +668,29 @@ pub fn generate_node_types_json(
                         })
                     })
             });
+    let extra_names = syntax_grammar
+        .extra_symbols
+        .iter()
+        .flat_map(|symbol| {
+            aliases_by_symbol
+                .get(symbol)
+                .unwrap_or(&empty)
+                .iter()
+                .map(|alias| {
+                    alias.as_ref().map_or(
+                        match symbol.kind {
+                            SymbolType::NonTerminal => &syntax_grammar.variables[symbol.index].name,
+                            SymbolType::Terminal => &lexical_grammar.variables[symbol.index].name,
+                            SymbolType::External => {
+                                &syntax_grammar.external_tokens[symbol.index].name
+                            }
+                            _ => unreachable!(),
+                        },
+                        |alias| &alias.value,
+                    )
+                })
+        })
+        .collect::<HashSet<_>>();
 
     for (name, kind) in regular_tokens.chain(external_tokens) {
         match kind {
@@ -639,6 +702,7 @@ pub fn generate_node_types_json(
                             kind: name.clone(),
                             named: true,
                             root: false,
+                            extra: extra_names.contains(&name),
                             fields: None,
                             children: None,
                             subtypes: None,
@@ -656,6 +720,7 @@ pub fn generate_node_types_json(
                 kind: name.clone(),
                 named: false,
                 root: false,
+                extra: extra_names.contains(&name),
                 fields: None,
                 children: None,
                 subtypes: None,
@@ -774,6 +839,7 @@ mod tests {
                 kind: "v1".to_string(),
                 named: true,
                 root: true,
+                extra: false,
                 subtypes: None,
                 children: None,
                 fields: Some(
@@ -812,6 +878,7 @@ mod tests {
                 kind: ";".to_string(),
                 named: false,
                 root: false,
+                extra: false,
                 subtypes: None,
                 children: None,
                 fields: None
@@ -823,6 +890,7 @@ mod tests {
                 kind: "v2".to_string(),
                 named: true,
                 root: false,
+                extra: false,
                 subtypes: None,
                 children: None,
                 fields: None
@@ -868,6 +936,7 @@ mod tests {
                 kind: "v1".to_string(),
                 named: true,
                 root: true,
+                extra: false,
                 subtypes: None,
                 children: None,
                 fields: Some(
@@ -906,6 +975,7 @@ mod tests {
                 kind: ";".to_string(),
                 named: false,
                 root: false,
+                extra: false,
                 subtypes: None,
                 children: None,
                 fields: None
@@ -917,6 +987,7 @@ mod tests {
                 kind: "v2".to_string(),
                 named: true,
                 root: false,
+                extra: false,
                 subtypes: None,
                 children: None,
                 fields: None
@@ -928,6 +999,7 @@ mod tests {
                 kind: "v3".to_string(),
                 named: true,
                 root: false,
+                extra: true,
                 subtypes: None,
                 children: None,
                 fields: None
@@ -974,6 +1046,7 @@ mod tests {
                 kind: "_v2".to_string(),
                 named: true,
                 root: false,
+                extra: false,
                 fields: None,
                 children: None,
                 subtypes: Some(vec![
@@ -998,6 +1071,7 @@ mod tests {
                 kind: "v1".to_string(),
                 named: true,
                 root: true,
+                extra: false,
                 subtypes: None,
                 children: None,
                 fields: Some(
@@ -1061,6 +1135,7 @@ mod tests {
                 kind: "v1".to_string(),
                 named: true,
                 root: true,
+                extra: false,
                 subtypes: None,
                 children: Some(FieldInfoJSON {
                     multiple: true,
@@ -1099,6 +1174,7 @@ mod tests {
                 kind: "v2".to_string(),
                 named: true,
                 root: false,
+                extra: false,
                 subtypes: None,
                 children: Some(FieldInfoJSON {
                     multiple: false,
@@ -1144,6 +1220,7 @@ mod tests {
                 kind: "v1".to_string(),
                 named: true,
                 root: true,
+                extra: false,
                 subtypes: None,
                 children: Some(FieldInfoJSON {
                     multiple: true,
@@ -1218,6 +1295,7 @@ mod tests {
                 kind: "identifier".to_string(),
                 named: true,
                 root: false,
+                extra: false,
                 subtypes: None,
                 children: None,
                 fields: None,
@@ -1229,6 +1307,7 @@ mod tests {
                 kind: "type_identifier".to_string(),
                 named: true,
                 root: false,
+                extra: false,
                 subtypes: None,
                 children: None,
                 fields: None,
@@ -1271,6 +1350,7 @@ mod tests {
                 kind: "a".to_string(),
                 named: true,
                 root: true,
+                extra: false,
                 subtypes: None,
                 children: Some(FieldInfoJSON {
                     multiple: true,
@@ -1319,6 +1399,7 @@ mod tests {
                 kind: "script".to_string(),
                 named: true,
                 root: true,
+                extra: false,
                 fields: Some(BTreeMap::new()),
                 children: None,
                 subtypes: None
@@ -1376,6 +1457,7 @@ mod tests {
                     kind: "a".to_string(),
                     named: true,
                     root: false,
+                    extra: false,
                     subtypes: None,
                     children: None,
                     fields: Some(
@@ -1432,6 +1514,7 @@ mod tests {
                     kind: "script".to_string(),
                     named: true,
                     root: true,
+                    extra: false,
                     subtypes: None,
                     // Only one node
                     children: Some(FieldInfoJSON {
@@ -1487,6 +1570,7 @@ mod tests {
                 kind: "b".to_string(),
                 named: true,
                 root: false,
+                extra: false,
                 subtypes: None,
                 children: Some(FieldInfoJSON {
                     multiple: true,

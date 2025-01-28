@@ -1,10 +1,11 @@
 use std::{collections::HashMap, fmt};
 
+use serde::Serialize;
 use smallbitvec::SmallBitVec;
 
 use super::grammars::VariableType;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize)]
 pub enum SymbolType {
     External,
     End,
@@ -13,19 +14,19 @@ pub enum SymbolType {
     NonTerminal,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize)]
 pub enum Associativity {
     Left,
     Right,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize)]
 pub struct Alias {
     pub value: String,
     pub is_named: bool,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Default)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Default, Serialize)]
 pub enum Precedence {
     #[default]
     None,
@@ -35,26 +36,24 @@ pub enum Precedence {
 
 pub type AliasMap = HashMap<Symbol, Alias>;
 
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize)]
 pub struct MetadataParams {
     pub precedence: Precedence,
     pub dynamic_precedence: i32,
     pub associativity: Option<Associativity>,
     pub is_token: bool,
-    pub is_string: bool,
-    pub is_active: bool,
     pub is_main_token: bool,
     pub alias: Option<Alias>,
     pub field_name: Option<String>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize)]
 pub struct Symbol {
     pub kind: SymbolType,
     pub index: usize,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize)]
 pub enum Rule {
     Blank,
     String(String),
@@ -68,18 +67,48 @@ pub enum Rule {
     },
     Repeat(Box<Rule>),
     Seq(Vec<Rule>),
+    Reserved {
+        rule: Box<Rule>,
+        context_name: String,
+    },
 }
 
 // Because tokens are represented as small (~400 max) unsigned integers,
 // sets of tokens can be efficiently represented as bit vectors with each
 // index corresponding to a token, and each value representing whether or not
 // the token is present in the set.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Default, Clone, PartialEq, Eq, Hash)]
 pub struct TokenSet {
     terminal_bits: SmallBitVec,
     external_bits: SmallBitVec,
     eof: bool,
     end_of_nonterminal_extra: bool,
+}
+
+impl fmt::Debug for TokenSet {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_list().entries(self.iter()).finish()
+    }
+}
+
+impl PartialOrd for TokenSet {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for TokenSet {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.terminal_bits
+            .iter()
+            .cmp(other.terminal_bits.iter())
+            .then_with(|| self.external_bits.iter().cmp(other.external_bits.iter()))
+            .then_with(|| self.eof.cmp(&other.eof))
+            .then_with(|| {
+                self.end_of_nonterminal_extra
+                    .cmp(&other.end_of_nonterminal_extra)
+            })
+    }
 }
 
 impl Rule {
@@ -148,6 +177,18 @@ impl Rule {
 
     pub const fn seq(rules: Vec<Self>) -> Self {
         Self::Seq(rules)
+    }
+
+    pub fn is_empty(&self) -> bool {
+        match self {
+            Self::Blank | Self::Pattern(..) | Self::NamedSymbol(_) | Self::Symbol(_) => false,
+            Self::String(string) => string.is_empty(),
+            Self::Metadata { rule, .. } | Self::Repeat(rule) | Self::Reserved { rule, .. } => {
+                rule.is_empty()
+            }
+            Self::Choice(rules) => rules.iter().any(Self::is_empty),
+            Self::Seq(rules) => rules.iter().all(Self::is_empty),
+        }
     }
 }
 
@@ -384,6 +425,9 @@ impl TokenSet {
         };
         if other.index < vec.len() && vec[other.index] {
             vec.set(other.index, false);
+            while vec.last() == Some(false) {
+                vec.pop();
+            }
             return true;
         }
         false
@@ -394,6 +438,13 @@ impl TokenSet {
             && !self.end_of_nonterminal_extra
             && !self.terminal_bits.iter().any(|a| a)
             && !self.external_bits.iter().any(|a| a)
+    }
+
+    pub fn len(&self) -> usize {
+        self.eof as usize
+            + self.end_of_nonterminal_extra as usize
+            + self.terminal_bits.iter().filter(|b| *b).count()
+            + self.external_bits.iter().filter(|b| *b).count()
     }
 
     pub fn insert_all_terminals(&mut self, other: &Self) -> bool {

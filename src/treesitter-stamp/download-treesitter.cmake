@@ -22,16 +22,16 @@ function(check_file_hash has_hash hash_is_good)
   set("${has_hash}" TRUE PARENT_SCOPE)
 
   message(VERBOSE "verifying file...
-       file='/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter/v0.24.7.tar.gz'")
+       file='/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter/9515be4fc16d3dfe6fba5ae4a7a058f32bcf535d.tar.gz'")
 
-  file("SHA256" "/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter/v0.24.7.tar.gz" actual_value)
+  file("SHA256" "/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter/9515be4fc16d3dfe6fba5ae4a7a058f32bcf535d.tar.gz" actual_value)
 
-  if(NOT "${actual_value}" STREQUAL "7cbc13c974d6abe978cafc9da12d1e79e07e365c42af75e43ec1b5cdc03ed447")
+  if(NOT "${actual_value}" STREQUAL "cbdea399736b55d61cfb581bc8d80620d487f4ec8f8d60b7fe00406e39a98d6d")
     set("${hash_is_good}" FALSE PARENT_SCOPE)
     message(VERBOSE "SHA256 hash of
-    /home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter/v0.24.7.tar.gz
+    /home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter/9515be4fc16d3dfe6fba5ae4a7a058f32bcf535d.tar.gz
   does not match expected value
-    expected: '7cbc13c974d6abe978cafc9da12d1e79e07e365c42af75e43ec1b5cdc03ed447'
+    expected: 'cbdea399736b55d61cfb581bc8d80620d487f4ec8f8d60b7fe00406e39a98d6d'
       actual: '${actual_value}'")
   else()
     set("${hash_is_good}" TRUE PARENT_SCOPE)
@@ -71,32 +71,32 @@ function(sleep_before_download attempt)
   execute_process(COMMAND "${CMAKE_COMMAND}" -E sleep "${sleep_seconds}")
 endfunction()
 
-if(EXISTS "/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter/v0.24.7.tar.gz")
+if(EXISTS "/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter/9515be4fc16d3dfe6fba5ae4a7a058f32bcf535d.tar.gz")
   check_file_hash(has_hash hash_is_good)
   if(has_hash)
     if(hash_is_good)
       message(VERBOSE "File already exists and hash match (skip download):
-  file='/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter/v0.24.7.tar.gz'
-  SHA256='7cbc13c974d6abe978cafc9da12d1e79e07e365c42af75e43ec1b5cdc03ed447'"
+  file='/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter/9515be4fc16d3dfe6fba5ae4a7a058f32bcf535d.tar.gz'
+  SHA256='cbdea399736b55d61cfb581bc8d80620d487f4ec8f8d60b7fe00406e39a98d6d'"
       )
       return()
     else()
       message(VERBOSE "File already exists but hash mismatch. Removing...")
-      file(REMOVE "/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter/v0.24.7.tar.gz")
+      file(REMOVE "/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter/9515be4fc16d3dfe6fba5ae4a7a058f32bcf535d.tar.gz")
     endif()
   else()
     message(VERBOSE "File already exists but no hash specified (use URL_HASH):
-  file='/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter/v0.24.7.tar.gz'
+  file='/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter/9515be4fc16d3dfe6fba5ae4a7a058f32bcf535d.tar.gz'
 Old file will be removed and new file downloaded from URL."
     )
-    file(REMOVE "/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter/v0.24.7.tar.gz")
+    file(REMOVE "/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter/9515be4fc16d3dfe6fba5ae4a7a058f32bcf535d.tar.gz")
   endif()
 endif()
 
 set(retry_number 5)
 
 message(VERBOSE "Downloading...
-   dst='/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter/v0.24.7.tar.gz'
+   dst='/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter/9515be4fc16d3dfe6fba5ae4a7a058f32bcf535d.tar.gz'
    timeout='none'
    inactivity timeout='none'"
 )
@@ -107,7 +107,7 @@ foreach(i RANGE ${retry_number})
   if(status_code IN_LIST download_retry_codes)
     sleep_before_download(${i})
   endif()
-  foreach(url IN ITEMS [====[https://github.com/tree-sitter/tree-sitter/archive/v0.24.7.tar.gz]====])
+  foreach(url IN ITEMS [====[https://github.com/tree-sitter/tree-sitter/archive/9515be4fc16d3dfe6fba5ae4a7a058f32bcf535d.tar.gz]====])
     if(NOT url IN_LIST skip_url_list)
       message(VERBOSE "Using src='${url}'")
 
@@ -119,7 +119,7 @@ foreach(i RANGE ${retry_number})
 
       file(
         DOWNLOAD
-        "${url}" "/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter/v0.24.7.tar.gz"
+        "${url}" "/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter/9515be4fc16d3dfe6fba5ae4a7a058f32bcf535d.tar.gz"
         
         # no TIMEOUT
         # no INACTIVITY_TIMEOUT
@@ -136,7 +136,7 @@ foreach(i RANGE ${retry_number})
         check_file_hash(has_hash hash_is_good)
         if(has_hash AND NOT hash_is_good)
           message(VERBOSE "Hash mismatch, removing...")
-          file(REMOVE "/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter/v0.24.7.tar.gz")
+          file(REMOVE "/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter/9515be4fc16d3dfe6fba5ae4a7a058f32bcf535d.tar.gz")
         else()
           message(VERBOSE "Downloading... done")
           return()

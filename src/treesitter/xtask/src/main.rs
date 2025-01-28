@@ -1,14 +1,20 @@
 mod benchmark;
 mod build_wasm;
 mod bump;
+mod check_wasm_exports;
 mod clippy;
 mod fetch;
 mod generate;
 mod test;
+mod upgrade_emscripten;
+mod upgrade_wasmtime;
+
+use std::path::Path;
 
 use anstyle::{AnsiColor, Color, Style};
 use anyhow::Result;
 use clap::{crate_authors, Args, Command, FromArgMatches as _, Subcommand};
+use git2::{Oid, Repository};
 use semver::Version;
 
 #[derive(Subcommand)]
@@ -23,6 +29,8 @@ enum Commands {
     BuildWasmStdlib,
     /// Bumps the version of the workspace.
     BumpVersion(BumpVersion),
+    /// Checks that WASM exports are synced.
+    CheckWasmExports(CheckWasmExports),
     /// Runs `cargo clippy`.
     Clippy(Clippy),
     /// Fetches emscripten.
@@ -33,10 +41,16 @@ enum Commands {
     GenerateBindings,
     /// Generates the fixtures for testing tree-sitter.
     GenerateFixtures(GenerateFixtures),
+    /// Generate the list of exports from Tree-sitter WASM files.
+    GenerateWasmExports,
     /// Run the test suite
     Test(Test),
     /// Run the WASM test suite
     TestWasm,
+    /// Upgrade the wasmtime dependency.
+    UpgradeWasmtime(UpgradeWasmtime),
+    /// Upgrade the emscripten file.
+    UpgradeEmscripten,
 }
 
 #[derive(Args)]
@@ -68,6 +82,16 @@ struct BuildWasm {
     /// Run emscripten with verbose output.
     #[arg(long, short)]
     verbose: bool,
+    /// Rebuild when relevant files are changed.
+    #[arg(long, short)]
+    watch: bool,
+    /// Emit TypeScript type definitions for the generated bindings,
+    /// requires `tsc` to be available.
+    #[arg(long, short)]
+    emit_tsd: bool,
+    /// Generate `CommonJS` modules instead of ES modules.
+    #[arg(long, short, env = "CJS")]
+    cjs: bool,
 }
 
 #[derive(Args)]
@@ -75,6 +99,13 @@ struct BumpVersion {
     /// The version to bump to.
     #[arg(long, short)]
     version: Option<Version>,
+}
+
+#[derive(Args)]
+struct CheckWasmExports {
+    /// Recheck when relevant files are changed.
+    #[arg(long, short)]
+    watch: bool,
 }
 
 #[derive(Args)]
@@ -102,6 +133,9 @@ struct Test {
     /// Compile C code with the Clang address sanitizer.
     #[arg(long, short)]
     address_sanitizer: bool,
+    /// Run only the corpus tests for the given language.
+    #[arg(long, short)]
+    language: Option<String>,
     /// Run only the corpus tests whose name contain the given string.
     #[arg(long, short)]
     example: Option<String>,
@@ -125,6 +159,16 @@ struct Test {
     /// Don't capture the output
     #[arg(long)]
     nocapture: bool,
+    /// Enable the wasm tests.
+    #[arg(long, short)]
+    wasm: bool,
+}
+
+#[derive(Args)]
+struct UpgradeWasmtime {
+    /// The version to upgrade to.
+    #[arg(long, short)]
+    version: Version,
 }
 
 const BUILD_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -180,6 +224,7 @@ fn run() -> Result<()> {
         Commands::BuildWasm(build_wasm_options) => build_wasm::run_wasm(&build_wasm_options)?,
         Commands::BuildWasmStdlib => build_wasm::run_wasm_stdlib()?,
         Commands::BumpVersion(bump_options) => bump::run(bump_options)?,
+        Commands::CheckWasmExports(check_options) => check_wasm_exports::run(&check_options)?,
         Commands::Clippy(clippy_options) => clippy::run(&clippy_options)?,
         Commands::FetchEmscripten => fetch::run_emscripten()?,
         Commands::FetchFixtures => fetch::run_fixtures()?,
@@ -187,8 +232,13 @@ fn run() -> Result<()> {
         Commands::GenerateFixtures(generate_fixtures_options) => {
             generate::run_fixtures(&generate_fixtures_options)?;
         }
+        Commands::GenerateWasmExports => generate::run_wasm_exports()?,
         Commands::Test(test_options) => test::run(&test_options)?,
         Commands::TestWasm => test::run_wasm()?,
+        Commands::UpgradeWasmtime(upgrade_wasmtime_options) => {
+            upgrade_wasmtime::run(&upgrade_wasmtime_options)?;
+        }
+        Commands::UpgradeEmscripten => upgrade_emscripten::run()?,
     }
 
     Ok(())
@@ -232,4 +282,83 @@ const fn get_styles() -> clap::builder::Styles {
                 .fg_color(Some(Color::Ansi(AnsiColor::Green))),
         )
         .placeholder(Style::new().fg_color(Some(Color::Ansi(AnsiColor::White))))
+}
+
+pub fn create_commit(repo: &Repository, msg: &str, paths: &[&str]) -> Result<Oid> {
+    let mut index = repo.index()?;
+    for path in paths {
+        index.add_path(Path::new(path))?;
+    }
+
+    index.write()?;
+
+    let tree_id = index.write_tree()?;
+    let tree = repo.find_tree(tree_id)?;
+    let signature = repo.signature()?;
+    let parent_commit = repo.revparse_single("HEAD")?.peel_to_commit()?;
+
+    Ok(repo.commit(
+        Some("HEAD"),
+        &signature,
+        &signature,
+        msg,
+        &tree,
+        &[&parent_commit],
+    )?)
+}
+
+#[macro_export]
+macro_rules! watch_wasm {
+    ($watch_fn:expr) => {
+        if let Err(e) = $watch_fn() {
+            eprintln!("{e}");
+        } else {
+            println!("Build succeeded");
+        }
+
+        let watch_files = [
+            "lib/tree-sitter.c",
+            "lib/exports.txt",
+            "lib/imports.js",
+            "lib/prefix.js",
+        ]
+        .iter()
+        .map(PathBuf::from)
+        .collect::<HashSet<PathBuf>>();
+        let (tx, rx) = std::sync::mpsc::channel();
+        let mut debouncer = new_debouncer(Duration::from_secs(1), None, tx)?;
+        debouncer.watch("lib/binding_web", RecursiveMode::NonRecursive)?;
+
+        for result in rx {
+            match result {
+                Ok(events) => {
+                    for event in events {
+                        if event.kind == EventKind::Access(AccessKind::Close(AccessMode::Write))
+                            && event
+                                .paths
+                                .iter()
+                                .filter_map(|p| p.file_name())
+                                .any(|p| watch_files.contains(&PathBuf::from(p)))
+                        {
+                            if let Err(e) = $watch_fn() {
+                                eprintln!("{e}");
+                            } else {
+                                println!("Build succeeded");
+                            }
+                        }
+                    }
+                }
+                Err(errors) => {
+                    return Err(anyhow!(
+                        "{}",
+                        errors
+                            .into_iter()
+                            .map(|e| e.to_string())
+                            .collect::<Vec<_>>()
+                            .join("\n")
+                    ));
+                }
+            }
+        }
+    };
 }

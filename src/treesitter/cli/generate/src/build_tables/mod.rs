@@ -8,14 +8,16 @@ mod token_conflicts;
 
 use std::collections::{BTreeSet, HashMap};
 
-use anyhow::Result;
 pub use build_lex_table::LARGE_CHARACTER_RANGE_COUNT;
+use build_parse_table::BuildTableResult;
+pub use build_parse_table::ParseTableBuilderError;
 use log::info;
 
 use self::{
     build_lex_table::build_lex_table,
     build_parse_table::{build_parse_table, ParseStateInfo},
     coincident_tokens::CoincidentTokenIndex,
+    item_set_builder::ParseItemSetBuilder,
     minimize_parse_table::minimize_parse_table,
     token_conflicts::TokenConflictMap,
 };
@@ -31,7 +33,6 @@ pub struct Tables {
     pub parse_table: ParseTable,
     pub main_lex_table: LexTable,
     pub keyword_lex_table: LexTable,
-    pub word_token: Option<Symbol>,
     pub large_character_sets: Vec<(Option<Symbol>, CharacterSet)>,
 }
 
@@ -42,9 +43,16 @@ pub fn build_tables(
     variable_info: &[VariableInfo],
     inlines: &InlinedProductionMap,
     report_symbol_name: Option<&str>,
-) -> Result<Tables> {
-    let (mut parse_table, following_tokens, parse_state_info) =
-        build_parse_table(syntax_grammar, lexical_grammar, inlines, variable_info)?;
+) -> BuildTableResult<Tables> {
+    let item_set_builder = ParseItemSetBuilder::new(syntax_grammar, lexical_grammar, inlines);
+    let following_tokens =
+        get_following_tokens(syntax_grammar, lexical_grammar, inlines, &item_set_builder);
+    let (mut parse_table, parse_state_info) = build_parse_table(
+        syntax_grammar,
+        lexical_grammar,
+        item_set_builder,
+        variable_info,
+    )?;
     let token_conflict_map = TokenConflictMap::new(lexical_grammar, following_tokens);
     let coincident_token_index = CoincidentTokenIndex::new(&parse_table, lexical_grammar);
     let keywords = identify_keywords(
@@ -97,8 +105,48 @@ pub fn build_tables(
         main_lex_table: lex_tables.main_lex_table,
         keyword_lex_table: lex_tables.keyword_lex_table,
         large_character_sets: lex_tables.large_character_sets,
-        word_token: syntax_grammar.word_token,
     })
+}
+
+fn get_following_tokens(
+    syntax_grammar: &SyntaxGrammar,
+    lexical_grammar: &LexicalGrammar,
+    inlines: &InlinedProductionMap,
+    builder: &ParseItemSetBuilder,
+) -> Vec<TokenSet> {
+    let mut result = vec![TokenSet::new(); lexical_grammar.variables.len()];
+    let productions = syntax_grammar
+        .variables
+        .iter()
+        .flat_map(|v| &v.productions)
+        .chain(&inlines.productions);
+    let all_tokens = (0..result.len())
+        .map(Symbol::terminal)
+        .collect::<TokenSet>();
+    for production in productions {
+        for i in 1..production.steps.len() {
+            let left_tokens = builder.last_set(&production.steps[i - 1].symbol);
+            let right_tokens = builder.first_set(&production.steps[i].symbol);
+            let right_reserved_tokens = builder.reserved_first_set(&production.steps[i].symbol);
+            for left_token in left_tokens.iter() {
+                if left_token.is_terminal() {
+                    result[left_token.index].insert_all_terminals(right_tokens);
+                    if let Some(reserved_tokens) = right_reserved_tokens {
+                        result[left_token.index].insert_all_terminals(reserved_tokens);
+                    }
+                }
+            }
+        }
+    }
+    for extra in &syntax_grammar.extra_symbols {
+        if extra.is_terminal() {
+            for entry in &mut result {
+                entry.insert(*extra);
+            }
+            result[extra.index] = all_tokens.clone();
+        }
+    }
+    result
 }
 
 fn populate_error_state(
@@ -208,7 +256,7 @@ fn populate_used_symbols(
             // ensure that a subtree's symbol can be successfully reassigned to the word token
             // without having to move the subtree to the heap.
             // See https://github.com/tree-sitter/tree-sitter/issues/258
-            if syntax_grammar.word_token.map_or(false, |t| t.index == i) {
+            if syntax_grammar.word_token.is_some_and(|t| t.index == i) {
                 parse_table.symbols.insert(1, Symbol::terminal(i));
             } else {
                 parse_table.symbols.push(Symbol::terminal(i));
@@ -414,9 +462,9 @@ fn report_state_info<'a>(
     for (i, state) in parse_table.states.iter().enumerate() {
         all_state_indices.insert(i);
         let item_set = &parse_state_info[state.id];
-        for (item, _) in &item_set.1.entries {
-            if !item.is_augmented() {
-                symbols_with_state_indices[item.variable_index as usize]
+        for entry in &item_set.1.entries {
+            if !entry.item.is_augmented() {
+                symbols_with_state_indices[entry.item.variable_index as usize]
                     .1
                     .insert(i);
             }
@@ -477,7 +525,7 @@ fn report_state_info<'a>(
             }
             eprintln!(
                 "\nitems:\n{}",
-                self::item::ParseItemSetDisplay(item_set, syntax_grammar, lexical_grammar,),
+                item::ParseItemSetDisplay(item_set, syntax_grammar, lexical_grammar),
             );
         }
     }

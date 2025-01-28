@@ -12,22 +12,23 @@ license.workspace = true
 keywords.workspace = true
 categories.workspace = true
 
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
 [lints]
 workspace = true
 
 [features]
 wasm = ["tree-sitter/wasm"]
-# TODO: For backward compatibility these must be enabled by default,
-# consider removing for the next semver incompatible release
 default = ["tree-sitter-highlight", "tree-sitter-tags"]
 
 [dependencies]
 anyhow.workspace = true
 cc.workspace = true
-dirs.workspace = true
+etcetera.workspace = true
 fs4.workspace = true
 indoc.workspace = true
-lazy_static.workspace = true
 libloading.workspace = true
 once_cell.workspace = true
 path-slash.workspace = true

@@ -6,15 +6,12 @@ use std::{
 
 use anyhow::{anyhow, Context, Result};
 use heck::{ToKebabCase, ToShoutySnakeCase, ToSnakeCase, ToUpperCamelCase};
-use regex::Regex;
+use indoc::{formatdoc, indoc};
 use semver::Version;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use tree_sitter_generate::write_file;
-use tree_sitter_loader::{
-    Author, Bindings, Grammar, Links, Metadata, PackageJSON, PackageJSONAuthor,
-    PackageJSONRepository, PathsJSON, TreeSitterJSON,
-};
+use tree_sitter_loader::{Author, Bindings, Grammar, Links, Metadata, PathsJSON, TreeSitterJSON};
 use url::Url;
 
 const CLI_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -25,8 +22,11 @@ const ABI_VERSION_MAX_PLACEHOLDER: &str = "ABI_VERSION_MAX";
 
 const PARSER_NAME_PLACEHOLDER: &str = "PARSER_NAME";
 const CAMEL_PARSER_NAME_PLACEHOLDER: &str = "CAMEL_PARSER_NAME";
+const TITLE_PARSER_NAME_PLACEHOLDER: &str = "TITLE_PARSER_NAME";
 const UPPER_PARSER_NAME_PLACEHOLDER: &str = "UPPER_PARSER_NAME";
 const LOWER_PARSER_NAME_PLACEHOLDER: &str = "LOWER_PARSER_NAME";
+const KEBAB_PARSER_NAME_PLACEHOLDER: &str = "KEBAB_PARSER_NAME";
+const PARSER_CLASS_NAME_PLACEHOLDER: &str = "PARSER_CLASS_NAME";
 
 const PARSER_DESCRIPTION_PLACEHOLDER: &str = "PARSER_DESCRIPTION";
 const PARSER_LICENSE_PLACEHOLDER: &str = "PARSER_LICENSE";
@@ -54,6 +54,8 @@ const AUTHOR_EMAIL_PLACEHOLDER_RS: &str = " PARSER_AUTHOR_EMAIL";
 const AUTHOR_BLOCK_GRAMMAR: &str = "\n * @author ";
 const AUTHOR_NAME_PLACEHOLDER_GRAMMAR: &str = "PARSER_AUTHOR_NAME";
 const AUTHOR_EMAIL_PLACEHOLDER_GRAMMAR: &str = " PARSER_AUTHOR_EMAIL";
+
+const FUNDING_URL_PLACEHOLDER: &str = "FUNDING_URL";
 
 const GRAMMAR_JS_TEMPLATE: &str = include_str!("./templates/grammar.js");
 const PACKAGE_JSON_TEMPLATE: &str = include_str!("./templates/package.json");
@@ -93,6 +95,13 @@ const TEST_BINDING_PY_TEMPLATE: &str = include_str!("./templates/test_binding.py
 const PACKAGE_SWIFT_TEMPLATE: &str = include_str!("./templates/package.swift");
 const TESTS_SWIFT_TEMPLATE: &str = include_str!("./templates/tests.swift");
 
+const BUILD_ZIG_TEMPLATE: &str = include_str!("./templates/build.zig");
+const BUILD_ZIG_ZON_TEMPLATE: &str = include_str!("./templates/build.zig.zon");
+
+const TREE_SITTER_JSON_SCHEMA: &str =
+    "https://tree-sitter.github.io/tree-sitter/assets/schemas/config.schema.json";
+
+#[must_use]
 pub fn path_in_ignore(repo_path: &Path) -> bool {
     [
         "bindings",
@@ -114,9 +123,12 @@ pub fn path_in_ignore(repo_path: &Path) -> bool {
 pub struct JsonConfigOpts {
     pub name: String,
     pub camelcase: String,
+    pub title: String,
     pub description: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub repository: Option<Url>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub funding: Option<Url>,
     pub scope: String,
     pub file_types: Vec<String>,
     pub version: Version,
@@ -129,11 +141,14 @@ pub struct JsonConfigOpts {
 }
 
 impl JsonConfigOpts {
+    #[must_use]
     pub fn to_tree_sitter_json(self) -> TreeSitterJSON {
         TreeSitterJSON {
+            schema: Some(TREE_SITTER_JSON_SCHEMA.to_string()),
             grammars: vec![Grammar {
                 name: self.name.clone(),
                 camelcase: Some(self.camelcase),
+                title: Some(self.title),
                 scope: self.scope,
                 path: None,
                 external_files: PathsJSON::Empty,
@@ -145,6 +160,7 @@ impl JsonConfigOpts {
                 injection_regex: Some(format!("^{}$", self.name)),
                 first_line_regex: None,
                 content_regex: None,
+                class_name: Some(format!("TreeSitter{}", self.name.to_upper_camel_case())),
             }],
             metadata: Metadata {
                 version: self.version,
@@ -163,6 +179,7 @@ impl JsonConfigOpts {
                         ))
                         .expect("Failed to parse default repository URL")
                     }),
+                    funding: self.funding,
                     homepage: None,
                 }),
                 namespace: None,
@@ -177,8 +194,10 @@ impl Default for JsonConfigOpts {
         Self {
             name: String::new(),
             camelcase: String::new(),
+            title: String::new(),
             description: String::new(),
             repository: None,
+            funding: None,
             scope: String::new(),
             file_types: vec![],
             version: Version::from_str("0.1.0").unwrap(),
@@ -197,172 +216,18 @@ struct GenerateOpts<'a> {
     license: Option<&'a str>,
     description: Option<&'a str>,
     repository: Option<&'a str>,
+    funding: Option<&'a str>,
     version: &'a Version,
     camel_parser_name: &'a str,
-}
-
-// TODO: remove in 0.25
-// A return value of true means migration was successful, and false if not.
-pub fn migrate_package_json(repo_path: &Path) -> Result<bool> {
-    let root_path =
-        get_root_path(&repo_path.join("package.json")).unwrap_or_else(|_| repo_path.to_path_buf());
-    let (package_json_path, tree_sitter_json_path) = (
-        root_path.join("package.json"),
-        root_path.join("tree-sitter.json"),
-    );
-
-    let old_config = serde_json::from_str::<PackageJSON>(
-        &fs::read_to_string(&package_json_path)
-            .with_context(|| format!("Failed to read package.json in {}", root_path.display()))?,
-    )?;
-
-    if old_config.tree_sitter.is_none() {
-        eprintln!("Failed to find `tree-sitter` section in package.json, unable to migrate");
-        return Ok(false);
-    }
-
-    let name = old_config.name.replace("tree-sitter-", "");
-
-    let new_config = TreeSitterJSON {
-        grammars: old_config
-            .tree_sitter
-            .unwrap()
-            .into_iter()
-            .map(|l| Grammar {
-                name: name.clone(),
-                camelcase: Some(name.to_upper_camel_case()),
-                scope: l.scope.unwrap_or_else(|| format!("source.{name}")),
-                path: Some(l.path),
-                external_files: l.external_files,
-                file_types: l.file_types,
-                highlights: l.highlights,
-                injections: l.injections,
-                locals: l.locals,
-                tags: l.tags,
-                injection_regex: l.injection_regex,
-                first_line_regex: l.first_line_regex,
-                content_regex: l.content_regex,
-            })
-            .collect(),
-        metadata: Metadata {
-            version: old_config.version,
-            license: old_config
-                .license
-                .map_or_else(|| Some("MIT".to_string()), Some),
-            description: old_config
-                .description
-                .map_or_else(|| Some(format!("{name} grammar for tree-sitter")), Some),
-            authors: {
-                let authors = old_config
-                    .author
-                    .map(|a| vec![a].into_iter())
-                    .unwrap_or_else(|| vec![].into_iter())
-                    .chain(old_config.maintainers.unwrap_or_default())
-                    .filter_map(|a| match a {
-                        PackageJSONAuthor::String(s) => {
-                            let mut name = s.trim().to_string();
-                            if name.is_empty() {
-                                return None;
-                            }
-
-                            let mut email = None;
-                            let mut url = None;
-
-                            if let Some(url_start) = name.rfind('(') {
-                                if let Some(url_end) = name.rfind(')') {
-                                    url = Some(name[url_start + 1..url_end].trim().to_string());
-                                    name = name[..url_start].trim().to_string();
-                                }
-                            }
-
-                            if let Some(email_start) = name.rfind('<') {
-                                if let Some(email_end) = name.rfind('>') {
-                                    email =
-                                        Some(name[email_start + 1..email_end].trim().to_string());
-                                    name = name[..email_start].trim().to_string();
-                                }
-                            }
-
-                            Some(Author { name, email, url })
-                        }
-                        PackageJSONAuthor::Object { name, email, url } => {
-                            if name.is_empty() {
-                                None
-                            } else {
-                                Some(Author { name, email, url })
-                            }
-                        }
-                    })
-                    .collect::<Vec<_>>();
-                if authors.is_empty() {
-                    None
-                } else {
-                    Some(authors)
-                }
-            },
-            links: Some(Links {
-                repository: old_config
-                    .repository
-                    .map(|r| match r {
-                        PackageJSONRepository::String(s) => {
-                            if let Some(stripped) = s.strip_prefix("github:") {
-                                Url::parse(&format!("https://github.com/{stripped}"))
-                            } else if Regex::new(r"^[\w.-]+/[\w.-]+$").unwrap().is_match(&s) {
-                                Url::parse(&format!("https://github.com/{s}"))
-                            } else if let Some(stripped) = s.strip_prefix("gitlab:") {
-                                Url::parse(&format!("https://gitlab.com/{stripped}"))
-                            } else if let Some(stripped) = s.strip_prefix("bitbucket:") {
-                                Url::parse(&format!("https://bitbucket.org/{stripped}"))
-                            } else {
-                                Url::parse(&s)
-                            }
-                        }
-                        PackageJSONRepository::Object { url, .. } => Url::parse(&url),
-                    })
-                    .transpose()?
-                    .unwrap_or_else(|| {
-                        Url::parse(&format!(
-                            "https://github.com/tree-sitter/tree-sitter-{name}"
-                        ))
-                        .expect("Failed to parse default repository URL")
-                    }),
-                homepage: None,
-            }),
-            namespace: None,
-        },
-        bindings: Bindings::default(),
-    };
-
-    write_file(
-        &tree_sitter_json_path,
-        serde_json::to_string_pretty(&new_config)? + "\n",
-    )?;
-
-    // Remove the `tree-sitter` field in-place
-    let mut package_json = serde_json::from_str::<Map<String, Value>>(
-        &fs::read_to_string(&package_json_path)
-            .with_context(|| format!("Failed to read package.json in {}", root_path.display()))?,
-    )
-    .unwrap();
-    package_json.remove("tree-sitter");
-    write_file(
-        &root_path.join("package.json"),
-        serde_json::to_string_pretty(&package_json)? + "\n",
-    )?;
-
-    println!("Warning: your package.json's `tree-sitter` field has been automatically migrated to the new `tree-sitter.json` config file");
-    println!(
-        "For more information, visit https://tree-sitter.github.io/tree-sitter/creating-parsers"
-    );
-
-    Ok(true)
+    title_parser_name: &'a str,
+    class_name: &'a str,
 }
 
 pub fn generate_grammar_files(
     repo_path: &Path,
     language_name: &str,
     allow_update: bool,
-    opts: Option<JsonConfigOpts>,
+    opts: Option<&JsonConfigOpts>,
 ) -> Result<()> {
     let dashed_language_name = language_name.to_kebab_case();
 
@@ -371,17 +236,16 @@ pub fn generate_grammar_files(
         true,
         |path| {
             // invariant: opts is always Some when `tree-sitter.json` doesn't exist
-            let Some(opts) = opts.clone() else {
-                unreachable!()
-            };
+            let Some(opts) = opts else { unreachable!() };
 
-            let tree_sitter_json = opts.to_tree_sitter_json();
-            write_file(path, serde_json::to_string_pretty(&tree_sitter_json)?)
+            let tree_sitter_json = opts.clone().to_tree_sitter_json();
+            write_file(path, serde_json::to_string_pretty(&tree_sitter_json)?)?;
+            Ok(())
         },
         |path| {
             // updating the config, if needed
-            if let Some(opts) = opts.clone() {
-                let tree_sitter_json = opts.to_tree_sitter_json();
+            if let Some(opts) = opts {
+                let tree_sitter_json = opts.clone().to_tree_sitter_json();
                 write_file(path, serde_json::to_string_pretty(&tree_sitter_json)?)?;
             }
             Ok(())
@@ -398,6 +262,14 @@ pub fn generate_grammar_files(
         .camelcase
         .clone()
         .unwrap_or_else(|| language_name.to_upper_camel_case());
+    let title_name = tree_sitter_config.grammars[0]
+        .title
+        .clone()
+        .unwrap_or_else(|| language_name.to_upper_camel_case());
+    let class_name = tree_sitter_config.grammars[0]
+        .class_name
+        .clone()
+        .unwrap_or_else(|| format!("TreeSitter{}", language_name.to_upper_camel_case()));
 
     let generate_opts = GenerateOpts {
         author_name: authors
@@ -416,8 +288,15 @@ pub fn generate_grammar_files(
             .links
             .as_ref()
             .map(|l| l.repository.as_str()),
+        funding: tree_sitter_config
+            .metadata
+            .links
+            .as_ref()
+            .and_then(|l| l.funding.as_ref().map(|f| f.as_str())),
         version: &tree_sitter_config.metadata.version,
         camel_parser_name: &camel_name,
+        title_parser_name: &title_name,
+        class_name: &class_name,
     };
 
     // Create package.json
@@ -438,14 +317,40 @@ pub fn generate_grammar_files(
     }
 
     // Write .gitignore file
-    missing_path(repo_path.join(".gitignore"), |path| {
-        generate_file(path, GITIGNORE_TEMPLATE, language_name, &generate_opts)
-    })?;
+    missing_path_else(
+        repo_path.join(".gitignore"),
+        allow_update,
+        |path| generate_file(path, GITIGNORE_TEMPLATE, language_name, &generate_opts),
+        |path| {
+            let contents = fs::read_to_string(path)?;
+            if !contents.contains("Zig artifacts") {
+                eprintln!("Replacing .gitignore");
+                generate_file(path, GITIGNORE_TEMPLATE, language_name, &generate_opts)?;
+            }
+            Ok(())
+        },
+    )?;
 
     // Write .gitattributes file
-    missing_path(repo_path.join(".gitattributes"), |path| {
-        generate_file(path, GITATTRIBUTES_TEMPLATE, language_name, &generate_opts)
-    })?;
+    missing_path_else(
+        repo_path.join(".gitattributes"),
+        allow_update,
+        |path| generate_file(path, GITATTRIBUTES_TEMPLATE, language_name, &generate_opts),
+        |path| {
+            let mut contents = fs::read_to_string(path)?;
+            contents = contents.replace("bindings/c/* ", "bindings/c/** ");
+            if !contents.contains("Zig bindings") {
+                contents.push('\n');
+                contents.push_str(indoc! {"
+                # Zig bindings
+                build.zig linguist-generated
+                build.zig.zon linguist-generated
+                "});
+            }
+            write_file(path, contents)?;
+            Ok(())
+        },
+    )?;
 
     // Write .editorconfig file
     missing_path(repo_path.join(".editorconfig"), |path| {
@@ -511,9 +416,18 @@ pub fn generate_grammar_files(
                 generate_file(path, JS_BINDING_CC_TEMPLATE, language_name, &generate_opts)
             })?;
 
-            missing_path(repo_path.join("binding.gyp"), |path| {
-                generate_file(path, BINDING_GYP_TEMPLATE, language_name, &generate_opts)
-            })?;
+            missing_path_else(
+                repo_path.join("binding.gyp"),
+                allow_update,
+                |path| generate_file(path, BINDING_GYP_TEMPLATE, language_name, &generate_opts),
+                |path| {
+                    let contents = fs::read_to_string(path)?;
+                    if contents.contains("fs.exists(") {
+                        write_file(path, contents.replace("fs.exists(", "fs.existsSync("))?;
+                    }
+                    Ok(())
+                },
+            )?;
 
             Ok(())
         })?;
@@ -522,13 +436,22 @@ pub fn generate_grammar_files(
     // Generate C bindings
     if tree_sitter_config.bindings.c {
         missing_path(bindings_dir.join("c"), create_dir)?.apply(|path| {
-            missing_path(
-                path.join(format!("tree-sitter-{language_name}.h")),
-                |path| generate_file(path, PARSER_NAME_H_TEMPLATE, language_name, &generate_opts),
-            )?;
+            let old_file = &path.join(format!("tree-sitter-{}.h", language_name.to_kebab_case()));
+            if allow_update && fs::exists(old_file).unwrap_or(false) {
+                fs::remove_file(old_file)?;
+            }
+            missing_path(path.join("tree_sitter"), create_dir)?.apply(|include_path| {
+                missing_path(
+                    include_path.join(format!("tree-sitter-{}.h", language_name.to_kebab_case())),
+                    |path| {
+                        generate_file(path, PARSER_NAME_H_TEMPLATE, language_name, &generate_opts)
+                    },
+                )?;
+                Ok(())
+            })?;
 
             missing_path(
-                path.join(format!("tree-sitter-{language_name}.pc.in")),
+                path.join(format!("tree-sitter-{}.pc.in", language_name.to_kebab_case())),
                 |path| {
                     generate_file(
                         path,
@@ -539,22 +462,51 @@ pub fn generate_grammar_files(
                 },
             )?;
 
-            missing_path(repo_path.join("Makefile"), |path| {
-                generate_file(path, MAKEFILE_TEMPLATE, language_name, &generate_opts)
-            })?;
+            missing_path_else(
+                repo_path.join("Makefile"),
+                allow_update,
+                |path| {
+                    generate_file(path, MAKEFILE_TEMPLATE, language_name, &generate_opts)
+                },
+                |path| {
+                    let contents = fs::read_to_string(path)?.replace(
+                        "-m644 bindings/c/$(LANGUAGE_NAME).h",
+                        "-m644 bindings/c/tree_sitter/$(LANGUAGE_NAME).h"
+                    );
+                    write_file(path, contents)?;
+                    Ok(())
+                },
+            )?;
 
             missing_path_else(
                 repo_path.join("CMakeLists.txt"),
                 allow_update,
                 |path| generate_file(path, CMAKELISTS_TXT_TEMPLATE, language_name, &generate_opts),
                 |path| {
-                    let contents = fs::read_to_string(path)?;
-                    let old = "add_custom_target(test";
-                    if contents.contains(old) {
-                        write_file(path, contents.replace(old, "add_custom_target(ts-test"))
-                    } else {
-                        Ok(())
-                    }
+                    let mut contents = fs::read_to_string(path)?;
+                    contents = contents
+                        .replace("add_custom_target(test", "add_custom_target(ts-test")
+                        .replace(
+                            &formatdoc! {r#"
+                            install(FILES bindings/c/tree-sitter-{language_name}.h
+                                    DESTINATION "${{CMAKE_INSTALL_INCLUDEDIR}}/tree_sitter")
+                            "#},
+                            indoc! {r#"
+                            install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/bindings/c/tree_sitter"
+                                    DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
+                                    FILES_MATCHING PATTERN "*.h")
+                            "#}
+                        ).replace(
+                            &format!("target_include_directories(tree-sitter-{language_name} PRIVATE src)"),
+                            &formatdoc! {"
+                            target_include_directories(tree-sitter-{language_name}
+                                                       PRIVATE src
+                                                       INTERFACE $<BUILD_INTERFACE:${{CMAKE_CURRENT_SOURCE_DIR}}/bindings/c>
+                                                                 $<INSTALL_INTERFACE:${{CMAKE_INSTALL_INCLUDEDIR}}>)
+                            "}
+                        );
+                    write_file(path, contents)?;
+                    Ok(())
                 },
             )?;
 
@@ -592,9 +544,44 @@ pub fn generate_grammar_files(
             let lang_path = path.join(format!("tree_sitter_{}", language_name.to_snake_case()));
             missing_path(&lang_path, create_dir)?;
 
-            missing_path(lang_path.join("binding.c"), |path| {
-                generate_file(path, PY_BINDING_C_TEMPLATE, language_name, &generate_opts)
-            })?;
+            missing_path_else(
+                lang_path.join("binding.c"),
+                allow_update,
+                |path| generate_file(path, PY_BINDING_C_TEMPLATE, language_name, &generate_opts),
+                |path| {
+                    let mut contents = fs::read_to_string(path)?;
+                    if !contents.contains("PyModuleDef_Init") {
+                        contents = contents
+                            .replace("PyModule_Create", "PyModuleDef_Init")
+                            .replace(
+                                "static PyMethodDef methods[] = {\n",
+                                indoc! {"
+                                static struct PyModuleDef_Slot slots[] = {
+                                #ifdef Py_GIL_DISABLED
+                                    {Py_mod_gil, Py_MOD_GIL_NOT_USED},
+                                #endif
+                                    {0, NULL}
+                                };
+
+                                static PyMethodDef methods[] = {
+                                "},
+                            )
+                            .replace(
+                                indoc! {"
+                                .m_size = -1,
+                                    .m_methods = methods
+                                "},
+                                indoc! {"
+                                .m_size = 0,
+                                    .m_methods = methods,
+                                    .m_slots = slots,
+                                "},
+                            );
+                        write_file(path, contents)?;
+                    }
+                    Ok(())
+                },
+            )?;
 
             missing_path(lang_path.join("__init__.py"), |path| {
                 generate_file(path, INIT_PY_TEMPLATE, language_name, &generate_opts)
@@ -620,18 +607,43 @@ pub fn generate_grammar_files(
                 Ok(())
             })?;
 
-            missing_path(repo_path.join("setup.py"), |path| {
-                generate_file(path, SETUP_PY_TEMPLATE, language_name, &generate_opts)
-            })?;
+            missing_path_else(
+                repo_path.join("setup.py"),
+                allow_update,
+                |path| generate_file(path, SETUP_PY_TEMPLATE, language_name, &generate_opts),
+                |path| {
+                    let contents = fs::read_to_string(path)?;
+                    if !contents.contains("egg_info") || !contents.contains("Py_GIL_DISABLED") {
+                        eprintln!("Replacing setup.py");
+                        generate_file(path, SETUP_PY_TEMPLATE, language_name, &generate_opts)?;
+                    }
+                    Ok(())
+                },
+            )?;
 
-            missing_path(repo_path.join("pyproject.toml"), |path| {
-                generate_file(
-                    path,
-                    PYPROJECT_TOML_TEMPLATE,
-                    dashed_language_name.as_str(),
-                    &generate_opts,
-                )
-            })?;
+            missing_path_else(
+                repo_path.join("pyproject.toml"),
+                allow_update,
+                |path| {
+                    generate_file(
+                        path,
+                        PYPROJECT_TOML_TEMPLATE,
+                        dashed_language_name.as_str(),
+                        &generate_opts,
+                    )
+                },
+                |path| {
+                    let mut contents = fs::read_to_string(path)?;
+                    if !contents.contains("cp310-*") {
+                        contents = contents
+                            .replace(r#"build = "cp39-*""#, r#"build = "cp310-*""#)
+                            .replace(r#"python = ">=3.9""#, r#"python = ">=3.10""#)
+                            .replace("tree-sitter~=0.22", "tree-sitter~=0.24");
+                        write_file(path, contents)?;
+                    }
+                    Ok(())
+                },
+            )?;
 
             Ok(())
         })?;
@@ -668,6 +680,17 @@ pub fn generate_grammar_files(
         })?;
     }
 
+    // Generate Zig bindings
+    if tree_sitter_config.bindings.zig {
+        missing_path(repo_path.join("build.zig"), |path| {
+            generate_file(path, BUILD_ZIG_TEMPLATE, language_name, &generate_opts)
+        })?;
+
+        missing_path(repo_path.join("build.zig.zon"), |path| {
+            generate_file(path, BUILD_ZIG_ZON_TEMPLATE, language_name, &generate_opts)
+        })?;
+    }
+
     Ok(())
 }
 
@@ -692,7 +715,7 @@ pub fn get_root_path(path: &Path) -> Result<PathBuf> {
                 }
             })
             .transpose()?;
-        if let Some(true) = json {
+        if json == Some(true) {
             return Ok(pathbuf.parent().unwrap().to_path_buf());
         }
         pathbuf.pop(); // filename
@@ -723,12 +746,20 @@ fn generate_file(
             generate_opts.camel_parser_name,
         )
         .replace(
+            TITLE_PARSER_NAME_PLACEHOLDER,
+            generate_opts.title_parser_name,
+        )
+        .replace(
             UPPER_PARSER_NAME_PLACEHOLDER,
             &language_name.to_shouty_snake_case(),
         )
         .replace(
             LOWER_PARSER_NAME_PLACEHOLDER,
             &language_name.to_snake_case(),
+        )
+        .replace(
+            KEBAB_PARSER_NAME_PLACEHOLDER,
+            &language_name.to_kebab_case(),
         )
         .replace(PARSER_NAME_PLACEHOLDER, language_name)
         .replace(CLI_VERSION_PLACEHOLDER, CLI_VERSION)
@@ -737,7 +768,8 @@ fn generate_file(
         .replace(
             PARSER_VERSION_PLACEHOLDER,
             &generate_opts.version.to_string(),
-        );
+        )
+        .replace(PARSER_CLASS_NAME_PLACEHOLDER, generate_opts.class_name);
 
     if let Some(name) = generate_opts.author_name {
         replacement = replacement.replace(AUTHOR_NAME_PLACEHOLDER, name);
@@ -814,11 +846,7 @@ fn generate_file(
                         .map(|i| i + start_idx + 2)
                     {
                         replacement.replace_range(start_idx..end_idx, "");
-                    } else {
-                        println!("none 2");
                     }
-                } else {
-                    println!("none 1");
                 }
             }
             "grammar.js" => {
@@ -828,11 +856,7 @@ fn generate_file(
                         .map(|i| i + start_idx + 1)
                     {
                         replacement.replace_range(start_idx..end_idx, "");
-                    } else {
-                        println!("none 2");
                     }
-                } else {
-                    println!("none 1");
                 }
             }
             "Cargo.toml" => {
@@ -856,7 +880,7 @@ fn generate_file(
 
     match generate_opts.description {
         Some(description) => {
-            replacement = replacement.replace(PARSER_DESCRIPTION_PLACEHOLDER, description)
+            replacement = replacement.replace(PARSER_DESCRIPTION_PLACEHOLDER, description);
         }
         _ => {
             replacement = replacement.replace(
@@ -865,7 +889,7 @@ fn generate_file(
                     "{} grammar for tree-sitter",
                     generate_opts.camel_parser_name,
                 ),
-            )
+            );
         }
     }
 
@@ -876,7 +900,7 @@ fn generate_file(
                     PARSER_URL_STRIPPED_PLACEHOLDER,
                     &repository.replace("https://", "").to_lowercase(),
                 )
-                .replace(PARSER_URL_PLACEHOLDER, &repository.to_lowercase())
+                .replace(PARSER_URL_PLACEHOLDER, &repository.to_lowercase());
         }
         _ => {
             replacement = replacement
@@ -893,11 +917,31 @@ fn generate_file(
                         "https://github.com/tree-sitter/tree-sitter-{}",
                         language_name.to_lowercase()
                     ),
-                )
+                );
         }
     }
 
-    write_file(path, replacement)
+    if let Some(funding_url) = generate_opts.funding {
+        match filename {
+            "pyproject.toml" | "package.json" => {
+                replacement = replacement.replace(FUNDING_URL_PLACEHOLDER, funding_url);
+            }
+            _ => {}
+        }
+    } else {
+        match filename {
+            "package.json" => {
+                replacement = replacement.replace("  \"funding\": \"FUNDING_URL\",\n", "");
+            }
+            "pyproject.toml" => {
+                replacement = replacement.replace("Funding = \"FUNDING_URL\"\n", "");
+            }
+            _ => {}
+        }
+    }
+
+    write_file(path, replacement)?;
+    Ok(())
 }
 
 fn create_dir(path: &Path) -> Result<()> {

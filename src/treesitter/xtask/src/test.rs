@@ -45,8 +45,11 @@ pub fn run(args: &Test) -> Result<()> {
     } else {
         String::new()
     };
+    if let Some(language) = &args.language {
+        env::set_var("TREE_SITTER_LANGUAGE", language);
+    }
     if let Some(example) = &args.example {
-        env::set_var("TREE_SITTER_EXAMPLE", example);
+        env::set_var("TREE_SITTER_EXAMPLE_INCLUDE", example);
     }
     if let Some(seed) = args.seed {
         env::set_var("TREE_SITTER_SEED", seed.to_string());
@@ -86,7 +89,14 @@ pub fn run(args: &Test) -> Result<()> {
         )?;
     } else {
         let mut cargo_cmd = Command::new("cargo");
-        cargo_cmd.arg("test").arg(test_flags).args(&args.args);
+        cargo_cmd.arg("test");
+        if args.wasm {
+            cargo_cmd.arg("--features").arg("wasm");
+        }
+        if !test_flags.is_empty() {
+            cargo_cmd.arg(test_flags);
+        }
+        cargo_cmd.args(&args.args);
         if args.nocapture {
             cargo_cmd.arg("--").arg("--nocapture");
         }
@@ -115,8 +125,15 @@ pub fn run_wasm() -> Result<()> {
         bail_on_err(&output, "Failed to install test dependencies")?;
     }
 
-    let output = Command::new(npm).arg("test").output()?;
-    bail_on_err(&output, &format!("Failed to run {npm} test"))?;
+    let child = Command::new(npm).arg("test").spawn()?;
+    let output = child.wait_with_output()?;
+    bail_on_err(&output, &format!("Failed to run `{npm} test`"))?;
+
+    // Display test results
+    let output = String::from_utf8_lossy(&output.stdout);
+    for line in output.lines() {
+        println!("{line}");
+    }
 
     Ok(())
 }

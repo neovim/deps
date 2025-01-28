@@ -1,12 +1,4 @@
-use std::ffi::CStr;
-
-use tree_sitter::{
-    ffi::{
-        ts_language_symbol_name, ts_language_symbol_type, TSSymbol, TSSymbolTypeAnonymous,
-        TSSymbolTypeAuxiliary, TSSymbolTypeRegular, TSSymbolTypeSupertype,
-    },
-    Parser,
-};
+use tree_sitter::{self, Parser};
 
 use super::helpers::fixtures::get_language;
 
@@ -75,64 +67,132 @@ fn test_lookahead_iterator_modifiable_only_by_mut() {
 #[test]
 fn test_symbol_metadata_checks() {
     let language = get_language("rust");
-    let ts_language = language.clone().into_raw();
     for i in 0..language.node_kind_count() {
-        let ts_symbol: TSSymbol = i.try_into().unwrap();
-        unsafe {
-            let name = CStr::from_ptr(ts_language_symbol_name(ts_language, ts_symbol))
-                .to_str()
-                .unwrap();
-            match name {
-                "_type"
-                | "_expression"
-                | "_pattern"
-                | "_literal"
-                | "_literal_pattern"
-                | "_declaration_statement" => {
-                    assert_eq!(
-                        ts_language_symbol_type(ts_language, ts_symbol),
-                        TSSymbolTypeSupertype
-                    );
-                    assert_ne!(
-                        ts_language_symbol_type(ts_language, ts_symbol),
-                        TSSymbolTypeAuxiliary
-                    );
-                }
-                "_raw_string_literal_start"
-                | "_raw_string_literal_end"
-                | "_line_doc_comment"
-                | "_error_sentinel" => {
-                    assert_eq!(
-                        ts_language_symbol_type(ts_language, ts_symbol),
-                        TSSymbolTypeAuxiliary
-                    );
-                    assert_ne!(
-                        ts_language_symbol_type(ts_language, ts_symbol),
-                        TSSymbolTypeSupertype
-                    );
-                }
-                "enum_item" | "struct_item" | "type_item" => {
-                    assert_ne!(
-                        ts_language_symbol_type(ts_language, ts_symbol),
-                        TSSymbolTypeSupertype
-                    );
-                    assert_eq!(
-                        ts_language_symbol_type(ts_language, ts_symbol),
-                        TSSymbolTypeRegular
-                    );
-                }
-                "=>" | "[" | "]" | "(" | ")" | "{" | "}" => {
-                    assert_ne!(
-                        ts_language_symbol_type(ts_language, ts_symbol),
-                        TSSymbolTypeSupertype
-                    );
-                    assert_eq!(
-                        ts_language_symbol_type(ts_language, ts_symbol),
-                        TSSymbolTypeAnonymous
-                    );
-                }
-                _ => {}
+        let sym = i as u16;
+        let name = language.node_kind_for_id(sym).unwrap();
+        match name {
+            "_type"
+            | "_expression"
+            | "_pattern"
+            | "_literal"
+            | "_literal_pattern"
+            | "_declaration_statement" => assert!(language.node_kind_is_supertype(sym)),
+
+            "_raw_string_literal_start"
+            | "_raw_string_literal_end"
+            | "_line_doc_comment"
+            | "_error_sentinel" => assert!(!language.node_kind_is_supertype(sym)),
+
+            "enum_item" | "struct_item" | "type_item" => {
+                assert!(language.node_kind_is_named(sym));
             }
+
+            "=>" | "[" | "]" | "(" | ")" | "{" | "}" => {
+                assert!(language.node_kind_is_visible(sym));
+            }
+
+            _ => {}
+        }
+    }
+}
+
+#[test]
+fn test_supertypes() {
+    let language = get_language("rust");
+    let supertypes = language.supertypes();
+
+    if language.abi_version() < 15 {
+        return;
+    }
+
+    assert_eq!(supertypes.len(), 5);
+    assert_eq!(
+        supertypes
+            .iter()
+            .filter_map(|&s| language.node_kind_for_id(s))
+            .map(|s| s.to_string())
+            .collect::<Vec<String>>(),
+        vec![
+            "_expression",
+            "_literal",
+            "_literal_pattern",
+            "_pattern",
+            "_type"
+        ]
+    );
+
+    for &supertype in supertypes {
+        let mut subtypes = language
+            .subtypes_for_supertype(supertype)
+            .iter()
+            .filter_map(|symbol| language.node_kind_for_id(*symbol))
+            .collect::<Vec<&str>>();
+        subtypes.sort_unstable();
+        subtypes.dedup();
+
+        match language.node_kind_for_id(supertype) {
+            Some("_literal") => {
+                assert_eq!(
+                    subtypes,
+                    &[
+                        "boolean_literal",
+                        "char_literal",
+                        "float_literal",
+                        "integer_literal",
+                        "raw_string_literal",
+                        "string_literal"
+                    ]
+                );
+            }
+            Some("_pattern") => {
+                assert_eq!(
+                    subtypes,
+                    &[
+                        "_",
+                        "_literal_pattern",
+                        "captured_pattern",
+                        "const_block",
+                        "identifier",
+                        "macro_invocation",
+                        "mut_pattern",
+                        "or_pattern",
+                        "range_pattern",
+                        "ref_pattern",
+                        "reference_pattern",
+                        "remaining_field_pattern",
+                        "scoped_identifier",
+                        "slice_pattern",
+                        "struct_pattern",
+                        "tuple_pattern",
+                        "tuple_struct_pattern",
+                    ]
+                );
+            }
+            Some("_type") => {
+                assert_eq!(
+                    subtypes,
+                    &[
+                        "abstract_type",
+                        "array_type",
+                        "bounded_type",
+                        "dynamic_type",
+                        "function_type",
+                        "generic_type",
+                        "macro_invocation",
+                        "metavariable",
+                        "never_type",
+                        "pointer_type",
+                        "primitive_type",
+                        "reference_type",
+                        "removed_trait_bound",
+                        "scoped_type_identifier",
+                        "tuple_type",
+                        "type_identifier",
+                        "unit_type"
+                    ]
+                );
+            }
+            _ => {}
         }
     }
 }

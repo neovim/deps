@@ -43,15 +43,17 @@ pub fn build_lex_table(
         let tokens = state
             .terminal_entries
             .keys()
+            .copied()
+            .chain(state.reserved_words.iter())
             .filter_map(|token| {
                 if token.is_terminal() {
-                    if keywords.contains(token) {
+                    if keywords.contains(&token) {
                         syntax_grammar.word_token
                     } else {
-                        Some(*token)
+                        Some(token)
                     }
                 } else if token.is_eof() {
-                    Some(*token)
+                    Some(token)
                 } else {
                     None
                 }
@@ -175,8 +177,7 @@ impl<'a> LexTableBuilder<'a> {
 
         if is_new {
             info!(
-                "entry point state: {}, tokens: {:?}",
-                state_id,
+                "entry point state: {state_id}, tokens: {:?}",
                 tokens
                     .iter()
                     .map(|t| &self.lexical_grammar.variables[t.index].name)
@@ -357,9 +358,7 @@ fn minimize_lex_table(table: &mut LexTable, parse_table: &mut ParseTable) {
         &mut group_ids_by_state_id,
         1,
         lex_states_differ,
-    ) {
-        continue;
-    }
+    ) {}
 
     let mut new_states = Vec::with_capacity(state_ids_by_group_id.len());
     for state_ids in &state_ids_by_group_id {

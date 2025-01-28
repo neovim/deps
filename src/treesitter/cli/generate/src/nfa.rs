@@ -58,7 +58,8 @@ impl CharacterSet {
 
     /// Create a character set with a given *inclusive* range of characters.
     #[allow(clippy::single_range_in_vec_init)]
-    pub fn from_range(mut first: char, mut last: char) -> Self {
+    #[cfg(test)]
+    fn from_range(mut first: char, mut last: char) -> Self {
         if first > last {
             swap(&mut first, &mut last);
         }
@@ -286,7 +287,8 @@ impl CharacterSet {
 
     /// Produces a `CharacterSet` containing every character that is in _exactly one_ of `self` or
     /// `other`, but is not present in both sets.
-    pub fn symmetric_difference(mut self, mut other: Self) -> Self {
+    #[cfg(test)]
+    fn symmetric_difference(mut self, mut other: Self) -> Self {
         self.remove_intersection(&mut other);
         self.add(&other)
     }
@@ -361,9 +363,9 @@ impl CharacterSet {
         }) {
             Ok(ix) | Err(ix) => ix,
         };
-        self.ranges.get(ix).map_or(false, |range| {
-            range.start <= seek_range.start && range.end >= seek_range.end
-        })
+        self.ranges
+            .get(ix)
+            .is_some_and(|range| range.start <= seek_range.start && range.end >= seek_range.end)
     }
 
     pub fn contains(&self, c: char) -> bool {
@@ -947,20 +949,19 @@ mod tests {
             assert_eq!(
                 left.remove_intersection(&mut right),
                 row.intersection,
-                "row {}a: {:?} && {:?}",
-                i,
+                "row {i}a: {:?} && {:?}",
                 row.left,
                 row.right
             );
             assert_eq!(
                 left, row.left_only,
-                "row {}a: {:?} - {:?}",
-                i, row.left, row.right
+                "row {i}a: {:?} - {:?}",
+                row.left, row.right
             );
             assert_eq!(
                 right, row.right_only,
-                "row {}a: {:?} - {:?}",
-                i, row.right, row.left
+                "row {i}a: {:?} - {:?}",
+                row.right, row.left
             );
 
             let mut left = row.left.clone();
@@ -968,27 +969,25 @@ mod tests {
             assert_eq!(
                 right.remove_intersection(&mut left),
                 row.intersection,
-                "row {}b: {:?} && {:?}",
-                i,
+                "row {i}b: {:?} && {:?}",
                 row.left,
                 row.right
             );
             assert_eq!(
                 left, row.left_only,
-                "row {}b: {:?} - {:?}",
-                i, row.left, row.right
+                "row {i}b: {:?} - {:?}",
+                row.left, row.right
             );
             assert_eq!(
                 right, row.right_only,
-                "row {}b: {:?} - {:?}",
-                i, row.right, row.left
+                "row {i}b: {:?} - {:?}",
+                row.right, row.left
             );
 
             assert_eq!(
                 row.left.clone().difference(row.right.clone()),
                 row.left_only,
-                "row {}b: {:?} -- {:?}",
-                i,
+                "row {i}b: {:?} -- {:?}",
                 row.left,
                 row.right
             );

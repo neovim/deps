@@ -1,11 +1,10 @@
-use std::collections::HashMap;
-
-use anyhow::{anyhow, Context, Result};
-use lazy_static::lazy_static;
-use regex_syntax::ast::{
-    parse, Ast, ClassPerlKind, ClassSet, ClassSetBinaryOpKind, ClassSetItem, ClassUnicodeKind,
-    RepetitionKind, RepetitionRange,
+use anyhow::Result;
+use regex_syntax::{
+    hir::{Class, Hir, HirKind},
+    ParserBuilder,
 };
+use serde::Serialize;
+use thiserror::Error;
 
 use super::ExtractedLexicalGrammar;
 use crate::{
@@ -14,26 +13,44 @@ use crate::{
     rules::{Precedence, Rule},
 };
 
-lazy_static! {
-    static ref UNICODE_CATEGORIES: HashMap<&'static str, Vec<u32>> =
-        serde_json::from_str(UNICODE_CATEGORIES_JSON).unwrap();
-    static ref UNICODE_PROPERTIES: HashMap<&'static str, Vec<u32>> =
-        serde_json::from_str(UNICODE_PROPERTIES_JSON).unwrap();
-    static ref UNICODE_CATEGORY_ALIASES: HashMap<&'static str, String> =
-        serde_json::from_str(UNICODE_CATEGORY_ALIASES_JSON).unwrap();
-    static ref UNICODE_PROPERTY_ALIASES: HashMap<&'static str, String> =
-        serde_json::from_str(UNICODE_PROPERTY_ALIASES_JSON).unwrap();
-}
-
-const UNICODE_CATEGORIES_JSON: &str = include_str!("./unicode-categories.json");
-const UNICODE_PROPERTIES_JSON: &str = include_str!("./unicode-properties.json");
-const UNICODE_CATEGORY_ALIASES_JSON: &str = include_str!("./unicode-category-aliases.json");
-const UNICODE_PROPERTY_ALIASES_JSON: &str = include_str!("./unicode-property-aliases.json");
-
 struct NfaBuilder {
     nfa: Nfa,
     is_sep: bool,
     precedence_stack: Vec<i32>,
+}
+
+pub type ExpandTokensResult<T> = Result<T, ExpandTokensError>;
+
+#[derive(Debug, Error, Serialize)]
+pub enum ExpandTokensError {
+    #[error(
+        "The rule `{0}` matches the empty string.
+Tree-sitter does not support syntactic rules that match the empty string
+unless they are used only as the grammar's start rule.
+        "
+    )]
+    EmptyString(String),
+    #[error(transparent)]
+    Processing(ExpandTokensProcessingError),
+    #[error(transparent)]
+    ExpandRule(ExpandRuleError),
+}
+
+#[derive(Debug, Error, Serialize)]
+pub struct ExpandTokensProcessingError {
+    rule: String,
+    error: ExpandRuleError,
+}
+
+impl std::fmt::Display for ExpandTokensProcessingError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(
+            f,
+            "Error processing rule {}: Grammar error: Unexpected rule {:?}",
+            self.rule, self.error
+        )?;
+        Ok(())
+    }
 }
 
 fn get_implicit_precedence(rule: &Rule) -> i32 {
@@ -59,7 +76,7 @@ const fn get_completion_precedence(rule: &Rule) -> i32 {
     0
 }
 
-pub fn expand_tokens(mut grammar: ExtractedLexicalGrammar) -> Result<LexicalGrammar> {
+pub fn expand_tokens(mut grammar: ExtractedLexicalGrammar) -> ExpandTokensResult<LexicalGrammar> {
     let mut builder = NfaBuilder {
         nfa: Nfa::new(),
         is_sep: true,
@@ -75,6 +92,10 @@ pub fn expand_tokens(mut grammar: ExtractedLexicalGrammar) -> Result<LexicalGram
 
     let mut variables = Vec::new();
     for (i, variable) in grammar.variables.into_iter().enumerate() {
+        if variable.rule.is_empty() {
+            Err(ExpandTokensError::EmptyString(variable.name.clone()))?;
+        }
+
         let is_immediate_token = match &variable.rule {
             Rule::Metadata { params, .. } => params.is_main_token,
             _ => false,
@@ -88,12 +109,19 @@ pub fn expand_tokens(mut grammar: ExtractedLexicalGrammar) -> Result<LexicalGram
         let last_state_id = builder.nfa.last_state_id();
         builder
             .expand_rule(&variable.rule, last_state_id)
-            .with_context(|| format!("Error processing rule {}", variable.name))?;
+            .map_err(|e| {
+                ExpandTokensError::Processing(ExpandTokensProcessingError {
+                    rule: variable.name.clone(),
+                    error: e,
+                })
+            })?;
 
         if !is_immediate_token {
             builder.is_sep = true;
             let last_state_id = builder.nfa.last_state_id();
-            builder.expand_rule(&separator_rule, last_state_id)?;
+            builder
+                .expand_rule(&separator_rule, last_state_id)
+                .map_err(ExpandTokensError::ExpandRule)?;
         }
 
         variables.push(LexicalVariable {
@@ -110,12 +138,54 @@ pub fn expand_tokens(mut grammar: ExtractedLexicalGrammar) -> Result<LexicalGram
     })
 }
 
+pub type ExpandRuleResult<T> = Result<T, ExpandRuleError>;
+
+#[derive(Debug, Error, Serialize)]
+pub enum ExpandRuleError {
+    #[error("Grammar error: Unexpected rule {0:?}")]
+    UnexpectedRule(Rule),
+    #[error("{0}")]
+    Parse(String),
+    #[error(transparent)]
+    ExpandRegex(ExpandRegexError),
+}
+
+pub type ExpandRegexResult<T> = Result<T, ExpandRegexError>;
+
+#[derive(Debug, Error, Serialize)]
+pub enum ExpandRegexError {
+    #[error("{0}")]
+    Utf8(String),
+    #[error("Regex error: Assertions are not supported")]
+    Assertion,
+}
+
 impl NfaBuilder {
-    fn expand_rule(&mut self, rule: &Rule, mut next_state_id: u32) -> Result<bool> {
+    fn expand_rule(&mut self, rule: &Rule, mut next_state_id: u32) -> ExpandRuleResult<bool> {
         match rule {
             Rule::Pattern(s, f) => {
-                let ast = parse::Parser::new().parse(s)?;
-                self.expand_regex(&ast, next_state_id, f.contains('i'))
+                // With unicode enabled, `\w`, `\s` and `\d` expand to character sets that are much
+                // larger than intended, so we replace them with the actual
+                // character sets they should represent. If the full unicode range
+                // of `\w`, `\s` or `\d` are needed then `\p{L}`, `\p{Z}` and `\p{N}` should be
+                // used.
+                let s = s
+                    .replace(r"\w", r"[0-9A-Za-z_]")
+                    .replace(r"\s", r"[\t-\r ]")
+                    .replace(r"\d", r"[0-9]")
+                    .replace(r"\W", r"[^0-9A-Za-z_]")
+                    .replace(r"\S", r"[^\t-\r ]")
+                    .replace(r"\D", r"[^0-9]");
+                let mut parser = ParserBuilder::new()
+                    .case_insensitive(f.contains('i'))
+                    .unicode(true)
+                    .utf8(false)
+                    .build();
+                let hir = parser
+                    .parse(&s)
+                    .map_err(|e| ExpandRuleError::Parse(e.to_string()))?;
+                self.expand_regex(&hir, next_state_id)
+                    .map_err(ExpandRuleError::ExpandRegex)
             }
             Rule::String(s) => {
                 for c in s.chars().rev() {
@@ -179,129 +249,98 @@ impl NfaBuilder {
                 result
             }
             Rule::Blank => Ok(false),
-            _ => Err(anyhow!("Grammar error: Unexpected rule {rule:?}")),
+            _ => Err(ExpandRuleError::UnexpectedRule(rule.clone()))?,
         }
     }
 
-    fn expand_regex(
-        &mut self,
-        ast: &Ast,
-        mut next_state_id: u32,
-        case_insensitive: bool,
-    ) -> Result<bool> {
-        const fn inverse_char(c: char) -> char {
-            match c {
-                'a'..='z' => (c as u8 - b'a' + b'A') as char,
-                'A'..='Z' => (c as u8 - b'A' + b'a') as char,
-                c => c,
-            }
-        }
-
-        fn with_inverse_char(mut chars: CharacterSet) -> CharacterSet {
-            for char in chars.clone().chars() {
-                let inverted = inverse_char(char);
-                if char != inverted {
-                    chars = chars.add_char(inverted);
+    fn expand_regex(&mut self, hir: &Hir, mut next_state_id: u32) -> ExpandRegexResult<bool> {
+        match hir.kind() {
+            HirKind::Empty => Ok(false),
+            HirKind::Literal(literal) => {
+                for character in std::str::from_utf8(&literal.0)
+                    .map_err(|e| ExpandRegexError::Utf8(e.to_string()))?
+                    .chars()
+                    .rev()
+                {
+                    let char_set = CharacterSet::from_char(character);
+                    self.push_advance(char_set, next_state_id);
+                    next_state_id = self.nfa.last_state_id();
                 }
-            }
-            chars
-        }
 
-        match ast {
-            Ast::Empty(_) => Ok(false),
-            Ast::Flags(_) => Err(anyhow!("Regex error: Flags are not supported")),
-            Ast::Literal(literal) => {
-                let mut char_set = CharacterSet::from_char(literal.c);
-                if case_insensitive {
-                    let inverted = inverse_char(literal.c);
-                    if literal.c != inverted {
-                        char_set = char_set.add_char(inverted);
+                Ok(true)
+            }
+            HirKind::Class(class) => match class {
+                Class::Unicode(class) => {
+                    let mut chars = CharacterSet::default();
+                    for c in class.ranges() {
+                        chars = chars.add_range(c.start(), c.end());
                     }
+
+                    // For some reason, the long s `ſ` is included if the letter `s` is in a
+                    // pattern, so we remove it.
+                    if chars.range_count() == 3
+                        && chars
+                            .ranges()
+                            // exact check to ensure that `ſ` wasn't intentionally added.
+                            .all(|r| ['s'..='s', 'S'..='S', 'ſ'..='ſ'].contains(&r))
+                    {
+                        chars = chars.difference(CharacterSet::from_char('ſ'));
+                    }
+                    self.push_advance(chars, next_state_id);
+                    Ok(true)
                 }
-                self.push_advance(char_set, next_state_id);
-                Ok(true)
-            }
-            Ast::Dot(_) => {
-                self.push_advance(CharacterSet::from_char('\n').negate(), next_state_id);
-                Ok(true)
-            }
-            Ast::Assertion(_) => Err(anyhow!("Regex error: Assertions are not supported")),
-            Ast::ClassUnicode(class) => {
-                let mut chars = self.expand_unicode_character_class(&class.kind)?;
-                if class.negated {
-                    chars = chars.negate();
+                Class::Bytes(bytes_class) => {
+                    let mut chars = CharacterSet::default();
+                    for c in bytes_class.ranges() {
+                        chars = chars.add_range(c.start().into(), c.end().into());
+                    }
+                    self.push_advance(chars, next_state_id);
+                    Ok(true)
                 }
-                if case_insensitive {
-                    chars = with_inverse_char(chars);
+            },
+            HirKind::Look(_) => Err(ExpandRegexError::Assertion)?,
+            HirKind::Repetition(repetition) => match (repetition.min, repetition.max) {
+                (0, Some(1)) => self.expand_zero_or_one(&repetition.sub, next_state_id),
+                (1, None) => self.expand_one_or_more(&repetition.sub, next_state_id),
+                (0, None) => self.expand_zero_or_more(&repetition.sub, next_state_id),
+                (min, Some(max)) if min == max => {
+                    self.expand_count(&repetition.sub, min, next_state_id)
                 }
-                self.push_advance(chars, next_state_id);
-                Ok(true)
-            }
-            Ast::ClassPerl(class) => {
-                let mut chars = self.expand_perl_character_class(&class.kind);
-                if class.negated {
-                    chars = chars.negate();
-                }
-                if case_insensitive {
-                    chars = with_inverse_char(chars);
-                }
-                self.push_advance(chars, next_state_id);
-                Ok(true)
-            }
-            Ast::ClassBracketed(class) => {
-                let mut chars = self.translate_class_set(&class.kind)?;
-                if class.negated {
-                    chars = chars.negate();
-                }
-                if case_insensitive {
-                    chars = with_inverse_char(chars);
-                }
-                self.push_advance(chars, next_state_id);
-                Ok(true)
-            }
-            Ast::Repetition(repetition) => match repetition.op.kind {
-                RepetitionKind::ZeroOrOne => {
-                    self.expand_zero_or_one(&repetition.ast, next_state_id, case_insensitive)
-                }
-                RepetitionKind::OneOrMore => {
-                    self.expand_one_or_more(&repetition.ast, next_state_id, case_insensitive)
-                }
-                RepetitionKind::ZeroOrMore => {
-                    self.expand_zero_or_more(&repetition.ast, next_state_id, case_insensitive)
-                }
-                RepetitionKind::Range(RepetitionRange::Exactly(count)) => {
-                    self.expand_count(&repetition.ast, count, next_state_id, case_insensitive)
-                }
-                RepetitionKind::Range(RepetitionRange::AtLeast(min)) => {
-                    if self.expand_zero_or_more(&repetition.ast, next_state_id, case_insensitive)? {
-                        self.expand_count(&repetition.ast, min, next_state_id, case_insensitive)
+                (min, None) => {
+                    if self.expand_zero_or_more(&repetition.sub, next_state_id)? {
+                        self.expand_count(&repetition.sub, min, next_state_id)
                     } else {
                         Ok(false)
                     }
                 }
-                RepetitionKind::Range(RepetitionRange::Bounded(min, max)) => {
-                    let mut result =
-                        self.expand_count(&repetition.ast, min, next_state_id, case_insensitive)?;
+                (min, Some(max)) => {
+                    let mut result = self.expand_count(&repetition.sub, min, next_state_id)?;
                     for _ in min..max {
                         if result {
                             next_state_id = self.nfa.last_state_id();
                         }
-                        if self.expand_zero_or_one(
-                            &repetition.ast,
-                            next_state_id,
-                            case_insensitive,
-                        )? {
+                        if self.expand_zero_or_one(&repetition.sub, next_state_id)? {
                             result = true;
                         }
                     }
                     Ok(result)
                 }
             },
-            Ast::Group(group) => self.expand_regex(&group.ast, next_state_id, case_insensitive),
-            Ast::Alternation(alternation) => {
+            HirKind::Capture(capture) => self.expand_regex(&capture.sub, next_state_id),
+            HirKind::Concat(concat) => {
+                let mut result = false;
+                for hir in concat.iter().rev() {
+                    if self.expand_regex(hir, next_state_id)? {
+                        result = true;
+                        next_state_id = self.nfa.last_state_id();
+                    }
+                }
+                Ok(result)
+            }
+            HirKind::Alternation(alternations) => {
                 let mut alternative_state_ids = Vec::new();
-                for ast in &alternation.asts {
-                    if self.expand_regex(ast, next_state_id, case_insensitive)? {
+                for hir in alternations {
+                    if self.expand_regex(hir, next_state_id)? {
                         alternative_state_ids.push(self.nfa.last_state_id());
                     } else {
                         alternative_state_ids.push(next_state_id);
@@ -310,58 +349,21 @@ impl NfaBuilder {
                 alternative_state_ids.sort_unstable();
                 alternative_state_ids.dedup();
                 alternative_state_ids.retain(|i| *i != self.nfa.last_state_id());
-
                 for alternative_state_id in alternative_state_ids {
                     self.push_split(alternative_state_id);
                 }
                 Ok(true)
             }
-            Ast::Concat(concat) => {
-                let mut result = false;
-                for ast in concat.asts.iter().rev() {
-                    if self.expand_regex(ast, next_state_id, case_insensitive)? {
-                        result = true;
-                        next_state_id = self.nfa.last_state_id();
-                    }
-                }
-                Ok(result)
-            }
         }
     }
 
-    fn translate_class_set(&self, class_set: &ClassSet) -> Result<CharacterSet> {
-        match &class_set {
-            ClassSet::Item(item) => self.expand_character_class(item),
-            ClassSet::BinaryOp(binary_op) => {
-                let mut lhs_char_class = self.translate_class_set(&binary_op.lhs)?;
-                let mut rhs_char_class = self.translate_class_set(&binary_op.rhs)?;
-                match binary_op.kind {
-                    ClassSetBinaryOpKind::Intersection => {
-                        Ok(lhs_char_class.remove_intersection(&mut rhs_char_class))
-                    }
-                    ClassSetBinaryOpKind::Difference => {
-                        Ok(lhs_char_class.difference(rhs_char_class))
-                    }
-                    ClassSetBinaryOpKind::SymmetricDifference => {
-                        Ok(lhs_char_class.symmetric_difference(rhs_char_class))
-                    }
-                }
-            }
-        }
-    }
-
-    fn expand_one_or_more(
-        &mut self,
-        ast: &Ast,
-        next_state_id: u32,
-        case_insensitive: bool,
-    ) -> Result<bool> {
+    fn expand_one_or_more(&mut self, hir: &Hir, next_state_id: u32) -> ExpandRegexResult<bool> {
         self.nfa.states.push(NfaState::Accept {
             variable_index: 0,
             precedence: 0,
         }); // Placeholder for split
         let split_state_id = self.nfa.last_state_id();
-        if self.expand_regex(ast, split_state_id, case_insensitive)? {
+        if self.expand_regex(hir, split_state_id)? {
             self.nfa.states[split_state_id as usize] =
                 NfaState::Split(self.nfa.last_state_id(), next_state_id);
             Ok(true)
@@ -371,13 +373,8 @@ impl NfaBuilder {
         }
     }
 
-    fn expand_zero_or_one(
-        &mut self,
-        ast: &Ast,
-        next_state_id: u32,
-        case_insensitive: bool,
-    ) -> Result<bool> {
-        if self.expand_regex(ast, next_state_id, case_insensitive)? {
+    fn expand_zero_or_one(&mut self, hir: &Hir, next_state_id: u32) -> ExpandRegexResult<bool> {
+        if self.expand_regex(hir, next_state_id)? {
             self.push_split(next_state_id);
             Ok(true)
         } else {
@@ -385,13 +382,8 @@ impl NfaBuilder {
         }
     }
 
-    fn expand_zero_or_more(
-        &mut self,
-        ast: &Ast,
-        next_state_id: u32,
-        case_insensitive: bool,
-    ) -> Result<bool> {
-        if self.expand_one_or_more(ast, next_state_id, case_insensitive)? {
+    fn expand_zero_or_more(&mut self, hir: &Hir, next_state_id: u32) -> ExpandRegexResult<bool> {
+        if self.expand_one_or_more(hir, next_state_id)? {
             self.push_split(next_state_id);
             Ok(true)
         } else {
@@ -401,124 +393,18 @@ impl NfaBuilder {
 
     fn expand_count(
         &mut self,
-        ast: &Ast,
+        hir: &Hir,
         count: u32,
         mut next_state_id: u32,
-        case_insensitive: bool,
-    ) -> Result<bool> {
+    ) -> ExpandRegexResult<bool> {
         let mut result = false;
         for _ in 0..count {
-            if self.expand_regex(ast, next_state_id, case_insensitive)? {
+            if self.expand_regex(hir, next_state_id)? {
                 result = true;
                 next_state_id = self.nfa.last_state_id();
             }
         }
         Ok(result)
-    }
-
-    fn expand_character_class(&self, item: &ClassSetItem) -> Result<CharacterSet> {
-        match item {
-            ClassSetItem::Empty(_) => Ok(CharacterSet::empty()),
-            ClassSetItem::Literal(literal) => Ok(CharacterSet::from_char(literal.c)),
-            ClassSetItem::Range(range) => Ok(CharacterSet::from_range(range.start.c, range.end.c)),
-            ClassSetItem::Union(union) => {
-                let mut result = CharacterSet::empty();
-                for item in &union.items {
-                    result = result.add(&self.expand_character_class(item)?);
-                }
-                Ok(result)
-            }
-            ClassSetItem::Perl(class) => Ok(self.expand_perl_character_class(&class.kind)),
-            ClassSetItem::Unicode(class) => {
-                let mut set = self.expand_unicode_character_class(&class.kind)?;
-                if class.negated {
-                    set = set.negate();
-                }
-                Ok(set)
-            }
-            ClassSetItem::Bracketed(class) => {
-                let mut set = self.translate_class_set(&class.kind)?;
-                if class.negated {
-                    set = set.negate();
-                }
-                Ok(set)
-            }
-            ClassSetItem::Ascii(_) => Err(anyhow!(
-                "Regex error: Unsupported character class syntax {item:?}",
-            )),
-        }
-    }
-
-    fn expand_unicode_character_class(&self, class: &ClassUnicodeKind) -> Result<CharacterSet> {
-        let mut chars = CharacterSet::empty();
-
-        let category_letter;
-        match class {
-            ClassUnicodeKind::OneLetter(le) => {
-                category_letter = le.to_string();
-            }
-            ClassUnicodeKind::Named(class_name) => {
-                let actual_class_name = UNICODE_CATEGORY_ALIASES
-                    .get(class_name.as_str())
-                    .or_else(|| UNICODE_PROPERTY_ALIASES.get(class_name.as_str()))
-                    .unwrap_or(class_name);
-                if actual_class_name.len() == 1 {
-                    category_letter = actual_class_name.clone();
-                } else {
-                    let code_points =
-                        UNICODE_CATEGORIES
-                            .get(actual_class_name.as_str())
-                            .or_else(|| UNICODE_PROPERTIES.get(actual_class_name.as_str()))
-                            .ok_or_else(|| {
-                                anyhow!(
-                                    "Regex error: Unsupported unicode character class {class_name}",
-                                )
-                            })?;
-                    for c in code_points {
-                        if let Some(c) = char::from_u32(*c) {
-                            chars = chars.add_char(c);
-                        }
-                    }
-
-                    return Ok(chars);
-                }
-            }
-            ClassUnicodeKind::NamedValue { .. } => {
-                return Err(anyhow!(
-                    "Regex error: Key-value unicode properties are not supported"
-                ))
-            }
-        }
-
-        for (category, code_points) in UNICODE_CATEGORIES.iter() {
-            if category.starts_with(&category_letter) {
-                for c in code_points {
-                    if let Some(c) = char::from_u32(*c) {
-                        chars = chars.add_char(c);
-                    }
-                }
-            }
-        }
-
-        Ok(chars)
-    }
-
-    fn expand_perl_character_class(&self, item: &ClassPerlKind) -> CharacterSet {
-        match item {
-            ClassPerlKind::Digit => CharacterSet::from_range('0', '9'),
-            ClassPerlKind::Space => CharacterSet::empty()
-                .add_char(' ')
-                .add_char('\t')
-                .add_char('\r')
-                .add_char('\n')
-                .add_char('\x0B')
-                .add_char('\x0C'),
-            ClassPerlKind::Word => CharacterSet::empty()
-                .add_char('_')
-                .add_range('A', 'Z')
-                .add_range('a', 'z')
-                .add_range('0', '9'),
-        }
     }
 
     fn push_advance(&mut self, chars: CharacterSet, state_id: u32) {

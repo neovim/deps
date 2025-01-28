@@ -115,6 +115,12 @@ pub fn test_language_corpus(
     skipped: Option<&[&str]>,
     language_dir: Option<&str>,
 ) {
+    if let Some(filter) = LANGUAGE_FILTER.as_ref() {
+        if language_name != filter {
+            return;
+        }
+    }
+
     let language_dir = language_dir.unwrap_or_default();
 
     let grammars_dir = fixtures_dir().join("grammars");
@@ -341,7 +347,7 @@ fn test_feature_corpus_files() {
         let language_name = language_name.to_str().unwrap();
 
         if let Some(filter) = LANGUAGE_FILTER.as_ref() {
-            if language_name != filter.as_str() {
+            if language_name != filter {
                 continue;
             }
         }
@@ -353,7 +359,8 @@ fn test_feature_corpus_files() {
         }
         let error_message_path = test_path.join("expected_error.txt");
         let grammar_json = tree_sitter_generate::load_grammar_file(&grammar_path, None).unwrap();
-        let generate_result = tree_sitter_generate::generate_parser_for_grammar(&grammar_json);
+        let generate_result =
+            tree_sitter_generate::generate_parser_for_grammar(&grammar_json, Some((0, 0, 0)));
 
         if error_message_path.exists() {
             if EXAMPLE_INCLUDE.is_some() || EXAMPLE_EXCLUDE.is_some() {
@@ -419,7 +426,6 @@ fn test_feature_corpus_files() {
 
                 if !passed {
                     failure_count += 1;
-                    continue;
                 }
             }
         }

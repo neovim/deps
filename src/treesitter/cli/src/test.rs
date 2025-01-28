@@ -1,49 +1,60 @@
 use std::{
     collections::BTreeMap,
     ffi::OsStr,
+    fmt::Write as _,
     fs,
     io::{self, Write},
     path::{Path, PathBuf},
     str,
+    sync::LazyLock,
+    time::Duration,
 };
 
 use anstyle::{AnsiColor, Color, Style};
 use anyhow::{anyhow, Context, Result};
+use clap::ValueEnum;
 use indoc::indoc;
-use lazy_static::lazy_static;
 use regex::{
     bytes::{Regex as ByteRegex, RegexBuilder as ByteRegexBuilder},
     Regex,
 };
 use similar::{ChangeTag, TextDiff};
-use tree_sitter::{format_sexp, Language, LogType, Parser, Query};
+use tree_sitter::{format_sexp, Language, LogType, Parser, Query, Tree};
 use walkdir::WalkDir;
 
 use super::util;
+use crate::parse::Stats;
 
-lazy_static! {
-    static ref HEADER_REGEX: ByteRegex = ByteRegexBuilder::new(
+static HEADER_REGEX: LazyLock<ByteRegex> = LazyLock::new(|| {
+    ByteRegexBuilder::new(
         r"^(?x)
            (?P<equals>(?:=+){3,})
            (?P<suffix1>[^=\r\n][^\r\n]*)?
            \r?\n
            (?P<test_name_and_markers>(?:([^=\r\n]|\s+:)[^\r\n]*\r?\n)+)
            ===+
-           (?P<suffix2>[^=\r\n][^\r\n]*)?\r?\n"
+           (?P<suffix2>[^=\r\n][^\r\n]*)?\r?\n",
     )
     .multi_line(true)
     .build()
-    .unwrap();
-    static ref DIVIDER_REGEX: ByteRegex =
-        ByteRegexBuilder::new(r"^(?P<hyphens>(?:-+){3,})(?P<suffix>[^-\r\n][^\r\n]*)?\r?\n")
-            .multi_line(true)
-            .build()
-            .unwrap();
-    static ref COMMENT_REGEX: Regex = Regex::new(r"(?m)^\s*;.*$").unwrap();
-    static ref WHITESPACE_REGEX: Regex = Regex::new(r"\s+").unwrap();
-    static ref SEXP_FIELD_REGEX: Regex = Regex::new(r" \w+: \(").unwrap();
-    static ref POINT_REGEX: Regex = Regex::new(r"\s*\[\s*\d+\s*,\s*\d+\s*\]\s*").unwrap();
-}
+    .unwrap()
+});
+
+static DIVIDER_REGEX: LazyLock<ByteRegex> = LazyLock::new(|| {
+    ByteRegexBuilder::new(r"^(?P<hyphens>(?:-+){3,})(?P<suffix>[^-\r\n][^\r\n]*)?\r?\n")
+        .multi_line(true)
+        .build()
+        .unwrap()
+});
+
+static COMMENT_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?m)^\s*;.*$").unwrap());
+
+static WHITESPACE_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\s+").unwrap());
+
+static SEXP_FIELD_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r" \w+: \(").unwrap());
+
+static POINT_REGEX: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\s*\[\s*\d+\s*,\s*\d+\s*\]\s*").unwrap());
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum TestEntry {
@@ -61,6 +72,7 @@ pub enum TestEntry {
         has_fields: bool,
         attributes_str: String,
         attributes: TestAttributes,
+        file_name: Option<String>,
     },
 }
 
@@ -95,17 +107,32 @@ impl Default for TestAttributes {
     }
 }
 
+#[derive(ValueEnum, Default, Copy, Clone, PartialEq, Eq)]
+pub enum TestStats {
+    All,
+    #[default]
+    OutliersAndTotal,
+    TotalOnly,
+}
+
 pub struct TestOptions<'a> {
+    pub output: &'a mut String,
     pub path: PathBuf,
     pub debug: bool,
     pub debug_graph: bool,
     pub include: Option<Regex>,
     pub exclude: Option<Regex>,
+    pub file_name: Option<String>,
     pub update: bool,
     pub open_log: bool,
     pub languages: BTreeMap<&'a str, &'a Language>,
     pub color: bool,
     pub test_num: usize,
+    /// Whether a test ran for the nth line in `output`, the true parse rate, and the adjusted
+    /// parse rate
+    pub parse_rates: &'a mut Vec<(bool, Option<(f64, f64)>)>,
+    pub stat_display: TestStats,
+    pub stats: &'a mut Stats,
     pub show_fields: bool,
     pub overview_only: bool,
 }
@@ -137,6 +164,53 @@ pub fn run_tests_at_path(parser: &mut Parser, opts: &mut TestOptions) -> Result<
         &mut corrected_entries,
         &mut has_parse_errors,
     )?;
+
+    let (count, total_adj_parse_time) = opts
+        .parse_rates
+        .iter()
+        .flat_map(|(_, rates)| rates)
+        .fold((0usize, 0.0f64), |(count, rate_accum), (_, adj_rate)| {
+            (count + 1, rate_accum + adj_rate)
+        });
+
+    let avg = total_adj_parse_time / count as f64;
+    let std_dev = {
+        let variance = opts
+            .parse_rates
+            .iter()
+            .flat_map(|(_, rates)| rates)
+            .map(|(_, rate_i)| (rate_i - avg).powi(2))
+            .sum::<f64>()
+            / count as f64;
+        variance.sqrt()
+    };
+
+    for ((is_test, rates), out_line) in opts.parse_rates.iter().zip(opts.output.lines()) {
+        let stat_display = if !is_test {
+            // Test group, no actual parsing took place
+            String::new()
+        } else {
+            match (opts.stat_display, rates) {
+                (TestStats::TotalOnly, _) | (_, None) => String::new(),
+                (display, Some((true_rate, adj_rate))) => {
+                    let mut stats = if display == TestStats::All {
+                        format!(" ({true_rate:.3} bytes/ms)")
+                    } else {
+                        String::new()
+                    };
+                    // 3 standard deviations below the mean, aka the "Empirical Rule"
+                    if *adj_rate < 3.0f64.mul_add(-std_dev, avg) {
+                        stats += &paint(
+                            opts.color.then_some(AnsiColor::Red),
+                            &format!(" -- Warning: Slow parse rate ({true_rate:.3} bytes/ms)"),
+                        );
+                    }
+                    stats
+                }
+            }
+        };
+        println!("{out_line}{stat_display}");
+    }
 
     parser.stop_printing_dot_graphs();
 
@@ -201,64 +275,6 @@ pub fn run_tests_at_path(parser: &mut Parser, opts: &mut TestOptions) -> Result<
             }
         }
     }
-}
-
-#[allow(clippy::type_complexity)]
-pub fn get_test_info<'test>(
-    test_entry: &'test TestEntry,
-    target_test: u32,
-    test_num: &mut u32,
-) -> Option<(&'test str, &'test [u8], Vec<Box<str>>)> {
-    match test_entry {
-        TestEntry::Example {
-            name,
-            input,
-            attributes,
-            ..
-        } => {
-            if *test_num == target_test {
-                return Some((name, input, attributes.languages.clone()));
-            }
-            *test_num += 1;
-        }
-        TestEntry::Group { children, .. } => {
-            for child in children {
-                if let Some((name, input, languages)) = get_test_info(child, target_test, test_num)
-                {
-                    return Some((name, input, languages));
-                }
-            }
-        }
-    }
-
-    None
-}
-
-/// Writes the input of `target_test` to a temporary file and returns the path
-pub fn get_tmp_test_file(target_test: u32, color: bool) -> Result<(PathBuf, Vec<Box<str>>)> {
-    let current_dir = std::env::current_dir().unwrap();
-    let test_dir = current_dir.join("test").join("corpus");
-
-    // Get the input of the target test
-    let test_entry = parse_tests(&test_dir)?;
-    let mut test_num = 0;
-    let Some((test_name, test_contents, languages)) =
-        get_test_info(&test_entry, target_test - 1, &mut test_num)
-    else {
-        return Err(anyhow!("Failed to fetch contents of test #{target_test}"));
-    };
-
-    // Write the test contents to a temporary file
-    let test_path = std::env::temp_dir().join(".tree-sitter-test");
-    let mut test_file = std::fs::File::create(&test_path)?;
-    test_file.write_all(test_contents)?;
-
-    println!(
-        "{target_test}. {}\n",
-        paint(color.then_some(AnsiColor::Green), test_name)
-    );
-
-    Ok((test_path, languages))
 }
 
 pub fn check_queries_at_path(language: &Language, path: &Path) -> Result<()> {
@@ -327,8 +343,8 @@ pub fn print_diff(actual: &str, expected: &str, use_color: bool) {
     println!();
 }
 
-pub fn paint(color: Option<AnsiColor>, text: &str) -> String {
-    let style = Style::new().fg_color(color.map(Color::Ansi));
+pub fn paint(color: Option<impl Into<Color>>, text: &str) -> String {
+    let style = Style::new().fg_color(color.map(Into::into));
     format!("{style}{text}{style:#}")
 }
 
@@ -338,7 +354,7 @@ fn run_tests(
     parser: &mut Parser,
     test_entry: TestEntry,
     opts: &mut TestOptions,
-    mut indent_level: i32,
+    mut indent_level: u32,
     failures: &mut Vec<(String, String, String)>,
     corrected_entries: &mut Vec<(String, String, String, String, usize, usize)>,
     has_parse_errors: &mut bool,
@@ -353,24 +369,31 @@ fn run_tests(
             has_fields,
             attributes_str,
             attributes,
+            ..
         } => {
-            print!("{}", "  ".repeat(indent_level as usize));
+            write!(opts.output, "{}", "  ".repeat(indent_level as usize))?;
 
             if attributes.skip {
-                println!(
-                    "{:>3}.  {}",
+                writeln!(
+                    opts.output,
+                    "{:>3}. ⌀ {}",
                     opts.test_num,
                     paint(opts.color.then_some(AnsiColor::Yellow), &name),
-                );
+                )?;
+                opts.parse_rates.push((true, None));
+                opts.test_num += 1;
                 return Ok(true);
             }
 
             if !attributes.platform {
-                println!(
-                    "{:>3}.  {}",
+                writeln!(
+                    opts.output,
+                    "{:>3}. ⌀ {}",
                     opts.test_num,
                     paint(opts.color.then_some(AnsiColor::Magenta), &name),
-                );
+                )?;
+                opts.parse_rates.push((true, None));
+                opts.test_num += 1;
                 return Ok(true);
             }
 
@@ -382,15 +405,30 @@ fn run_tests(
                         .ok_or_else(|| anyhow!("Language not found: {language_name}"))?;
                     parser.set_language(language)?;
                 }
+                let start = std::time::Instant::now();
                 let tree = parser.parse(&input, None).unwrap();
+                {
+                    let parse_time = start.elapsed();
+                    let true_parse_rate = tree.root_node().byte_range().len() as f64
+                        / (parse_time.as_nanos() as f64 / 1_000_000.0);
+                    let adj_parse_rate = adjusted_parse_rate(&tree, parse_time);
+
+                    opts.parse_rates
+                        .push((true, Some((true_parse_rate, adj_parse_rate))));
+                    opts.stats.total_parses += 1;
+                    opts.stats.total_duration += parse_time;
+                    opts.stats.total_bytes += tree.root_node().byte_range().len();
+                }
 
                 if attributes.error {
                     if tree.root_node().has_error() {
-                        println!(
-                            "{:>3}.  {}",
+                        writeln!(
+                            opts.output,
+                            "{:>3}. ✓ {}",
                             opts.test_num,
-                            paint(opts.color.then_some(AnsiColor::Green), &name)
-                        );
+                            paint(opts.color.then_some(AnsiColor::Green), &name),
+                        )?;
+                        opts.stats.successful_parses += 1;
                         if opts.update {
                             let input = String::from_utf8(input.clone()).unwrap();
                             let output = format_sexp(&output, 0);
@@ -417,11 +455,12 @@ fn run_tests(
                                 divider_delim_len,
                             ));
                         }
-                        println!(
-                            "{:>3}.  {}",
+                        writeln!(
+                            opts.output,
+                            "{:>3}. ✗ {}",
                             opts.test_num,
-                            paint(opts.color.then_some(AnsiColor::Red), &name)
-                        );
+                            paint(opts.color.then_some(AnsiColor::Red), &name),
+                        )?;
                         failures.push((
                             name.clone(),
                             tree.root_node().to_sexp(),
@@ -439,11 +478,13 @@ fn run_tests(
                     }
 
                     if actual == output {
-                        println!(
+                        writeln!(
+                            opts.output,
                             "{:>3}. ✓ {}",
                             opts.test_num,
-                            paint(opts.color.then_some(AnsiColor::Green), &name)
-                        );
+                            paint(opts.color.then_some(AnsiColor::Green), &name),
+                        )?;
+                        opts.stats.successful_parses += 1;
                         if opts.update {
                             let input = String::from_utf8(input.clone()).unwrap();
                             let output = format_sexp(&output, 0);
@@ -488,18 +529,20 @@ fn run_tests(
                                     header_delim_len,
                                     divider_delim_len,
                                 ));
-                                println!(
+                                writeln!(
+                                    opts.output,
                                     "{:>3}. ✓ {}",
                                     opts.test_num,
                                     paint(opts.color.then_some(AnsiColor::Blue), &name),
-                                );
+                                )?;
                             }
                         } else {
-                            println!(
+                            writeln!(
+                                opts.output,
                                 "{:>3}. ✗ {}",
                                 opts.test_num,
                                 paint(opts.color.then_some(AnsiColor::Red), &name),
-                            );
+                            )?;
                         }
                         failures.push((name.clone(), actual, output.clone()));
 
@@ -526,12 +569,16 @@ fn run_tests(
             }
 
             indent_level += 1;
-            let mut advance_counter = opts.test_num;
             let failure_count = failures.len();
             let mut has_printed = false;
-            let mut skipped_tests = 0;
 
-            let matches_filter = |name: &str, opts: &TestOptions| {
+            let matches_filter = |name: &str, file_name: &Option<String>, opts: &TestOptions| {
+                if let (Some(test_file_path), Some(filter_file_name)) = (file_name, &opts.file_name)
+                {
+                    if !filter_file_name.eq(test_file_path) {
+                        return false;
+                    }
+                }
                 if let Some(include) = &opts.include {
                     include.is_match(name)
                 } else if let Some(exclude) = &opts.exclude {
@@ -541,15 +588,11 @@ fn run_tests(
                 }
             };
 
-            let mut should_skip = |entry: &TestEntry, opts: &TestOptions| match entry {
-                TestEntry::Example { name, .. } => {
-                    advance_counter += 1;
-                    !matches_filter(name, opts)
-                }
-                TestEntry::Group { .. } => {
-                    advance_counter += count_subtests(entry);
-                    false
-                }
+            let should_skip = |entry: &TestEntry, opts: &TestOptions| match entry {
+                TestEntry::Example {
+                    name, file_name, ..
+                } => !matches_filter(name, file_name, opts),
+                TestEntry::Group { .. } => false,
             };
 
             for child in children {
@@ -576,15 +619,18 @@ fn run_tests(
                         ));
 
                         opts.test_num += 1;
-                        skipped_tests += 1;
 
                         continue;
                     }
                 }
                 if !has_printed && indent_level > 1 {
                     has_printed = true;
-                    print!("{}", "  ".repeat((indent_level - 1) as usize));
-                    println!("{name}:");
+                    writeln!(
+                        opts.output,
+                        "{}{name}:",
+                        "  ".repeat((indent_level - 1) as usize)
+                    )?;
+                    opts.parse_rates.push((false, None));
                 }
                 if !run_tests(
                     parser,
@@ -600,8 +646,6 @@ fn run_tests(
                 }
             }
 
-            opts.test_num += skipped_tests;
-
             if let Some(file_path) = file_path {
                 if opts.update && failures.len() - failure_count > 0 {
                     write_tests(&file_path, corrected_entries)?;
@@ -613,13 +657,16 @@ fn run_tests(
     Ok(true)
 }
 
-fn count_subtests(test_entry: &TestEntry) -> usize {
-    match test_entry {
-        TestEntry::Example { .. } => 1,
-        TestEntry::Group { children, .. } => children
-            .iter()
-            .fold(0, |count, child| count + count_subtests(child)),
-    }
+// Parse time is interpreted in ns before converting to ms to avoid truncation issues
+// Parse rates often have several outliers, leading to a large standard deviation. Taking
+// the log of these rates serves to "flatten" out the distribution, yielding a more
+// usable standard deviation for finding statistically significant slow parse rates
+// NOTE: This is just a heuristic
+#[must_use]
+pub fn adjusted_parse_rate(tree: &Tree, parse_time: Duration) -> f64 {
+    f64::ln(
+        tree.root_node().byte_range().len() as f64 / (parse_time.as_nanos() as f64 / 1_000_000.0),
+    )
 }
 
 fn write_tests(
@@ -858,6 +905,7 @@ fn parse_test_content(name: String, content: &str, file_path: Option<PathBuf>) -
 
                     // Remove trailing newline from the input.
                     input.pop();
+                    #[cfg(target_os = "windows")]
                     if input.last() == Some(&b'\r') {
                         input.pop();
                     }
@@ -873,6 +921,12 @@ fn parse_test_content(name: String, content: &str, file_path: Option<PathBuf>) -
                     // fields will not be checked.
                     let has_fields = SEXP_FIELD_REGEX.is_match(&output);
 
+                    let file_name = if let Some(ref path) = file_path {
+                        path.file_name().map(|n| n.to_string_lossy().to_string())
+                    } else {
+                        None
+                    };
+
                     let t = TestEntry::Example {
                         name: prev_name,
                         input,
@@ -882,6 +936,7 @@ fn parse_test_content(name: String, content: &str, file_path: Option<PathBuf>) -
                         has_fields,
                         attributes_str: prev_attributes_str,
                         attributes: prev_attributes,
+                        file_name,
                     };
 
                     children.push(t);
@@ -946,6 +1001,7 @@ d
                         has_fields: false,
                         attributes_str: String::new(),
                         attributes: TestAttributes::default(),
+                        file_name: None,
                     },
                     TestEntry::Example {
                         name: "The second test".to_string(),
@@ -956,6 +1012,7 @@ d
                         has_fields: false,
                         attributes_str: String::new(),
                         attributes: TestAttributes::default(),
+                        file_name: None,
                     },
                 ],
                 file_path: None,
@@ -1007,6 +1064,7 @@ abc
                         has_fields: false,
                         attributes_str: String::new(),
                         attributes: TestAttributes::default(),
+                        file_name: None,
                     },
                     TestEntry::Example {
                         name: "Code ending with dashes".to_string(),
@@ -1017,6 +1075,7 @@ abc
                         has_fields: false,
                         attributes_str: String::new(),
                         attributes: TestAttributes::default(),
+                        file_name: None,
                     },
                 ],
                 file_path: None,
@@ -1172,6 +1231,7 @@ code
                         has_fields: false,
                         attributes_str: String::new(),
                         attributes: TestAttributes::default(),
+                        file_name: None,
                     },
                     TestEntry::Example {
                         name: "sexp with comment between".to_string(),
@@ -1182,6 +1242,7 @@ code
                         has_fields: false,
                         attributes_str: String::new(),
                         attributes: TestAttributes::default(),
+                        file_name: None,
                     },
                     TestEntry::Example {
                         name: "sexp with ';'".to_string(),
@@ -1192,6 +1253,7 @@ code
                         has_fields: false,
                         attributes_str: String::new(),
                         attributes: TestAttributes::default(),
+                        file_name: None,
                     }
                 ],
                 file_path: None,
@@ -1286,6 +1348,7 @@ Subsequent test containing equals
                         has_fields: false,
                         attributes_str: String::new(),
                         attributes: TestAttributes::default(),
+                        file_name: None,
                     },
                     TestEntry::Example {
                         name: "Second test".to_string(),
@@ -1296,6 +1359,7 @@ Subsequent test containing equals
                         has_fields: false,
                         attributes_str: String::new(),
                         attributes: TestAttributes::default(),
+                        file_name: None,
                     },
                     TestEntry::Example {
                         name: "Test name with = symbol".to_string(),
@@ -1306,6 +1370,7 @@ Subsequent test containing equals
                         has_fields: false,
                         attributes_str: String::new(),
                         attributes: TestAttributes::default(),
+                        file_name: None,
                     },
                     TestEntry::Example {
                         name: "Test containing equals".to_string(),
@@ -1316,6 +1381,7 @@ Subsequent test containing equals
                         has_fields: false,
                         attributes_str: String::new(),
                         attributes: TestAttributes::default(),
+                        file_name: None,
                     },
                     TestEntry::Example {
                         name: "Subsequent test containing equals".to_string(),
@@ -1326,6 +1392,7 @@ Subsequent test containing equals
                         has_fields: false,
                         attributes_str: String::new(),
                         attributes: TestAttributes::default(),
+                        file_name: None,
                     }
                 ],
                 file_path: None,
@@ -1372,6 +1439,7 @@ code with ----
                         has_fields: false,
                         attributes_str: String::new(),
                         attributes: TestAttributes::default(),
+                        file_name: None,
                     },
                     TestEntry::Example {
                         name: "name with === signs".to_string(),
@@ -1382,6 +1450,7 @@ code with ----
                         has_fields: false,
                         attributes_str: String::new(),
                         attributes: TestAttributes::default(),
+                        file_name: None,
                     }
                 ]
             }
@@ -1426,6 +1495,7 @@ a
                         error: false,
                         languages: vec!["".into()]
                     },
+                    file_name: None,
                 }]
             }
         );
@@ -1484,6 +1554,7 @@ a
                             error: false,
                             languages: vec!["".into()]
                         },
+                        file_name: None,
                     },
                     TestEntry::Example {
                         name: "Test with bad platform marker".to_string(),
@@ -1504,6 +1575,7 @@ a
                             error: false,
                             languages: vec!["foo".into()]
                         },
+                        file_name: None,
                     }
                 ]
             }

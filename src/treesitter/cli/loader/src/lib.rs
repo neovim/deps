@@ -1,4 +1,5 @@
 #![doc = include_str!("../README.md")]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
 #[cfg(any(feature = "tree-sitter-highlight", feature = "tree-sitter-tags"))]
 use std::ops::Range;
@@ -13,15 +14,16 @@ use std::{
     mem,
     path::{Path, PathBuf},
     process::Command,
+    sync::LazyLock,
     time::SystemTime,
 };
 
 #[cfg(any(feature = "tree-sitter-highlight", feature = "tree-sitter-tags"))]
 use anyhow::Error;
 use anyhow::{anyhow, Context, Result};
+use etcetera::BaseStrategy as _;
 use fs4::fs_std::FileExt;
 use indoc::indoc;
-use lazy_static::lazy_static;
 use libloading::{Library, Symbol};
 use once_cell::unsync::OnceCell;
 use path_slash::PathBufExt as _;
@@ -39,9 +41,8 @@ use tree_sitter_highlight::HighlightConfiguration;
 use tree_sitter_tags::{Error as TagsError, TagsConfiguration};
 use url::Url;
 
-lazy_static! {
-    static ref GRAMMAR_NAME_REGEX: Regex = Regex::new(r#""name":\s*"(.*?)""#).unwrap();
-}
+static GRAMMAR_NAME_REGEX: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#""name":\s*"(.*?)""#).unwrap());
 
 pub const EMSCRIPTEN_TAG: &str = concat!("docker.io/emscripten/emsdk:", env!("EMSCRIPTEN_VERSION"));
 
@@ -60,12 +61,12 @@ pub struct Config {
 pub enum PathsJSON {
     #[default]
     Empty,
-    Single(String),
-    Multiple(Vec<String>),
+    Single(PathBuf),
+    Multiple(Vec<PathBuf>),
 }
 
 impl PathsJSON {
-    fn into_vec(self) -> Option<Vec<String>> {
+    fn into_vec(self) -> Option<Vec<PathBuf>> {
         match self {
             Self::Empty => None,
             Self::Single(s) => Some(vec![s]),
@@ -73,7 +74,7 @@ impl PathsJSON {
         }
     }
 
-    fn is_empty(&self) -> bool {
+    const fn is_empty(&self) -> bool {
         matches!(self, Self::Empty)
     }
 }
@@ -139,6 +140,8 @@ pub struct LanguageConfigurationJSON {
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct TreeSitterJSON {
+    #[serde(rename = "$schema")]
+    pub schema: Option<String>,
     pub grammars: Vec<Grammar>,
     pub metadata: Metadata,
     #[serde(default)]
@@ -152,6 +155,7 @@ impl TreeSitterJSON {
         )?)?)
     }
 
+    #[must_use]
     pub fn has_multiple_language_configs(&self) -> bool {
         self.grammars.len() > 1
     }
@@ -163,6 +167,8 @@ pub struct Grammar {
     pub name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub camelcase: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
     pub scope: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub path: Option<PathBuf>,
@@ -183,6 +189,8 @@ pub struct Grammar {
     pub first_line_regex: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub content_regex: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub class_name: Option<String>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -213,6 +221,8 @@ pub struct Author {
 pub struct Links {
     pub repository: Url,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub funding: Option<Url>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub homepage: Option<String>,
 }
 
@@ -229,6 +239,7 @@ pub struct Bindings {
     pub python: bool,
     pub rust: bool,
     pub swift: bool,
+    pub zig: bool,
 }
 
 impl Default for Bindings {
@@ -242,6 +253,7 @@ impl Default for Bindings {
             python: true,
             rust: true,
             swift: true,
+            zig: false,
         }
     }
 }
@@ -254,7 +266,7 @@ where
     D: Deserializer<'de>,
 {
     let paths = Vec::<PathBuf>::deserialize(deserializer)?;
-    let Some(home) = dirs::home_dir() else {
+    let Ok(home) = etcetera::home_dir() else {
         return Ok(paths);
     };
     let standardized = paths
@@ -277,7 +289,7 @@ fn standardize_path(path: PathBuf, home: &Path) -> PathBuf {
 impl Config {
     #[must_use]
     pub fn initial() -> Self {
-        let home_dir = dirs::home_dir().expect("Cannot determine home directory");
+        let home_dir = etcetera::home_dir().expect("Cannot determine home directory");
         Self {
             parser_directories: vec![
                 home_dir.join("github"),
@@ -301,10 +313,10 @@ pub struct LanguageConfiguration<'a> {
     pub injection_regex: Option<Regex>,
     pub file_types: Vec<String>,
     pub root_path: PathBuf,
-    pub highlights_filenames: Option<Vec<String>>,
-    pub injections_filenames: Option<Vec<String>>,
-    pub locals_filenames: Option<Vec<String>>,
-    pub tags_filenames: Option<Vec<String>>,
+    pub highlights_filenames: Option<Vec<PathBuf>>,
+    pub injections_filenames: Option<Vec<PathBuf>>,
+    pub locals_filenames: Option<Vec<PathBuf>>,
+    pub tags_filenames: Option<Vec<PathBuf>>,
     pub language_name: String,
     language_id: usize,
     #[cfg(feature = "tree-sitter-highlight")]
@@ -369,17 +381,26 @@ impl<'a> CompileConfig<'a> {
     }
 }
 
-unsafe impl Send for Loader {}
 unsafe impl Sync for Loader {}
 
 impl Loader {
     pub fn new() -> Result<Self> {
-        let parser_lib_path = match env::var("TREE_SITTER_LIBDIR") {
-            Ok(path) => PathBuf::from(path),
-            _ => dirs::cache_dir()
-                .ok_or_else(|| anyhow!("Cannot determine cache directory"))?
+        let parser_lib_path = if let Ok(path) = env::var("TREE_SITTER_LIBDIR") {
+            PathBuf::from(path)
+        } else {
+            if cfg!(target_os = "macos") {
+                let legacy_apple_path = etcetera::base_strategy::Apple::new()?
+                    .cache_dir() // `$HOME/Library/Caches/`
+                    .join("tree-sitter");
+                if legacy_apple_path.exists() && legacy_apple_path.is_dir() {
+                    std::fs::remove_dir_all(legacy_apple_path)?;
+                }
+            }
+
+            etcetera::choose_base_strategy()?
+                .cache_dir()
                 .join("tree-sitter")
-                .join("lib"),
+                .join("lib")
         };
         Ok(Self::with_parser_lib_path(parser_lib_path))
     }
@@ -407,6 +428,7 @@ impl Loader {
     }
 
     #[cfg(feature = "tree-sitter-highlight")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "tree-sitter-highlight")))]
     pub fn configure_highlights(&mut self, names: &[String]) {
         self.use_all_highlight_names = false;
         let mut highlights = self.highlight_names.lock().unwrap();
@@ -416,6 +438,7 @@ impl Loader {
 
     #[must_use]
     #[cfg(feature = "tree-sitter-highlight")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "tree-sitter-highlight")))]
     pub fn highlight_names(&self) -> Vec<String> {
         self.highlight_names.lock().unwrap().clone()
     }
@@ -476,7 +499,7 @@ impl Loader {
         scope: &str,
     ) -> Result<Option<(Language, &LanguageConfiguration)>> {
         for configuration in &self.language_configurations {
-            if configuration.scope.as_ref().map_or(false, |s| s == scope) {
+            if configuration.scope.as_ref().is_some_and(|s| s == scope) {
                 let language = self.language_for_id(configuration.language_id)?;
                 return Ok(Some((language, configuration)));
             }
@@ -519,11 +542,15 @@ impl Loader {
             .and_then(|n| n.to_str())
             .and_then(|file_name| self.language_configuration_ids_by_file_type.get(file_name))
             .or_else(|| {
-                path.extension()
-                    .and_then(|extension| extension.to_str())
-                    .and_then(|extension| {
-                        self.language_configuration_ids_by_file_type.get(extension)
-                    })
+                let mut path = path.to_owned();
+                let mut extensions = Vec::with_capacity(2);
+                while let Some(extension) = path.extension() {
+                    extensions.push(extension.to_str()?.to_string());
+                    path = PathBuf::from(path.file_stem()?.to_os_string());
+                }
+                extensions.reverse();
+                self.language_configuration_ids_by_file_type
+                    .get(&extensions.join("."))
             });
 
         if let Some(configuration_ids) = configuration_ids {
@@ -724,8 +751,8 @@ impl Loader {
                 .join("lock")
                 .join(format!("{}.lock", config.name))
         } else {
-            dirs::cache_dir()
-                .ok_or_else(|| anyhow!("Cannot determine cache directory"))?
+            etcetera::choose_base_strategy()?
+                .cache_dir()
                 .join("tree-sitter")
                 .join("lock")
                 .join(format!("{}.lock", config.name))
@@ -917,7 +944,7 @@ impl Loader {
 
                             {}
 
-                            You can read more about this at https://tree-sitter.github.io/tree-sitter/creating-parsers#external-scanners
+                            You can read more about this at https://tree-sitter.github.io/tree-sitter/creating-parsers/4-external-scanners
                         "},
                         missing,
                     )));
@@ -966,15 +993,14 @@ impl Loader {
         let source = if !force_docker && Command::new(emcc_name).output().is_ok() {
             EmccSource::Native
         } else if Command::new("docker")
-            .arg("info")
             .output()
-            .map_or(false, |out| out.status.success())
+            .is_ok_and(|out| out.status.success())
         {
             EmccSource::Docker
         } else if Command::new("podman")
             .arg("--version")
             .output()
-            .map_or(false, |out| out.status.success())
+            .is_ok_and(|out| out.status.success())
         {
             EmccSource::Podman
         } else {
@@ -994,7 +1020,7 @@ impl Loader {
                 let mut command = match source {
                     EmccSource::Docker => Command::new("docker"),
                     EmccSource::Podman => Command::new("podman"),
-                    _ => unreachable!(),
+                    EmccSource::Native => unreachable!(),
                 };
                 command.args(["run", "--rm"]);
 
@@ -1108,6 +1134,12 @@ impl Loader {
                 }
             }
         }
+    }
+
+    #[must_use]
+    pub fn get_language_configuration_in_current_path(&self) -> Option<&LanguageConfiguration> {
+        self.language_configuration_in_current_path
+            .map(|i| &self.language_configurations[i])
     }
 
     pub fn find_language_configurations_at_path(
@@ -1318,7 +1350,7 @@ impl Loader {
             .with_context(|| {
                 format!(
                     "Failed to load language for file name {}",
-                    &path.file_name().unwrap().to_string_lossy()
+                    path.file_name().unwrap().to_string_lossy()
                 )
             })?
         {
@@ -1352,6 +1384,7 @@ impl Loader {
     }
 
     #[cfg(feature = "wasm")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "wasm")))]
     pub fn use_wasm(&mut self, engine: &tree_sitter::wasmtime::Engine) {
         *self.wasm_store.lock().unwrap() = Some(tree_sitter::WasmStore::new(engine).unwrap());
     }
@@ -1363,26 +1396,26 @@ impl Loader {
     }
 }
 
-impl<'a> LanguageConfiguration<'a> {
+impl LanguageConfiguration<'_> {
     #[cfg(feature = "tree-sitter-highlight")]
     pub fn highlight_config(
         &self,
         language: Language,
-        paths: Option<&[String]>,
+        paths: Option<&[PathBuf]>,
     ) -> Result<Option<&HighlightConfiguration>> {
         let (highlights_filenames, injections_filenames, locals_filenames) = match paths {
             Some(paths) => (
                 Some(
                     paths
                         .iter()
-                        .filter(|p| p.ends_with("tree-sitter-highlights.scm"))
+                        .filter(|p| p.ends_with("highlights.scm"))
                         .cloned()
                         .collect::<Vec<_>>(),
                 ),
                 Some(
                     paths
                         .iter()
-                        .filter(|p| p.ends_with("tree-sitter-tags.scm"))
+                        .filter(|p| p.ends_with("tags.scm"))
                         .cloned()
                         .collect::<Vec<_>>(),
                 ),
@@ -1404,7 +1437,7 @@ impl<'a> LanguageConfiguration<'a> {
                     } else {
                         self.highlights_filenames.as_deref()
                     },
-                    "tree-sitter-highlights.scm",
+                    "highlights.scm",
                 )?;
                 let (injections_query, injection_ranges) = self.read_queries(
                     if injections_filenames.is_some() {
@@ -1481,7 +1514,7 @@ impl<'a> LanguageConfiguration<'a> {
         self.tags_config
             .get_or_try_init(|| {
                 let (tags_query, tags_ranges) =
-                    self.read_queries(self.tags_filenames.as_deref(), "tree-sitter-tags.scm")?;
+                    self.read_queries(self.tags_filenames.as_deref(), "tags.scm")?;
                 let (locals_query, locals_ranges) =
                     self.read_queries(self.locals_filenames.as_deref(), "locals.scm")?;
                 if tags_query.is_empty() {
@@ -1518,7 +1551,7 @@ impl<'a> LanguageConfiguration<'a> {
     #[cfg(any(feature = "tree-sitter-highlight", feature = "tree-sitter-tags"))]
     fn include_path_in_query_error(
         mut error: QueryError,
-        ranges: &[(String, Range<usize>)],
+        ranges: &[(PathBuf, Range<usize>)],
         source: &str,
         start_offset: usize,
     ) -> Error {
@@ -1538,9 +1571,9 @@ impl<'a> LanguageConfiguration<'a> {
     #[cfg(any(feature = "tree-sitter-highlight", feature = "tree-sitter-tags"))]
     fn read_queries(
         &self,
-        paths: Option<&[String]>,
+        paths: Option<&[PathBuf]>,
         default_path: &str,
-    ) -> Result<(String, Vec<(String, Range<usize>)>)> {
+    ) -> Result<(String, Vec<(PathBuf, Range<usize>)>)> {
         let mut query = String::new();
         let mut path_ranges = Vec::new();
         if let Some(paths) = paths {
@@ -1553,13 +1586,11 @@ impl<'a> LanguageConfiguration<'a> {
             }
         } else {
             // highlights.scm is needed to test highlights, and tags.scm to test tags
-            if default_path == "tree-sitter-highlights.scm"
-                || default_path == "tree-sitter-tags.scm"
-            {
+            if default_path == "highlights.scm" || default_path == "tags.scm" {
                 eprintln!(
                     indoc! {"
-                        Warning: you should add a `{}` entry pointing to the highlights path in `tree-sitter` language list in the grammar's package.json
-                        See more here: https://tree-sitter.github.io/tree-sitter/syntax-highlighting#query-paths
+                        Warning: you should add a `{}` entry pointing to the highlights path in the `tree-sitter` object in the grammar's tree-sitter.json file.
+                        See more here: https://tree-sitter.github.io/tree-sitter/3-syntax-highlighting#query-paths
                     "},
                     default_path.replace(".scm", "")
                 );
@@ -1569,7 +1600,7 @@ impl<'a> LanguageConfiguration<'a> {
             if path.exists() {
                 query = fs::read_to_string(&path)
                     .with_context(|| format!("Failed to read query file {path:?}"))?;
-                path_ranges.push((default_path.to_string(), 0..query.len()));
+                path_ranges.push((PathBuf::from(default_path), 0..query.len()));
             }
         }
 

@@ -2,30 +2,31 @@ use std::{
     cmp::Ordering,
     fmt,
     hash::{Hash, Hasher},
+    sync::LazyLock,
 };
 
-use lazy_static::lazy_static;
-
 use crate::{
-    grammars::{LexicalGrammar, Production, ProductionStep, SyntaxGrammar},
+    grammars::{
+        LexicalGrammar, Production, ProductionStep, ReservedWordSetId, SyntaxGrammar,
+        NO_RESERVED_WORDS,
+    },
     rules::{Associativity, Precedence, Symbol, SymbolType, TokenSet},
 };
 
-lazy_static! {
-    static ref START_PRODUCTION: Production = Production {
-        dynamic_precedence: 0,
-        steps: vec![ProductionStep {
-            symbol: Symbol {
-                index: 0,
-                kind: SymbolType::NonTerminal,
-            },
-            precedence: Precedence::None,
-            associativity: None,
-            alias: None,
-            field_name: None,
-        }],
-    };
-}
+static START_PRODUCTION: LazyLock<Production> = LazyLock::new(|| Production {
+    dynamic_precedence: 0,
+    steps: vec![ProductionStep {
+        symbol: Symbol {
+            index: 0,
+            kind: SymbolType::NonTerminal,
+        },
+        precedence: Precedence::None,
+        associativity: None,
+        alias: None,
+        field_name: None,
+        reserved_word_set_id: NO_RESERVED_WORDS,
+    }],
+});
 
 /// A [`ParseItem`] represents an in-progress match of a single production in a grammar.
 #[derive(Clone, Copy, Debug)]
@@ -58,7 +59,14 @@ pub struct ParseItem<'a> {
 /// to a state in the final parse table.
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct ParseItemSet<'a> {
-    pub entries: Vec<(ParseItem<'a>, TokenSet)>,
+    pub entries: Vec<ParseItemSetEntry<'a>>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ParseItemSetEntry<'a> {
+    pub item: ParseItem<'a>,
+    pub lookaheads: TokenSet,
+    pub following_reserved_word_set: ReservedWordSetId,
 }
 
 /// A [`ParseItemSetCore`] is like a [`ParseItemSet`], but without the lookahead
@@ -152,35 +160,31 @@ impl<'a> ParseItem<'a> {
 }
 
 impl<'a> ParseItemSet<'a> {
-    pub fn with(elements: impl IntoIterator<Item = (ParseItem<'a>, TokenSet)>) -> Self {
-        let mut result = Self::default();
-        for (item, lookaheads) in elements {
-            result.insert(item, &lookaheads);
-        }
-        result
-    }
-
-    pub fn insert(&mut self, item: ParseItem<'a>, lookaheads: &TokenSet) -> &mut TokenSet {
-        match self.entries.binary_search_by(|(i, _)| i.cmp(&item)) {
+    pub fn insert(&mut self, item: ParseItem<'a>) -> &mut ParseItemSetEntry<'a> {
+        match self.entries.binary_search_by(|e| e.item.cmp(&item)) {
             Err(i) => {
-                self.entries.insert(i, (item, lookaheads.clone()));
-                &mut self.entries[i].1
+                self.entries.insert(
+                    i,
+                    ParseItemSetEntry {
+                        item,
+                        lookaheads: TokenSet::new(),
+                        following_reserved_word_set: ReservedWordSetId::default(),
+                    },
+                );
+                &mut self.entries[i]
             }
-            Ok(i) => {
-                self.entries[i].1.insert_all(lookaheads);
-                &mut self.entries[i].1
-            }
+            Ok(i) => &mut self.entries[i],
         }
     }
 
     pub fn core(&self) -> ParseItemSetCore<'a> {
         ParseItemSetCore {
-            entries: self.entries.iter().map(|e| e.0).collect(),
+            entries: self.entries.iter().map(|e| e.item).collect(),
         }
     }
 }
 
-impl<'a> fmt::Display for ParseItemDisplay<'a> {
+impl fmt::Display for ParseItemDisplay<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         if self.0.is_augmented() {
             write!(f, "START →")?;
@@ -188,35 +192,42 @@ impl<'a> fmt::Display for ParseItemDisplay<'a> {
             write!(
                 f,
                 "{} →",
-                &self.1.variables[self.0.variable_index as usize].name
+                self.1.variables[self.0.variable_index as usize].name
             )?;
         }
 
         for (i, step) in self.0.production.steps.iter().enumerate() {
             if i == self.0.step_index as usize {
                 write!(f, " •")?;
-                if let Some(associativity) = step.associativity {
+                if !step.precedence.is_none()
+                    || step.associativity.is_some()
+                    || step.reserved_word_set_id != ReservedWordSetId::default()
+                {
+                    write!(f, " (")?;
                     if step.precedence.is_none() {
-                        write!(f, " ({associativity:?})")?;
-                    } else {
-                        write!(f, " ({} {associativity:?})", step.precedence)?;
+                        write!(f, " {}", step.precedence)?;
                     }
-                } else if !step.precedence.is_none() {
-                    write!(f, " ({})", step.precedence)?;
+                    if let Some(associativity) = step.associativity {
+                        write!(f, " {associativity:?}")?;
+                    }
+                    if step.reserved_word_set_id != ReservedWordSetId::default() {
+                        write!(f, "reserved: {}", step.reserved_word_set_id)?;
+                    }
+                    write!(f, " )")?;
                 }
             }
 
             write!(f, " ")?;
             if step.symbol.is_terminal() {
                 if let Some(variable) = self.2.variables.get(step.symbol.index) {
-                    write!(f, "{}", &variable.name)?;
+                    write!(f, "{}", variable.name)?;
                 } else {
                     write!(f, "terminal-{}", step.symbol.index)?;
                 }
             } else if step.symbol.is_external() {
-                write!(f, "{}", &self.1.external_tokens[step.symbol.index].name)?;
+                write!(f, "{}", self.1.external_tokens[step.symbol.index].name)?;
             } else {
-                write!(f, "{}", &self.1.variables[step.symbol.index].name)?;
+                write!(f, "{}", self.1.variables[step.symbol.index].name)?;
             }
 
             if let Some(alias) = &step.alias {
@@ -243,7 +254,33 @@ impl<'a> fmt::Display for ParseItemDisplay<'a> {
     }
 }
 
-impl<'a> fmt::Display for TokenSetDisplay<'a> {
+const fn escape_invisible(c: char) -> Option<&'static str> {
+    Some(match c {
+        '\n' => "\\n",
+        '\r' => "\\r",
+        '\t' => "\\t",
+        '\0' => "\\0",
+        '\\' => "\\\\",
+        '\x0b' => "\\v",
+        '\x0c' => "\\f",
+        _ => return None,
+    })
+}
+
+fn display_variable_name(source: &str) -> String {
+    source
+        .chars()
+        .fold(String::with_capacity(source.len()), |mut acc, c| {
+            if let Some(esc) = escape_invisible(c) {
+                acc.push_str(esc);
+            } else {
+                acc.push(c);
+            }
+            acc
+        })
+}
+
+impl fmt::Display for TokenSetDisplay<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
         write!(f, "[")?;
         for (i, symbol) in self.0.iter().enumerate() {
@@ -253,14 +290,14 @@ impl<'a> fmt::Display for TokenSetDisplay<'a> {
 
             if symbol.is_terminal() {
                 if let Some(variable) = self.2.variables.get(symbol.index) {
-                    write!(f, "{}", &variable.name)?;
+                    write!(f, "{}", display_variable_name(&variable.name))?;
                 } else {
                     write!(f, "terminal-{}", symbol.index)?;
                 }
             } else if symbol.is_external() {
-                write!(f, "{}", &self.1.external_tokens[symbol.index].name)?;
+                write!(f, "{}", self.1.external_tokens[symbol.index].name)?;
             } else {
-                write!(f, "{}", &self.1.variables[symbol.index].name)?;
+                write!(f, "{}", self.1.variables[symbol.index].name)?;
             }
         }
         write!(f, "]")?;
@@ -268,21 +305,29 @@ impl<'a> fmt::Display for TokenSetDisplay<'a> {
     }
 }
 
-impl<'a> fmt::Display for ParseItemSetDisplay<'a> {
+impl fmt::Display for ParseItemSetDisplay<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        for (item, lookaheads) in &self.0.entries {
-            writeln!(
+        for entry in &self.0.entries {
+            write!(
                 f,
                 "{}\t{}",
-                ParseItemDisplay(item, self.1, self.2),
-                TokenSetDisplay(lookaheads, self.1, self.2)
+                ParseItemDisplay(&entry.item, self.1, self.2),
+                TokenSetDisplay(&entry.lookaheads, self.1, self.2),
             )?;
+            if entry.following_reserved_word_set != ReservedWordSetId::default() {
+                write!(
+                    f,
+                    "\treserved word set: {}",
+                    entry.following_reserved_word_set
+                )?;
+            }
+            writeln!(f)?;
         }
         Ok(())
     }
 }
 
-impl<'a> Hash for ParseItem<'a> {
+impl Hash for ParseItem<'_> {
     fn hash<H: Hasher>(&self, hasher: &mut H) {
         hasher.write_u32(self.variable_index);
         hasher.write_u32(self.step_index);
@@ -296,7 +341,7 @@ impl<'a> Hash for ParseItem<'a> {
         // this item, unless any of the following are true:
         //   * the children have fields
         //   * the children have aliases
-        //   * the children are hidden and
+        //   * the children are hidden and represent rules that have fields.
         // See the docs for `has_preceding_inherited_fields`.
         for step in &self.production.steps[0..self.step_index as usize] {
             step.alias.hash(hasher);
@@ -311,7 +356,7 @@ impl<'a> Hash for ParseItem<'a> {
     }
 }
 
-impl<'a> PartialEq for ParseItem<'a> {
+impl PartialEq for ParseItem<'_> {
     fn eq(&self, other: &Self) -> bool {
         if self.variable_index != other.variable_index
             || self.step_index != other.step_index
@@ -348,7 +393,7 @@ impl<'a> PartialEq for ParseItem<'a> {
     }
 }
 
-impl<'a> Ord for ParseItem<'a> {
+impl Ord for ParseItem<'_> {
     fn cmp(&self, other: &Self) -> Ordering {
         self.step_index
             .cmp(&other.step_index)
@@ -388,25 +433,26 @@ impl<'a> Ord for ParseItem<'a> {
     }
 }
 
-impl<'a> PartialOrd for ParseItem<'a> {
+impl PartialOrd for ParseItem<'_> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl<'a> Eq for ParseItem<'a> {}
+impl Eq for ParseItem<'_> {}
 
-impl<'a> Hash for ParseItemSet<'a> {
+impl Hash for ParseItemSet<'_> {
     fn hash<H: Hasher>(&self, hasher: &mut H) {
         hasher.write_usize(self.entries.len());
-        for (item, lookaheads) in &self.entries {
-            item.hash(hasher);
-            lookaheads.hash(hasher);
+        for entry in &self.entries {
+            entry.item.hash(hasher);
+            entry.lookaheads.hash(hasher);
+            entry.following_reserved_word_set.hash(hasher);
         }
     }
 }
 
-impl<'a> Hash for ParseItemSetCore<'a> {
+impl Hash for ParseItemSetCore<'_> {
     fn hash<H: Hasher>(&self, hasher: &mut H) {
         hasher.write_usize(self.entries.len());
         for item in &self.entries {

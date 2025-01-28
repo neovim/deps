@@ -1,10 +1,10 @@
 use std::{
     env, fs,
     path::{Path, PathBuf},
+    sync::LazyLock,
 };
 
 use anyhow::Context;
-use lazy_static::lazy_static;
 use tree_sitter::Language;
 use tree_sitter_generate::{ALLOC_HEADER, ARRAY_HEADER};
 use tree_sitter_highlight::HighlightConfiguration;
@@ -13,15 +13,13 @@ use tree_sitter_tags::TagsConfiguration;
 
 include!("./dirs.rs");
 
-lazy_static! {
-    static ref TEST_LOADER: Loader = {
-        let mut loader = Loader::with_parser_lib_path(SCRATCH_DIR.clone());
-        if env::var("TREE_SITTER_GRAMMAR_DEBUG").is_ok() {
-            loader.debug_build(true);
-        }
-        loader
-    };
-}
+static TEST_LOADER: LazyLock<Loader> = LazyLock::new(|| {
+    let mut loader = Loader::with_parser_lib_path(SCRATCH_DIR.clone());
+    if env::var("TREE_SITTER_GRAMMAR_DEBUG").is_ok() {
+        loader.debug_build(true);
+    }
+    loader
+});
 
 pub fn test_loader() -> &'static Loader {
     &TEST_LOADER
@@ -84,7 +82,7 @@ pub fn get_test_language(name: &str, parser_code: &str, path: Option<&Path>) -> 
     fs::create_dir_all(&src_dir).unwrap();
 
     let parser_path = src_dir.join("parser.c");
-    if !fs::read_to_string(&parser_path).map_or(false, |content| content == parser_code) {
+    if !fs::read_to_string(&parser_path).is_ok_and(|content| content == parser_code) {
         fs::write(&parser_path, parser_code).unwrap();
     }
 
@@ -93,8 +91,7 @@ pub fn get_test_language(name: &str, parser_code: &str, path: Option<&Path>) -> 
         if scanner_path.exists() {
             let scanner_code = fs::read_to_string(&scanner_path).unwrap();
             let scanner_copy_path = src_dir.join("scanner.c");
-            if !fs::read_to_string(&scanner_copy_path)
-                .map_or(false, |content| content == scanner_code)
+            if !fs::read_to_string(&scanner_copy_path).is_ok_and(|content| content == scanner_code)
             {
                 fs::write(&scanner_copy_path, scanner_code).unwrap();
             }

@@ -26,6 +26,9 @@ pub struct wasm_engine_t {
 
 pub struct WasmStore(*mut ffi::TSWasmStore);
 
+unsafe impl Send for WasmStore {}
+unsafe impl Sync for WasmStore {}
+
 #[derive(Debug, PartialEq, Eq)]
 pub struct WasmError {
     pub kind: WasmErrorKind,
@@ -45,7 +48,9 @@ impl WasmStore {
         unsafe {
             let mut error = MaybeUninit::<ffi::TSWasmError>::uninit();
             let store = ffi::ts_wasm_store_new(
-                (engine as *const wasmtime::Engine as *mut wasmtime::Engine).cast(),
+                std::ptr::from_ref::<wasmtime::Engine>(engine)
+                    .cast_mut()
+                    .cast(),
                 error.as_mut_ptr(),
             );
             if store.is_null() {
