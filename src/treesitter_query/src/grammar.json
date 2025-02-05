@@ -1,4 +1,5 @@
 {
+  "$schema": "https://tree-sitter.github.io/tree-sitter/assets/schemas/grammar.schema.json",
   "name": "query",
   "rules": {
     "program": {
@@ -18,6 +19,10 @@
         {
           "type": "SYMBOL",
           "name": "anonymous_node"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "missing_node"
         },
         {
           "type": "SYMBOL",
@@ -157,7 +162,7 @@
     },
     "identifier": {
       "type": "PATTERN",
-      "value": "[a-zA-Z0-9.\\-_\\$]+"
+      "value": "[a-zA-Z0-9\\-_\\$][a-zA-Z0-9.\\-_\\$]*"
     },
     "_immediate_identifier": {
       "type": "ALIAS",
@@ -165,7 +170,7 @@
         "type": "IMMEDIATE_TOKEN",
         "content": {
           "type": "PATTERN",
-          "value": "[a-zA-Z0-9.\\-_\\$]+"
+          "value": "[a-zA-Z0-9\\-_\\$][a-zA-Z0-9.\\-_\\$]*"
         }
       },
       "named": true,
@@ -366,6 +371,71 @@
               }
             ]
           }
+        },
+        {
+          "type": "STRING",
+          "value": ")"
+        },
+        {
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "FIELD",
+              "name": "quantifier",
+              "content": {
+                "type": "SYMBOL",
+                "name": "quantifier"
+              }
+            },
+            {
+              "type": "BLANK"
+            }
+          ]
+        },
+        {
+          "type": "REPEAT",
+          "content": {
+            "type": "SYMBOL",
+            "name": "capture"
+          }
+        }
+      ]
+    },
+    "missing_node": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "STRING",
+          "value": "("
+        },
+        {
+          "type": "STRING",
+          "value": "MISSING"
+        },
+        {
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "FIELD",
+              "name": "name",
+              "content": {
+                "type": "CHOICE",
+                "members": [
+                  {
+                    "type": "SYMBOL",
+                    "name": "identifier"
+                  },
+                  {
+                    "type": "SYMBOL",
+                    "name": "string"
+                  }
+                ]
+              }
+            },
+            {
+              "type": "BLANK"
+            }
+          ]
         },
         {
           "type": "STRING",
@@ -637,8 +707,17 @@
             "type": "SEQ",
             "members": [
               {
-                "type": "STRING",
-                "value": "#"
+                "type": "CHOICE",
+                "members": [
+                  {
+                    "type": "STRING",
+                    "value": "#"
+                  },
+                  {
+                    "type": "STRING",
+                    "value": "."
+                  }
+                ]
               },
               {
                 "type": "SYMBOL",
