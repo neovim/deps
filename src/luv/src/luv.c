@@ -227,6 +227,9 @@ static const luaL_Reg luv_functions[] = {
   {"udp_set_ttl", luv_udp_set_ttl},
   {"udp_send", luv_udp_send},
   {"udp_try_send", luv_udp_try_send},
+#if LUV_UV_VERSION_GEQ(1, 50, 0)
+  {"udp_try_send2", luv_udp_try_send2},
+#endif
   {"udp_recv_start", luv_udp_recv_start},
   {"udp_recv_stop", luv_udp_recv_stop},
 #if LUV_UV_VERSION_GEQ(1, 27, 0)
@@ -330,6 +333,9 @@ static const luaL_Reg luv_functions[] = {
   {"setgid", luv_setgid},
 #endif
   {"getrusage", luv_getrusage},
+#if LUV_UV_VERSION_GEQ(1, 50, 0)
+  {"getrusage_thread", luv_getrusage_thread},
+#endif
   {"guess_handle", luv_guess_handle},
   {"hrtime", luv_hrtime},
   {"interface_addresses", luv_interface_addresses},
@@ -395,6 +401,18 @@ static const luaL_Reg luv_functions[] = {
 #if LUV_UV_VERSION_GEQ(1, 48, 0)
   {"thread_getpriority", luv_thread_getpriority},
   {"thread_setpriority", luv_thread_setpriority},
+#endif
+#if LUV_UV_VERSION_GEQ(1, 50, 0)
+  {"thread_detach", luv_thread_detach},
+  {"thread_getname", luv_thread_getname},
+  {"thread_setname", luv_thread_setname},
+#endif
+
+#if LUV_UV_VERSION_GEQ(1, 49, 0)
+  {"utf16_length_as_wtf8", luv_utf16_length_as_wtf8},
+  {"utf16_to_wtf8", luv_utf16_to_wtf8},
+  {"wtf8_length_as_utf16", luv_wtf8_length_as_utf16},
+  {"wtf8_to_utf16", luv_wtf8_to_utf16},
 #endif
 
   // work.c
@@ -578,6 +596,9 @@ static const luaL_Reg luv_udp_methods[] = {
   {"set_ttl", luv_udp_set_ttl},
   {"send", luv_udp_send},
   {"try_send", luv_udp_try_send},
+#if LUV_UV_VERSION_GEQ(1, 50, 0)
+  {"try_send2", luv_udp_try_send2},
+#endif
   {"recv_start", luv_udp_recv_start},
   {"recv_stop", luv_udp_recv_stop},
 #if LUV_UV_VERSION_GEQ(1, 27, 0)
@@ -708,9 +729,11 @@ LUALIB_API int luv_cfpcall(lua_State* L, int nargs, int nresult, int flags) {
   case LUA_OK:
     break;
   case LUA_ERRMEM:
-    if ((flags & LUVF_CALLBACK_NOERRMSG) == 0)
+    if ((flags & LUVF_CALLBACK_NOERRMSG) == 0) {
       fprintf(stderr, "System Error: %s\n",
               luaL_tolstring(L, lua_absindex(L, -1), NULL));
+      lua_pop(L, 1); // Remove error string pushed by luaL_tolstring()
+    }
     if ((flags & LUVF_CALLBACK_NOEXIT) == 0)
       exit(-1);
     lua_pop(L, 1);
@@ -719,9 +742,11 @@ LUALIB_API int luv_cfpcall(lua_State* L, int nargs, int nresult, int flags) {
   case LUA_ERRRUN:
   case LUA_ERRERR:
   default:
-    if ((flags & LUVF_CALLBACK_NOERRMSG) == 0)
+    if ((flags & LUVF_CALLBACK_NOERRMSG) == 0) {
       fprintf(stderr, "Uncaught Error: %s\n",
               luaL_tolstring(L, lua_absindex(L, -1), NULL));
+      lua_pop(L, 1); // Remove error string pushed by luaL_tolstring()
+    }
     if ((flags & LUVF_CALLBACK_NOEXIT) == 0)
       exit(-1);
     lua_pop(L, 1);
@@ -763,6 +788,9 @@ LUALIB_API luv_ctx_t* luv_context(lua_State* L) {
     ctx = (luv_ctx_t*)lua_newuserdata(L, sizeof(*ctx));
     memset(ctx, 0, sizeof(*ctx));
     lua_rawset(L, LUA_REGISTRYINDEX);
+    // create table to contain internal handle
+    lua_newtable(L);
+    ctx->ht_ref = luaL_ref(L, LUA_REGISTRYINDEX);
   } else {
     ctx = (luv_ctx_t*)lua_touserdata(L, -1);
   }
@@ -828,6 +856,15 @@ static int loop_gc(lua_State *L) {
 }
 
 LUALIB_API int luaopen_luv (lua_State* L) {
+#ifdef LUA_RIDX_MAINTHREAD
+  // Lua 5.2+ - resolve the main thread of the current Lua state, even if
+  // we were loaded from a different thread (which may become suspended/dead).
+  lua_geti(L, LUA_REGISTRYINDEX, LUA_RIDX_MAINTHREAD);
+  lua_State* ctxL = lua_tothread(L, -1);
+  lua_pop(L, 1);
+#else
+  lua_State* ctxL = L;
+#endif
   luv_ctx_t* ctx = luv_context(L);
 
   luaL_newlib(L, luv_functions);
@@ -855,19 +892,13 @@ LUALIB_API int luaopen_luv (lua_State* L) {
     lua_rawset(L, -3);
 
     ctx->loop = loop;
-    ctx->L = L;
+    ctx->L = ctxL;
     ctx->mode = -1;
 
     ret = uv_loop_init(loop);
     if (ret < 0) {
       return luaL_error(L, "%s: %s\n", uv_err_name(ret), uv_strerror(ret));
     }
-
-    /* do cleanup in main thread */
-    lua_getglobal(L, "_THREAD");
-    if (lua_isnil(L, -1))
-      atexit(luv_work_cleanup);
-    lua_pop(L, 1);
   }
   // pcall is NULL, luv use default callback routine
   if (ctx->cb_pcall==NULL) {

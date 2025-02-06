@@ -165,61 +165,75 @@ static void luv_push_timeval_table(lua_State* L, const uv_timeval_t* t) {
   lua_setfield(L, -2, "usec");
 }
 
+static void luv_push_rusage_table(lua_State* L, const uv_rusage_t* rusage) {
+  lua_createtable(L, 0, 16);
+  // user CPU time used
+  luv_push_timeval_table(L, &rusage->ru_utime);
+  lua_setfield(L, -2, "utime");
+  // system CPU time used
+  luv_push_timeval_table(L, &rusage->ru_stime);
+  lua_setfield(L, -2, "stime");
+  // maximum resident set size
+  lua_pushinteger(L, rusage->ru_maxrss);
+  lua_setfield(L, -2, "maxrss");
+  // integral shared memory size
+  lua_pushinteger(L, rusage->ru_ixrss);
+  lua_setfield(L, -2, "ixrss");
+  // integral unshared data size
+  lua_pushinteger(L, rusage->ru_idrss);
+  lua_setfield(L, -2, "idrss");
+  // integral unshared stack size
+  lua_pushinteger(L, rusage->ru_isrss);
+  lua_setfield(L, -2, "isrss");
+  // page reclaims (soft page faults)
+  lua_pushinteger(L, rusage->ru_minflt);
+  lua_setfield(L, -2, "minflt");
+  // page faults (hard page faults)
+  lua_pushinteger(L, rusage->ru_majflt);
+  lua_setfield(L, -2, "majflt");
+  // swaps
+  lua_pushinteger(L, rusage->ru_nswap);
+  lua_setfield(L, -2, "nswap");
+  // block input operations
+  lua_pushinteger(L, rusage->ru_inblock);
+  lua_setfield(L, -2, "inblock");
+  // block output operations
+  lua_pushinteger(L, rusage->ru_oublock);
+  lua_setfield(L, -2, "oublock");
+  // IPC messages sent
+  lua_pushinteger(L, rusage->ru_msgsnd);
+  lua_setfield(L, -2, "msgsnd");
+  // IPC messages received
+  lua_pushinteger(L, rusage->ru_msgrcv);
+  lua_setfield(L, -2, "msgrcv");
+  // signals received
+  lua_pushinteger(L, rusage->ru_nsignals);
+  lua_setfield(L, -2, "nsignals");
+  // voluntary context switches
+  lua_pushinteger(L, rusage->ru_nvcsw);
+  lua_setfield(L, -2, "nvcsw");
+  // involuntary context switches
+  lua_pushinteger(L, rusage->ru_nivcsw);
+  lua_setfield(L, -2, "nivcsw");
+}
+
 static int luv_getrusage(lua_State* L) {
   uv_rusage_t rusage;
   int ret = uv_getrusage(&rusage);
   if (ret < 0) return luv_error(L, ret);
-  lua_createtable(L, 0, 16);
-  // user CPU time used
-  luv_push_timeval_table(L, &rusage.ru_utime);
-  lua_setfield(L, -2, "utime");
-  // system CPU time used
-  luv_push_timeval_table(L, &rusage.ru_stime);
-  lua_setfield(L, -2, "stime");
-  // maximum resident set size
-  lua_pushinteger(L, rusage.ru_maxrss);
-  lua_setfield(L, -2, "maxrss");
-  // integral shared memory size
-  lua_pushinteger(L, rusage.ru_ixrss);
-  lua_setfield(L, -2, "ixrss");
-  // integral unshared data size
-  lua_pushinteger(L, rusage.ru_idrss);
-  lua_setfield(L, -2, "idrss");
-  // integral unshared stack size
-  lua_pushinteger(L, rusage.ru_isrss);
-  lua_setfield(L, -2, "isrss");
-  // page reclaims (soft page faults)
-  lua_pushinteger(L, rusage.ru_minflt);
-  lua_setfield(L, -2, "minflt");
-  // page faults (hard page faults)
-  lua_pushinteger(L, rusage.ru_majflt);
-  lua_setfield(L, -2, "majflt");
-  // swaps
-  lua_pushinteger(L, rusage.ru_nswap);
-  lua_setfield(L, -2, "nswap");
-  // block input operations
-  lua_pushinteger(L, rusage.ru_inblock);
-  lua_setfield(L, -2, "inblock");
-  // block output operations
-  lua_pushinteger(L, rusage.ru_oublock);
-  lua_setfield(L, -2, "oublock");
-  // IPC messages sent
-  lua_pushinteger(L, rusage.ru_msgsnd);
-  lua_setfield(L, -2, "msgsnd");
-  // IPC messages received
-  lua_pushinteger(L, rusage.ru_msgrcv);
-  lua_setfield(L, -2, "msgrcv");
-  // signals received
-  lua_pushinteger(L, rusage.ru_nsignals);
-  lua_setfield(L, -2, "nsignals");
-  // voluntary context switches
-  lua_pushinteger(L, rusage.ru_nvcsw);
-  lua_setfield(L, -2, "nvcsw");
-  // involuntary context switches
-  lua_pushinteger(L, rusage.ru_nivcsw);
-  lua_setfield(L, -2, "nivcsw");
+  luv_push_rusage_table(L, &rusage);
   return 1;
 }
+
+#if LUV_UV_VERSION_GEQ(1, 50, 0)
+static int luv_getrusage_thread(lua_State *L) {
+  uv_rusage_t rusage;
+  int ret = uv_getrusage_thread(&rusage);
+  if (ret < 0) return luv_error(L, ret);
+  luv_push_rusage_table(L, &rusage);
+  return 1;
+}
+#endif
 
 #if LUV_UV_VERSION_GEQ(1, 44, 0)
 static int luv_available_parallelism(lua_State* L) {
@@ -781,4 +795,63 @@ static int luv_clock_gettime(lua_State* L) {
   lua_setfield(L, -2, "nsec");
   return 1;
 }
+#endif
+
+#if LUV_UV_VERSION_GEQ(1, 49, 0)
+
+static int luv_utf16_length_as_wtf8(lua_State* L) {
+  size_t sz;
+  const uint16_t *utf16 = (const uint16_t *)luaL_checklstring(L, 1, &sz);
+  ssize_t utf16_len = sz/2;
+  sz = uv_utf16_length_as_wtf8(utf16, utf16_len);
+  lua_pushinteger(L, sz);
+  return 1;
+}
+
+static int luv_utf16_to_wtf8(lua_State *L) {
+  int ret;
+  size_t sz;
+  char *wtf8;
+  const uint16_t *utf16 = (const uint16_t *)luaL_checklstring(L, 1, &sz);
+  ssize_t utf16_len = sz/2;
+  /* Note: Since `utf16_len` is provided, `sz` does not include a NUL terminator */
+  sz = uv_utf16_length_as_wtf8(utf16, utf16_len);
+  /* The wtf8_ptr must contain an extra space for an extra NUL after the result */
+  wtf8 = malloc(sz + 1);
+  if (wtf8 == NULL) return luaL_error(L, "failed to allocate %zu bytes", sz + 1);
+  /* Note: On success, *sz will not be modified */
+  ret = uv_utf16_to_wtf8(utf16, utf16_len, &wtf8, &sz);
+  if (ret == 0) {
+    lua_pushlstring(L, wtf8, sz);
+    ret = 1;
+  } else {
+    ret = luv_error(L, ret);
+  }
+  free(wtf8);
+  return ret;
+}
+
+static int luv_wtf8_length_as_utf16(lua_State *L) {
+  /* checkstring is guaranteed to return a NUL terminated string */
+  const char* wtf8 = luaL_checkstring(L, 1);
+  ssize_t ssz = uv_wtf8_length_as_utf16(wtf8);
+  /* The length includes a NUL terminator, but we return the length without the NUL terminator */
+  lua_pushinteger(L, ssz - 1);
+  return 1;
+}
+
+static int luv_wtf8_to_utf16(lua_State *L) {
+  size_t sz;
+  uint16_t *utf16;
+  const char* wtf8 = luaL_checklstring(L, 1, &sz);
+  ssize_t ssz = uv_wtf8_length_as_utf16(wtf8);
+  utf16 = malloc(ssz * 2);
+  if (utf16 == NULL) return luaL_error(L, "failed to allocate %zu bytes", ssz * 2);
+  uv_wtf8_to_utf16(wtf8, utf16, ssz);
+  /* The returned string includes a NUL terminator, but we use Lua style string */
+  lua_pushlstring(L, (const char*)utf16, (ssz-1) * 2);
+  free(utf16);
+  return 1;
+}
+
 #endif

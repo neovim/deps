@@ -83,7 +83,12 @@ static int luv_thread_arg_set(lua_State* L, luv_thread_arg_t* args, int idx, int
       arg->val.boolean = lua_toboolean(L, i);
       break;
     case LUA_TNUMBER:
-      arg->val.num = lua_tonumber(L, i);
+      arg->val.num.isinteger = lua_isinteger(L, i);
+      if (arg->val.num.isinteger) {
+        arg->val.num.value.i = lua_tointeger(L, i);
+      } else {
+        arg->val.num.value.n = lua_tonumber(L, i);
+      }
       break;
     case LUA_TSTRING:
       if (async)
@@ -181,7 +186,11 @@ static int luv_thread_arg_push(lua_State* L, luv_thread_arg_t* args, int flags) 
       lua_pushboolean(L, arg->val.boolean);
       break;
     case LUA_TNUMBER:
-      lua_pushnumber(L, arg->val.num);
+      if (arg->val.num.isinteger) {
+        lua_pushinteger(L, arg->val.num.value.i);
+      } else {
+        lua_pushnumber(L, arg->val.num.value.n);
+      }
       break;
     case LUA_TSTRING:
       lua_pushlstring(L, arg->val.str.base, arg->val.str.len);
@@ -483,6 +492,32 @@ static int luv_thread_setpriority(lua_State* L) {
 }
 #endif
 
+#if LUV_UV_VERSION_GEQ(1, 50, 0)
+static int luv_thread_detach(lua_State *L) {
+  luv_thread_t* tid = luv_check_thread(L, 1);
+  int ret = uv_thread_detach(&tid->handle);
+  if (ret < 0) return luv_error(L, ret);
+  tid->handle = 0;
+  lua_pushboolean(L, 1);
+  return 1;
+}
+
+static int luv_thread_getname(lua_State *L) {
+  luv_thread_t* tid = luv_check_thread(L, 1);
+  char name[MAX_THREAD_NAME_LENGTH];
+  int ret = uv_thread_getname(&tid->handle, name, MAX_THREAD_NAME_LENGTH);
+  if (ret < 0) return luv_error(L, ret);
+  lua_pushstring(L, name);
+  return 1;
+}
+
+static int luv_thread_setname(lua_State *L) {
+  const char* name = luaL_checkstring(L, 1);
+  int ret = uv_thread_setname(name);
+  return luv_result(L, ret);
+}
+#endif
+
 static int luv_thread_join(lua_State* L) {
   luv_thread_t* tid = luv_check_thread(L, 1);
   int ret = uv_thread_join(&tid->handle);
@@ -523,6 +558,10 @@ static const luaL_Reg luv_thread_methods[] = {
 #if LUV_UV_VERSION_GEQ(1, 48, 0)
   {"getpriority", luv_thread_getpriority},
   {"setpriority", luv_thread_setpriority},
+#endif
+#if LUV_UV_VERSION_GEQ(1, 50, 0)
+  {"setname", luv_thread_setname},
+  {"detach", luv_thread_detach},
 #endif
   {NULL, NULL}
 };

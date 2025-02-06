@@ -82,6 +82,7 @@ within the context of luv's Lua API. Low-level implementation details and
 unexposed C functions and types are not documented here except for when they
 are relevant to behavior seen in the Lua module.
 
+- [Constants][]
 - [Error handling][]
 - [Version checking][]
 - [`uv_loop_t`][] — Event loop
@@ -109,14 +110,109 @@ are relevant to behavior seen in the Lua module.
 - [Miscellaneous utilities][]
 - [Metrics operations][]
 
+## Constants
+
+[constants]: #constants
+
+As a Lua library, luv supports and encourages the use of lowercase strings to
+represent options. For example:
+```lua
+-- signal start with string input
+uv.signal_start("sigterm", function(signame)
+  print(signame) -- string output: "sigterm"
+end)
+```
+
+However, luv also superficially exposes libuv constants in a Lua table at
+`uv.constants` where its keys are uppercase constant names and their associated
+values are integers defined internally by libuv. The values from this table may
+be supported as function arguments, but their use may not change the output
+type. For example:
+
+```lua
+-- signal start with integer input
+uv.signal_start(uv.constants.SIGTERM, function(signame)
+  print(signame) -- string output: "sigterm"
+end)
+```
+
+The uppercase constants defined in `uv.constants` that have associated
+lowercase option strings are listed below.
+
+### Address Families
+
+- `AF_UNIX`: "unix"
+- `AF_INET`: "inet"
+- `AF_INET6`: "inet6"
+- `AF_IPX`: "ipx"
+- `AF_NETLINK`: "netlink"
+- `AF_X25`: "x25"
+- `AF_AX25`: "as25"
+- `AF_ATMPVC`: "atmpvc"
+- `AF_APPLETALK`: "appletalk"
+- `AF_PACKET`: "packet"
+
+### Signals
+
+- `SIGHUP`: "sighup"
+- `SIGINT`: "sigint"
+- `SIGQUIT`: "sigquit"
+- `SIGILL`: "sigill"
+- `SIGTRAP`: "sigtrap"
+- `SIGABRT`: "sigabrt"
+- `SIGIOT`: "sigiot"
+- `SIGBUS`: "sigbus"
+- `SIGFPE`: "sigfpe"
+- `SIGKILL`: "sigkill"
+- `SIGUSR1`: "sigusr1"
+- `SIGSEGV`: "sigsegv"
+- `SIGUSR2`: "sigusr2"
+- `SIGPIPE`: "sigpipe"
+- `SIGALRM`: "sigalrm"
+- `SIGTERM`: "sigterm"
+- `SIGCHLD`: "sigchld"
+- `SIGSTKFLT`: "sigstkflt"
+- `SIGCONT`: "sigcont"
+- `SIGSTOP`: "sigstop"
+- `SIGTSTP`: "sigtstp"
+- `SIGBREAK`: "sigbreak"
+- `SIGTTIN`: "sigttin"
+- `SIGTTOU`: "sigttou"
+- `SIGURG`: "sigurg"
+- `SIGXCPU`: "sigxcpu"
+- `SIGXFSZ`: "sigxfsz"
+- `SIGVTALRM`: "sigvtalrm"
+- `SIGPROF`: "sigprof"
+- `SIGWINCH`: "sigwinch"
+- `SIGIO`: "sigio"
+- `SIGPOLL`: "sigpoll"
+- `SIGLOST`: "siglost"
+- `SIGPWR`: "sigpwr"
+- `SIGSYS`: "sigsys"
+
+### Socket Types
+
+- `SOCK_STREAM`: "stream"
+- `SOCK_DGRAM`: "dgram"
+- `SOCK_SEQPACKET`: "seqpacket"
+- `SOCK_RAW`: "raw"
+- `SOCK_RDM`: "rdm"
+
+### TTY Modes
+
+- `TTY_MODE_NORMAL`: "normal"
+- `TTY_MODE_RAW`: "raw"
+- `TTY_MODE_IO`: "io"
+
 ## Error Handling
 
 [Error handling]: #error-handling
 
-In libuv, errors are negative numbered constants; however, while those errors are exposed through `uv.errno`,
-the functions used to handle them are not exposed to luv users. Instead, if an
-internal error is encountered, the luv function will return to the caller an
-assertable `nil, err, name` tuple.
+In libuv, errors are represented by negative numbered constants. While these
+constants are made available in the `uv.errno` table, they are not returned by
+luv funtions and the libuv functions used to handle them are not exposed.
+Instead, if an internal error is encountered, the failing luv function will
+return to the caller an assertable `nil, err, name` tuple:
 
 - `nil` idiomatically indicates failure
 - `err` is a string with the format `{name}: {message}`
@@ -130,10 +226,8 @@ When a function is called successfully, it will return either a value that is
 relevant to the operation of the function, or the integer `0` to indicate
 success, or sometimes nothing at all. These cases are documented below.
 
-### `uv.errno`
-
-A table value which exposes error constants as a map, where the key is the error name (without the `UV_` prefix) and its value is a negative number.
-See Libuv's [Error constants](https://docs.libuv.org/en/v1.x/errors.html#error-constants) page for further details.
+Below is a list of known error names and error strings. See libuv's
+[error constants][] page for an original source.
 
 - `E2BIG`: argument list too long.
 - `EACCES`: permission denied.
@@ -1094,8 +1188,8 @@ Reception of some signals is emulated on Windows:
 -- Create a new signal handler
 local signal = uv.new_signal()
 -- Define a handler function
-uv.signal_start(signal, "sigint", function(signal)
-  print("got " .. signal .. ", shutting down")
+uv.signal_start(signal, "sigint", function(signame)
+  print("got " .. signame .. ", shutting down")
   os.exit(1)
 end)
 ```
@@ -1107,31 +1201,35 @@ it.
 
 **Returns:** `uv_signal_t userdata` or `fail`
 
-### `uv.signal_start(signal, signum, callback)`
+### `uv.signal_start(signal, signame, callback)`
 
-> method form `signal:start(signum, callback)`
+> method form `signal:start(signame, callback)`
 
 **Parameters:**
 - `signal`: `uv_signal_t userdata`
-- `signum`: `integer` or `string`
+- `signame`: `string` or `integer`
 - `callback`: `callable`
-  - `signum`: `string`
+  - `signame`: `string`
 
 Start the handle with the given callback, watching for the given signal.
 
+See [Constants][] for supported `signame` input and output values.
+
 **Returns:** `0` or `fail`
 
-### `uv.signal_start_oneshot(signal, signum, callback)`
+### `uv.signal_start_oneshot(signal, signame, callback)`
 
-> method form `signal:start_oneshot(signum, callback)`
+> method form `signal:start_oneshot(signame, callback)`
 
 **Parameters:**
 - `signal`: `uv_signal_t userdata`
-- `signum`: `integer` or `string`
+- `signame`: `string` or `integer`
 - `callback`: `callable`
-  - `signum`: `string`
+  - `signame`: `string`
 
 Same functionality as `uv.signal_start()` but the signal handler is reset the moment the signal is received.
+
+See [Constants][] for supported `signame` input and output values.
 
 **Returns:** `0` or `fail`
 
@@ -1274,27 +1372,31 @@ When the child process exits, `on_exit` is called with an exit code and signal.
 
 **Returns:** `uv_process_t userdata`, `integer`
 
-### `uv.process_kill(process, signum)`
+### `uv.process_kill(process, signame)`
 
-> method form `process:kill(signum)`
+> method form `process:kill(signame)`
 
 **Parameters:**
 - `process`: `uv_process_t userdata`
-- `signum`: `integer` or `string` or `nil` (default: `sigterm`)
+- `signame`: `string` or `integer` or `nil` (default: `sigterm`)
 
 Sends the specified signal to the given process handle. Check the documentation
 on `uv_signal_t` for signal support, specially on Windows.
 
+See [Constants][] for supported `signame` input values.
+
 **Returns:** `0` or `fail`
 
-### `uv.kill(pid, signum)`
+### `uv.kill(pid, signame)`
 
 **Parameters:**
 - `pid`: `integer`
-- `signum`: `integer` or `string` or `nil` (default: `sigterm`)
+- `signame`: `string` or `integer` or `nil` (default: `sigterm`)
 
 Sends the specified signal to the given PID. Check the documentation on
 `uv_signal_t` for signal support, specially on Windows.
+
+See [Constants][] for supported `signame` input values.
 
 **Returns:** `0` or `fail`
 
@@ -1549,11 +1651,12 @@ TCP handles are used to represent both TCP streams and servers.
 ### `uv.new_tcp([flags])`
 
 **Parameters:**
-- `flags`: `string` or `nil`
+- `flags`: `string` or `integer` or `nil`
 
 Creates and initializes a new `uv_tcp_t`. Returns the Lua userdata wrapping it.
-Flags may be a family string: `"unix"`, `"inet"`, `"inet6"`, `"ipx"`,
-`"netlink"`, `"x25"`, `"ax25"`, `"atmpvc"`, `"appletalk"`, or `"packet"`.
+
+If set, `flags` must be a valid address family. See [Constants][] for supported
+address family input values.
 
 **Returns:** `uv_tcp_t userdata` or `fail`
 
@@ -1649,6 +1752,8 @@ later using `uv.tcp_getsockname()`.
 
 Get the address of the peer connected to the handle.
 
+See [Constants][] for supported address `family` output values.
+
 **Returns:** `table` or `fail`
 - `ip` : `string`
 - `family` : `string`
@@ -1662,6 +1767,8 @@ Get the address of the peer connected to the handle.
 - `tcp`: `uv_tcp_t userdata`
 
 Get the current address to which the handle is bound.
+
+See [Constants][] for supported address `family` output values.
 
 **Returns:** `table` or `fail`
 - `ip` : `string`
@@ -1723,8 +1830,7 @@ and `uv.tcp_close_reset()` calls is not allowed.
 
 Create a pair of connected sockets with the specified properties. The resulting handles can be passed to `uv.tcp_open`, used with `uv.spawn`, or for any other purpose.
 
-When specified as a string, `socktype` must be one of `"stream"`, `"dgram"`, `"raw"`,
-`"rdm"`, or `"seqpacket"`.
+See [Constants][] for supported `socktype` input values.
 
 When `protocol` is set to 0 or nil, it will be automatically chosen based on the socket's domain and type. When `protocol` is specified as a string, it will be looked up using the `getprotobyname(3)` function (examples: `"ip"`, `"icmp"`, `"tcp"`, `"udp"`, etc).
 
@@ -2059,16 +2165,11 @@ This function is not thread safe on systems that don’t support ioctl TIOCGPTN 
 
 **Parameters:**
 - `tty`: `uv_tty_t userdata`
-- `mode`: `integer`
+- `mode`: `string` or `integer`
 
 Set the TTY using the specified terminal mode.
 
-Parameter `mode` is a C enum with the following values:
-
-  - 0 - UV_TTY_MODE_NORMAL: Initial/normal terminal mode
-  - 1 - UV_TTY_MODE_RAW: Raw input mode (On Windows, ENABLE_WINDOW_INPUT is
-  also enabled)
-  - 2 - UV_TTY_MODE_IO: Binary-safe I/O mode for IPC (Unix-only)
+See [Constants][] for supported TTY mode input values.
 
 **Returns:** `0` or `fail`
 
@@ -2135,9 +2236,7 @@ UDP handles encapsulate UDP communication for both clients and servers.
 Creates and initializes a new `uv_udp_t`. Returns the Lua userdata wrapping
 it. The actual socket is created lazily.
 
-When specified, `family` must be one of `"unix"`, `"inet"`, `"inet6"`,
-`"ipx"`, `"netlink"`, `"x25"`, `"ax25"`, `"atmpvc"`, `"appletalk"`, or
-`"packet"`.
+See [Constants][] for supported address `family` input values.
 
 When specified, `mmsgs` determines the number of messages able to be received
 at one time via `recvmmsg(2)` (the allocated buffer will be sized to be able
@@ -2365,6 +2464,54 @@ completed immediately.
 
 **Returns:** `integer` or `fail`
 
+### `uv.udp_try_send2(udp, messages, flags)`
+
+> method form `udp:try_send2(messages, flags)`
+
+**Parameters:**
+- `udp`: `uv_udp_t userdata`
+- `messages`: `table`
+  - `[1, 2, 3, ..., n]` : `table`
+    - `data` : `buffer`
+    - `addr` : `table`
+      - `ip` : `string`
+      - `port` : `integer`
+- `flags`: `nil` (see below)
+- `port`: `integer`
+
+Like `uv.udp_try_send()`, but can send multiple datagrams.
+Lightweight abstraction around `sendmmsg(2)`, with a `sendmsg(2)` fallback loop
+for platforms that do not support the former. The `udp` handle must be fully
+initialized, either from a `uv.udp_bind` call, another call that will bind
+automatically (`udp_send`, `udp_try_send`, etc), or from `uv.udp_connect`.
+
+`messages` should be an array-like table, where `addr` must be specified
+if the `udp` has not been connected via `udp_connect`. Otherwise, `addr`
+must be `nil`.
+
+`flags` is reserved for future extension and must currently be `nil` or `0` or
+`{}`.
+
+Returns the number of messages sent successfully. An error will only be returned
+if the first datagram failed to be sent.
+
+**Returns:** `integer` or `fail`
+
+```lua
+-- If client:connect(...) was not called
+local addr = { ip = "127.0.0.1", port = 1234 }
+client:try_send2({
+  { data = "Message 1", addr = addr },
+  { data = "Message 2", addr = addr },
+})
+
+-- If client:connect(...) was called
+client:try_send2({
+  { data = "Message 1" },
+  { data = "Message 2" },
+})
+```
+
 ### `uv.udp_recv_start(udp, callback)`
 
 > method form `udp:recv_start(callback)`
@@ -2385,6 +2532,8 @@ completed immediately.
 Prepare for receiving data. If the socket has not previously been bound with
 `uv.udp_bind()` it is bound to `0.0.0.0` (the "all interfaces" IPv4 address)
 and a random port number.
+
+See [Constants][] for supported address `family` output values.
 
 **Returns:** `0` or `fail`
 
@@ -2591,7 +2740,7 @@ Equivalent to `close(2)`.
 **Parameters:**
 - `path`: `string`
 - `flags`: `string` or `integer`
-- `mode`: `integer`
+- `mode`: `integer` (octal `chmod(1)` mode, e.g. `tonumber('644', 8)`)
 - `callback`: `callable` (async version) or `nil` (sync version)
   - `err`: `nil` or `string`
   - `fd`: `integer` or `nil`
@@ -2666,7 +2815,7 @@ If `offset` is nil or omitted, it will default to `-1`, which indicates 'use and
 
 **Parameters:**
 - `path`: `string`
-- `mode`: `integer`
+- `mode`: `integer` (octal `chmod(1)` mode, e.g. `tonumber('755', 8)`)
 - `callback`: `callable` (async version) or `nil` (sync version)
   - `err`: `nil` or `string`
   - `success`: `boolean` or `nil`
@@ -2897,7 +3046,7 @@ Limited equivalent to `sendfile(2)`. Returns the number of bytes written.
 
 **Parameters:**
 - `path`: `string`
-- `mode`: `integer`
+- `mode`: `string`  (a combination of the `'r'`, `'w'` and `'x'` characters denoting the symbolic mode as per `chmod(1)`)
 - `callback`: `callable` (async version) or `nil` (sync version)
   - `err`: `nil` or `string`
   - `permission`: `boolean` or `nil`
@@ -2914,7 +3063,7 @@ Returns `true` or `false` indicating access permission.
 
 **Parameters:**
 - `path`: `string`
-- `mode`: `integer`
+- `mode`: `integer` (octal `chmod(1)` mode, e.g. `tonumber('644', 8)`)
 - `callback`: `callable` (async version) or `nil` (sync version)
   - `err`: `nil` or `string`
   - `success`: `boolean` or `nil`
@@ -3270,12 +3419,14 @@ called in the main loop thread.
 Equivalent to `getaddrinfo(3)`. Either `node` or `service` may be `nil` but not
 both.
 
-Valid hint strings for the keys that take a string:
-- `family`: `"unix"`, `"inet"`, `"inet6"`, `"ipx"`,
-`"netlink"`, `"x25"`, `"ax25"`, `"atmpvc"`, `"appletalk"`, or `"packet"`
-- `socktype`: `"stream"`, `"dgram"`, `"raw"`,
-`"rdm"`, or `"seqpacket"`
-- `protocol`: will be looked up using the `getprotobyname(3)` function (examples: `"ip"`, `"icmp"`, `"tcp"`, `"udp"`, etc)
+See [Constants][] for supported address `family` input and output values.
+
+See [Constants][] for supported `socktype` input and output values.
+
+When `protocol` is set to 0 or nil, it will be automatically chosen based on the
+socket's domain and type. When `protocol` is specified as a string, it will be
+looked up using the `getprotobyname(3)` function. Examples: `"ip"`, `"icmp"`,
+`"tcp"`, `"udp"`, etc.
 
 **Returns (sync version):** `table` or `fail`
 - `[1, 2, 3, ..., n]` : `table`
@@ -3302,8 +3453,7 @@ Valid hint strings for the keys that take a string:
 
 Equivalent to `getnameinfo(3)`.
 
-When specified, `family` must be one of `"unix"`, `"inet"`, `"inet6"`, `"ipx"`,
-`"netlink"`, `"x25"`, `"ax25"`, `"atmpvc"`, `"appletalk"`, or `"packet"`.
+See [Constants][] for supported address `family` input values.
 
 **Returns (sync version):** `string, string` or `fail`
 
@@ -3313,7 +3463,7 @@ When specified, `family` must be one of `"unix"`, `"inet"`, `"inet6"`, `"ipx"`,
 
 [Threading and synchronization utilities]: #threading-and-synchronization-utilities
 
-Libuv provides cross-platform implementations for multiple threading an
+Libuv provides cross-platform implementations for multiple threading and
  synchronization primitives. The API largely follows the pthreads API.
 
 ### `uv.new_thread([options], entry, ...)`
@@ -3413,7 +3563,7 @@ the number to correspond with the table keys used in `uv.thread_getaffinity` and
 
 **Parameters:**
 - `thread`: `luv_thread_t userdata`
-- `priority`: ``number`
+- `priority`: `number`
 
 Sets the specified thread's scheduling priority setting. It requires elevated
 privilege to set specific priorities on some platforms.
@@ -3460,6 +3610,41 @@ Returns the handle for the thread in which this is called.
 Waits for the `thread` to finish executing its entry function.
 
 **Returns:** `boolean` or `fail`
+
+### `uv.thread_detach(thread)`
+
+> method form `thread:detach()`
+
+**Parameters:**
+- `thread`: `luv_thread_t userdata`
+
+Detaches a thread. Detached threads automatically release their resources upon
+termination, eliminating the need for the application to call `uv.thread_join`.
+
+**Returns:** `boolean` or `fail`
+
+### `uv.thread_setname(name)`
+
+**Parameters:**
+- `name`: `string`
+
+Sets the name of the current thread. Different platforms define different limits
+on the max number of characters a thread name can be: Linux, IBM i (16), macOS
+(64), Windows (32767), and NetBSD (32), etc. The name will be truncated
+if `name` is larger than the limit of the platform.
+
+**Returns:** `0` or `fail`
+
+### `uv.thread_getname(thread)`
+
+> method form `thread:getname()`
+
+**Parameters:**
+- `thread`: `luv_thread_t userdata`
+
+Gets the name of the thread specified by `thread`.
+
+**Returns:** `string` or `fail`
 
 ### `uv.sleep(msec)`
 
@@ -3549,6 +3734,36 @@ Returns the resident set size (RSS) for the current process.
 ### `uv.getrusage()`
 
 Returns the resource usage.
+
+**Returns:** `table` or `fail`
+- `utime` : `table` (user CPU time used)
+  - `sec` : `integer`
+  - `usec` : `integer`
+- `stime` : `table` (system CPU time used)
+  - `sec` : `integer`
+  - `usec` : `integer`
+- `maxrss` : `integer` (maximum resident set size)
+- `ixrss` : `integer` (integral shared memory size)
+- `idrss` : `integer` (integral unshared data size)
+- `isrss` : `integer` (integral unshared stack size)
+- `minflt` : `integer` (page reclaims (soft page faults))
+- `majflt` : `integer` (page faults (hard page faults))
+- `nswap` : `integer` (swaps)
+- `inblock` : `integer` (block input operations)
+- `oublock` : `integer` (block output operations)
+- `msgsnd` : `integer` (IPC messages sent)
+- `msgrcv` : `integer` (IPC messages received)
+- `nsignals` : `integer` (signals received)
+- `nvcsw` : `integer` (voluntary context switches)
+- `nivcsw` : `integer` (involuntary context switches)
+
+### `uv.getrusage_thread()`
+
+Gets the resource usage measures for the calling thread.
+
+**Note** Not supported on all platforms. May return `ENOTSUP`.
+On macOS and Windows not all fields are set (the unsupported fields are filled
+with zeroes).
 
 **Returns:** `table` or `fail`
 - `utime` : `table` (user CPU time used)
@@ -3730,6 +3945,8 @@ Returns address information about the network interfaces on the system in a
 table. Each table key is the name of the interface while each associated value
 is an array of address information where fields are `ip`, `family`, `netmask`,
 `internal`, and `mac`.
+
+See [Constants][] for supported address `family` output values.
 
 **Returns:** `table`
 - `[name(s)]` : `table`
@@ -3947,6 +4164,52 @@ metrics counters.
 - `events` : `integer`
 - `events_waiting` : `integer`
 
+## String manipulation functions
+
+These string utilities are needed internally for dealing with Windows, and are exported to allow clients to work uniformly with this data when the libuv API is not complete.
+
+**Notes**:
+
+1. New in luv version 1.49.0.
+2. See [the WTF-8 spec](https://simonsapin.github.io/wtf-8/) for information about WTF-8.
+3. Luv uses Lua-style strings, which means that all inputs and return values (UTF-8 or UTF-16 strings) do not include a NUL terminator.
+
+### `uv.utf16_length_as_wtf8(utf16)`
+
+Get the length (in bytes) of a UTF-16 (or UCS-2) string `utf16` value after converting it to WTF-8. The endianness of the UTF-16 (or UCS-2) string is assumed to be the same as the native endianness of the platform.
+
+**Parameters:**
+- `utf16`: `string`
+
+**Returns:** `integer`
+
+### `uv.utf16_to_wtf8(utf16)`
+
+Convert UTF-16 (or UCS-2) string `utf16` to WTF-8 string. The endianness of the UTF-16 (or UCS-2) string is assumed to be the same as the native endianness of the platform.
+
+**Parameters:**
+- `utf16`: `string`
+
+**Returns:** `string`
+
+### `uv.wtf8_length_as_utf16(wtf8)`
+
+Get the length (in UTF-16 code units) of a WTF-8 `wtf8` value after converting it to UTF-16 (or UCS-2). Note: The number of bytes needed for a UTF-16 (or UCS-2) string is `<number of code units> * 2`.
+
+**Parameters:**
+- `wtf8`: `string`
+
+**Returns:** `integer`
+
+### `uv.wtf8_to_utf16(wtf8)`
+
+Convert WTF-8 string in `wtf8` to UTF-16 (or UCS-2) string. The endianness of the UTF-16 (or UCS-2) string will be the same as the native endianness of the platform.
+
+**Parameters:**
+- `wtf8`: `string`
+
+**Returns:** `string`
+
 ---
 
 [luv]: https://github.com/luvit/luv
@@ -3954,3 +4217,4 @@ metrics counters.
 [libuv]: https://github.com/libuv/libuv
 [libuv documentation page]: http://docs.libuv.org/
 [libuv API documentation]: http://docs.libuv.org/en/v1.x/api.html
+[error constants]: https://docs.libuv.org/en/v1.x/errors.html#error-constants

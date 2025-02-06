@@ -62,6 +62,10 @@
 #define MAX_TITLE_LENGTH (8192)
 #endif
 
+#ifndef MAX_THREAD_NAME_LENGTH
+#define MAX_THREAD_NAME_LENGTH (8192)
+#endif
+
 // luv flags to control luv_CFpcall routine
 #define LUVF_CALLBACK_NOEXIT       0x01       // Don't exit when LUA_ERRMEM
 #define LUVF_CALLBACK_NOTRACEBACK  0x02       // Don't traceback when error
@@ -100,6 +104,8 @@ typedef struct {
   luv_CFcpcall thrd_cpcall; /* luv thread c function in protected mode*/
 
   int          mode;        /* the mode used to run the loop (-1 if not running) */
+  int          ht_ref;      /* bookkeeping: maintain table of luv_handle_t pointers,
+                               to distinguish between internal and external handles */
 
   void* extra;              /* extra data */
 } luv_ctx_t;
