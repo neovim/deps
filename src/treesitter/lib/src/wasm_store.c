@@ -1220,6 +1220,10 @@ const TSLanguage *ts_wasm_store_load_language(
   const uint8_t *memory = wasmtime_memory_data(context, &self->memory);
   memcpy(&wasm_language, &memory[language_address], sizeof(LanguageInWasmMemory));
 
+  bool has_supertypes =
+    wasm_language.abi_version > LANGUAGE_VERSION_WITH_RESERVED_WORDS &&
+    wasm_language.supertype_count > 0;
+
   int32_t addresses[] = {
     wasm_language.parse_table,
     wasm_language.small_parse_table,
@@ -1239,9 +1243,9 @@ const TSLanguage *ts_wasm_store_load_language(
     wasm_language.primary_state_ids,
     wasm_language.name,
     wasm_language.reserved_words,
-    wasm_language.supertype_symbols,
-    wasm_language.supertype_map_entries,
-    wasm_language.supertype_map_slices,
+    has_supertypes ? wasm_language.supertype_symbols : 0,
+    has_supertypes ? wasm_language.supertype_map_entries : 0,
+    has_supertypes ? wasm_language.supertype_map_slices : 0,
     wasm_language.external_token_count > 0 ? wasm_language.external_scanner.states : 0,
     wasm_language.external_token_count > 0 ? wasm_language.external_scanner.symbol_map : 0,
     wasm_language.external_token_count > 0 ? wasm_language.external_scanner.create : 0,
@@ -1331,7 +1335,7 @@ const TSLanguage *ts_wasm_store_load_language(
     );
   }
 
-  if (language->supertype_count > 0) {
+  if (has_supertypes) {
     language->supertype_symbols = copy(
       &memory[wasm_language.supertype_symbols],
       wasm_language.supertype_count * sizeof(TSSymbol)
@@ -1609,13 +1613,22 @@ static void ts_wasm_store__call(
   }
 }
 
+// The data fields of TSLexer, without the function pointers.
+//
+// This portion of the struct needs to be copied in and out
+// of wasm memory before and after calling a scan function.
+typedef struct {
+  int32_t lookahead;
+  TSSymbol result_symbol;
+} TSLexerDataPrefix;
+
 static bool ts_wasm_store__call_lex_function(TSWasmStore *self, unsigned function_index, TSStateId state) {
   wasmtime_context_t *context = wasmtime_store_context(self->store);
   uint8_t *memory_data = wasmtime_memory_data(context, &self->memory);
   memcpy(
     &memory_data[self->lexer_address],
-    &self->current_lexer->lookahead,
-    sizeof(self->current_lexer->lookahead)
+    self->current_lexer,
+    sizeof(TSLexerDataPrefix)
   );
 
   wasmtime_val_raw_t args[2] = {
@@ -1627,9 +1640,9 @@ static bool ts_wasm_store__call_lex_function(TSWasmStore *self, unsigned functio
   bool result = args[0].i32;
 
   memcpy(
-    &self->current_lexer->lookahead,
+    self->current_lexer,
     &memory_data[self->lexer_address],
-    sizeof(self->current_lexer->lookahead) + sizeof(self->current_lexer->result_symbol)
+    sizeof(TSLexerDataPrefix)
   );
   return result;
 }
@@ -1674,8 +1687,8 @@ bool ts_wasm_store_call_scanner_scan(
 
   memcpy(
     &memory_data[self->lexer_address],
-    &self->current_lexer->lookahead,
-    sizeof(self->current_lexer->lookahead)
+    self->current_lexer,
+    sizeof(TSLexerDataPrefix)
   );
 
   uint32_t valid_tokens_address =
@@ -1690,9 +1703,9 @@ bool ts_wasm_store_call_scanner_scan(
   if (self->has_error) return false;
 
   memcpy(
-    &self->current_lexer->lookahead,
+    self->current_lexer,
     &memory_data[self->lexer_address],
-    sizeof(self->current_lexer->lookahead) + sizeof(self->current_lexer->result_symbol)
+    sizeof(TSLexerDataPrefix)
   );
   return args[0].i32;
 }
