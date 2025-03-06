@@ -1,6 +1,6 @@
 {
   "name": "web-tree-sitter",
-  "version": "0.25.2",
+  "version": "0.25.3",
   "description": "Tree-sitter bindings for the web",
   "repository": "https://github.com/tree-sitter/tree-sitter",
   "homepage": "https://github.com/tree-sitter/tree-sitter/tree/master/lib/binding_web",
@@ -19,11 +19,13 @@
   "exports": {
     ".": {
       "import": "./tree-sitter.js",
-      "require": "./tree-sitter.cjs"
+      "require": "./tree-sitter.cjs",
+      "types": "./web-tree-sitter.d.ts"
     },
     "./debug": {
       "import": "./debug/tree-sitter.js",
-      "require": "./debug/tree-sitter.cjs"
+      "require": "./debug/tree-sitter.cjs",
+      "types": "./web-tree-sitter.d.ts"
     }
   },
   "types": "web-tree-sitter.d.ts",

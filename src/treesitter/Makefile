@@ -2,7 +2,7 @@ ifeq ($(OS),Windows_NT)
 $(error Windows is not supported)
 endif
 
-VERSION := 0.25.2
+VERSION := 0.25.3
 DESCRIPTION := An incremental parsing system for programming tools
 HOMEPAGE_URL := https://tree-sitter.github.io/tree-sitter/
 
@@ -104,6 +104,12 @@ test-wasm:
 	cargo xtask test-wasm
 
 lint:
+	cargo update --workspace --locked --quiet
+	cargo check --workspace --all-targets
+	cargo +nightly fmt --all --check
+	cargo +stable clippy --workspace --all-targets -- -D warnings
+
+lint-nightly:
 	cargo update --workspace --locked --quiet
 	cargo check --workspace --all-targets
 	cargo +nightly fmt --all --check
