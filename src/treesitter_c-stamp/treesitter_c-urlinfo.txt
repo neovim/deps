@@ -6,7 +6,7 @@ method=url
 command=/usr/local/bin/cmake;-DCMAKE_MESSAGE_LOG_LEVEL=VERBOSE;-P;/home/runner/work/deps/deps/neovim/deps/build/src/treesitter_c-stamp/download-treesitter_c.cmake;COMMAND;/usr/local/bin/cmake;-DCMAKE_MESSAGE_LOG_LEVEL=VERBOSE;-P;/home/runner/work/deps/deps/neovim/deps/build/src/treesitter_c-stamp/verify-treesitter_c.cmake;COMMAND;/usr/local/bin/cmake;-DCMAKE_MESSAGE_LOG_LEVEL=VERBOSE;-P;/home/runner/work/deps/deps/neovim/deps/build/src/treesitter_c-stamp/extract-treesitter_c.cmake
 source_dir=/home/runner/work/deps/deps/neovim/deps/build/src/treesitter_c
 work_dir=/home/runner/work/deps/deps/neovim/deps/build/src
-url(s)=https://github.com/tree-sitter/tree-sitter-c/archive/v0.23.2.tar.gz
-hash=SHA256=d8b9c1b2ffb6a42caf9bc76e07c52507d4e60b17175ed9beb0e779be8db1200c
+url(s)=https://github.com/tree-sitter/tree-sitter-c/archive/v0.23.4.tar.gz
+hash=SHA256=b66c5043e26d84e5f17a059af71b157bcf202221069ed220aa1696d7d1d28a7a
       no_extract=
 
