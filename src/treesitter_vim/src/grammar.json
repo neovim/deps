@@ -1,4 +1,5 @@
 {
+  "$schema": "https://tree-sitter.github.io/tree-sitter/assets/schemas/grammar.schema.json",
   "name": "vim",
   "word": "keyword",
   "rules": {
@@ -7550,17 +7551,8 @@
                 "type": "SEQ",
                 "members": [
                   {
-                    "type": "CHOICE",
-                    "members": [
-                      {
-                        "type": "STRING",
-                        "value": "0"
-                      },
-                      {
-                        "type": "STRING",
-                        "value": "0"
-                      }
-                    ]
+                    "type": "STRING",
+                    "value": "0"
                   },
                   {
                     "type": "PATTERN",
@@ -14117,5 +14109,6 @@
     }
   ],
   "inline": [],
-  "supertypes": []
+  "supertypes": [],
+  "reserved": {}
 }
