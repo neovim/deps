@@ -34,6 +34,7 @@ jobs:
       - name: Build third-party
         run: |
           cd "$NEOVIM_DIR"
+          rm -rf deps
           mkdir deps
           cd deps
           cmake -G Ninja -DUSE_BUNDLED_BUSTED=OFF "${NEOVIM_DIR}/cmake.deps/"
