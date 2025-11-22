@@ -249,7 +249,7 @@ module.exports = grammar({
       optional($.ms_call_modifier),
       $._declaration_specifiers,
       field('declarator', alias($._old_style_function_declarator, $.function_declarator)),
-      repeat($.declaration),
+      repeat1($.declaration),
       field('body', $.compound_statement),
     ),
 
@@ -1369,8 +1369,6 @@ module.exports = grammar({
   },
 });
 
-module.exports.PREC = PREC;
-
 /**
  *
  * @param {string} suffix
@@ -1468,3 +1466,9 @@ function commaSep(rule) {
 function commaSep1(rule) {
   return seq(rule, repeat(seq(',', rule)));
 }
+
+module.exports.PREC = PREC;
+module.exports.preprocIf = preprocIf;
+module.exports.preprocessor = preprocessor;
+module.exports.commaSep = commaSep;
+module.exports.commaSep1 = commaSep1;

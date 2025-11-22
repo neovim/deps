@@ -17,7 +17,10 @@ use super::helpers::{
 };
 use crate::tests::{
     generate_parser,
-    helpers::query_helpers::{collect_captures, collect_matches},
+    helpers::{
+        fixtures::get_test_fixture_language,
+        query_helpers::{collect_captures, collect_matches},
+    },
     ITERATION_COUNT,
 };
 
@@ -328,6 +331,16 @@ fn test_query_errors_on_invalid_symbols() {
                 column: 15,
                 kind: QueryErrorKind::Field,
                 message: "alternatives".to_string()
+            }
+        );
+        assert_eq!(
+            Query::new(&language, "fakefield: (identifier)").unwrap_err(),
+            QueryError {
+                row: 0,
+                offset: 0,
+                column: 0,
+                kind: QueryErrorKind::Field,
+                message: "fakefield".to_string()
             }
         );
     });
@@ -2979,6 +2992,61 @@ fn test_query_matches_with_deeply_nested_patterns_with_fields() {
 }
 
 #[test]
+fn test_query_matches_with_alternations_and_predicates() {
+    allocations::record(|| {
+        let language = get_language("java");
+        let query = Query::new(
+            &language,
+            "
+            (block
+                [
+                    (local_variable_declaration
+                        (variable_declarator
+                            (identifier) @def.a
+                            (string_literal) @lit.a
+                        )
+                    )
+                    (local_variable_declaration
+                        (variable_declarator
+                            (identifier) @def.b
+                            (null_literal) @lit.b
+                        )
+                    )
+                ]
+                (expression_statement
+                    (method_invocation [
+                        (argument_list
+                            (identifier) @ref.a
+                            (string_literal)
+                        )
+                        (argument_list
+                            (null_literal)
+                            (identifier) @ref.b
+                        )
+                    ])
+                )
+                (#eq? @def.a @ref.a )
+                (#eq? @def.b @ref.b )
+            )
+            ",
+        )
+        .unwrap();
+
+        assert_query_matches(
+            &language,
+            &query,
+            r#"
+            void test() {
+                int a = "foo";
+                f(null, b);
+            }
+            "#,
+            &[],
+        );
+    });
+}
+
+#[test]
 fn test_query_matches_with_indefinite_step_containing_no_captures() {
     allocations::record(|| {
         // This pattern depends on the field declarations within the
@@ -5620,4 +5688,64 @@ const foo = [
     assert_eq!(captures, vec![("foo", "3")]);
     assert_eq!(matches.len(), 1);
     assert_eq!(matches[0].1, captures);
+}
+
+#[test]
+fn test_query_with_predicate_causing_oob_access() {
+    let language = get_language("rust");
+
+    let query = "(call_expression
+     function: (scoped_identifier
+       path: (scoped_identifier (identifier) @_regex (#any-of? @_regex \"Regex\" \"RegexBuilder\") .))
+     (#set! injection.language \"regex\"))";
+    Query::new(&language, query).unwrap();
+}
+
+#[test]
+fn test_query_with_anonymous_error_node() {
+    let language = get_test_fixture_language("anonymous_error");
+    let mut parser = Parser::new();
+    parser.set_language(&language).unwrap();
+
+    let source = "ERROR";
+
+    let tree = parser.parse(source, None).unwrap();
+    let query = Query::new(
+        &language,
+        r#"
+          "ERROR" @error
+          (document "ERROR" @error)
+        "#,
+    )
+    .unwrap();
+    let mut cursor = QueryCursor::new();
+    let matches = cursor.matches(&query, tree.root_node(), source.as_bytes());
+    let matches = collect_matches(matches, &query, source);
+
+    assert_eq!(
+        matches,
+        vec![(1, vec![("error", "ERROR")]), (0, vec![("error", "ERROR")])]
+    );
+}
+
+#[test]
+fn test_query_allows_error_nodes_with_children() {
+    allocations::record(|| {
+        let language = get_language("cpp");
+
+        let code = "SomeStruct foo{.bar{}};";
+
+        let mut parser = Parser::new();
+        parser.set_language(&language).unwrap();
+
+        let tree = parser.parse(code, None).unwrap();
+        let root = tree.root_node();
+
+        let query = Query::new(&language, "(initializer_list (ERROR) @error)").unwrap();
+        let mut cursor = QueryCursor::new();
+
+        let matches = cursor.matches(&query, root, code.as_bytes());
+        let matches = collect_matches(matches, &query, code);
+        assert_eq!(matches, &[(0, vec![("error", ".bar")])]);
+    });
 }

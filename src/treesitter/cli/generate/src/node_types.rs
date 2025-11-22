@@ -1,7 +1,4 @@
-use std::{
-    cmp::Ordering,
-    collections::{BTreeMap, HashMap, HashSet},
-};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use anyhow::Result;
 use serde::Serialize;
@@ -444,12 +441,33 @@ pub fn get_supertype_symbol_map(
     supertype_symbol_map
 }
 
+pub type SuperTypeCycleResult<T> = Result<T, SuperTypeCycleError>;
+
+#[derive(Debug, Error, Serialize)]
+pub struct SuperTypeCycleError {
+    items: Vec<String>,
+}
+
+impl std::fmt::Display for SuperTypeCycleError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Dependency cycle detected in node types:")?;
+        for (i, item) in self.items.iter().enumerate() {
+            write!(f, " {item}")?;
+            if i < self.items.len() - 1 {
+                write!(f, ",")?;
+            }
+        }
+
+        Ok(())
+    }
+}
+
 pub fn generate_node_types_json(
     syntax_grammar: &SyntaxGrammar,
     lexical_grammar: &LexicalGrammar,
     default_aliases: &AliasMap,
     variable_info: &[VariableInfo],
-) -> Vec<NodeInfoJSON> {
+) -> SuperTypeCycleResult<Vec<NodeInfoJSON>> {
     let mut node_types_json = BTreeMap::new();
 
     let child_type_to_node_type = |child_type: &ChildType| match child_type {
@@ -507,6 +525,31 @@ pub fn generate_node_types_json(
 
     let aliases_by_symbol = get_aliases_by_symbol(syntax_grammar, default_aliases);
 
+    let empty = HashSet::new();
+    let extra_names = syntax_grammar
+        .extra_symbols
+        .iter()
+        .flat_map(|symbol| {
+            aliases_by_symbol
+                .get(symbol)
+                .unwrap_or(&empty)
+                .iter()
+                .map(|alias| {
+                    alias.as_ref().map_or(
+                        match symbol.kind {
+                            SymbolType::NonTerminal => &syntax_grammar.variables[symbol.index].name,
+                            SymbolType::Terminal => &lexical_grammar.variables[symbol.index].name,
+                            SymbolType::External => {
+                                &syntax_grammar.external_tokens[symbol.index].name
+                            }
+                            _ => unreachable!(),
+                        },
+                        |alias| &alias.value,
+                    )
+                })
+        })
+        .collect::<HashSet<_>>();
+
     let mut subtype_map = Vec::new();
     for (i, info) in variable_info.iter().enumerate() {
         let symbol = Symbol::non_terminal(i);
@@ -519,7 +562,7 @@ pub fn generate_node_types_json(
                         kind: variable.name.clone(),
                         named: true,
                         root: false,
-                        extra: false,
+                        extra: extra_names.contains(&variable.name),
                         fields: None,
                         children: None,
                         subtypes: None,
@@ -563,7 +606,7 @@ pub fn generate_node_types_json(
                         kind: kind.clone(),
                         named: is_named,
                         root: i == 0,
-                        extra: false,
+                        extra: extra_names.contains(&kind),
                         fields: Some(BTreeMap::new()),
                         children: None,
                         subtypes: None,
@@ -602,15 +645,33 @@ pub fn generate_node_types_json(
         }
     }
 
-    // Sort the subtype map so that subtypes are listed before their supertypes.
-    subtype_map.sort_by(|a, b| {
-        if b.1.contains(&a.0) {
-            Ordering::Less
-        } else if a.1.contains(&b.0) {
-            Ordering::Greater
-        } else {
-            Ordering::Equal
+    // Sort the subtype map topologically so that subtypes are listed before their supertypes.
+    let mut sorted_kinds = Vec::with_capacity(subtype_map.len());
+    let mut top_sort = topological_sort::TopologicalSort::<String>::new();
+    for (supertype, subtypes) in &subtype_map {
+        for subtype in subtypes {
+            top_sort.add_dependency(subtype.kind.clone(), supertype.kind.clone());
         }
+    }
+    loop {
+        let mut next_kinds = top_sort.pop_all();
+        match (next_kinds.is_empty(), top_sort.is_empty()) {
+            (true, true) => break,
+            (true, false) => {
+                let mut items = top_sort.collect::<Vec<String>>();
+                items.sort();
+                return Err(SuperTypeCycleError { items });
+            }
+            (false, _) => {
+                next_kinds.sort();
+                sorted_kinds.extend(next_kinds);
+            }
+        }
+    }
+    subtype_map.sort_by(|a, b| {
+        let a_idx = sorted_kinds.iter().position(|n| n.eq(&a.0.kind)).unwrap();
+        let b_idx = sorted_kinds.iter().position(|n| n.eq(&b.0.kind)).unwrap();
+        a_idx.cmp(&b_idx)
     });
 
     for node_type_json in node_types_json.values_mut() {
@@ -634,7 +695,6 @@ pub fn generate_node_types_json(
 
     let mut anonymous_node_types = Vec::new();
 
-    let empty = HashSet::new();
     let regular_tokens = lexical_grammar
         .variables
         .iter()
@@ -668,29 +728,6 @@ pub fn generate_node_types_json(
                         })
                     })
             });
-    let extra_names = syntax_grammar
-        .extra_symbols
-        .iter()
-        .flat_map(|symbol| {
-            aliases_by_symbol
-                .get(symbol)
-                .unwrap_or(&empty)
-                .iter()
-                .map(|alias| {
-                    alias.as_ref().map_or(
-                        match symbol.kind {
-                            SymbolType::NonTerminal => &syntax_grammar.variables[symbol.index].name,
-                            SymbolType::Terminal => &lexical_grammar.variables[symbol.index].name,
-                            SymbolType::External => {
-                                &syntax_grammar.external_tokens[symbol.index].name
-                            }
-                            _ => unreachable!(),
-                        },
-                        |alias| &alias.value,
-                    )
-                })
-        })
-        .collect::<HashSet<_>>();
 
     for (name, kind) in regular_tokens.chain(external_tokens) {
         match kind {
@@ -743,7 +780,7 @@ pub fn generate_node_types_json(
             .then_with(|| a.kind.cmp(&b.kind))
     });
     result.dedup();
-    result
+    Ok(result)
 }
 
 fn process_supertypes(info: &mut FieldInfoJSON, subtype_map: &[(NodeTypeJSON, Vec<NodeTypeJSON>)]) {
@@ -829,7 +866,8 @@ mod tests {
                 },
             ],
             ..Default::default()
-        });
+        })
+        .unwrap();
 
         assert_eq!(node_types.len(), 3);
 
@@ -918,7 +956,9 @@ mod tests {
                 },
                 // This rule is not reachable from the start symbol, but
                 // it is reachable from the 'extra_symbols' so it
-                // should be present in the node_types
+                // should be present in the node_types.
+                // But because it's only a literal, it will get replaced by
+                // a lexical variable.
                 Variable {
                     name: "v3".to_string(),
                     kind: VariableType::Named,
@@ -926,7 +966,8 @@ mod tests {
                 },
             ],
             ..Default::default()
-        });
+        })
+        .unwrap();
 
         assert_eq!(node_types.len(), 4);
 
@@ -1008,6 +1049,118 @@ mod tests {
     }
 
     #[test]
+    fn test_node_types_deeper_extras() {
+        let node_types = get_node_types(&InputGrammar {
+            extra_symbols: vec![Rule::named("v3")],
+            variables: vec![
+                Variable {
+                    name: "v1".to_string(),
+                    kind: VariableType::Named,
+                    rule: Rule::seq(vec![
+                        Rule::field("f1".to_string(), Rule::named("v2")),
+                        Rule::field("f2".to_string(), Rule::string(";")),
+                    ]),
+                },
+                Variable {
+                    name: "v2".to_string(),
+                    kind: VariableType::Named,
+                    rule: Rule::string("x"),
+                },
+                // This rule is not reachable from the start symbol, but
+                // it is reachable from the 'extra_symbols' so it
+                // should be present in the node_types.
+                // Because it is not just a literal, it won't get replaced
+                // by a lexical variable.
+                Variable {
+                    name: "v3".to_string(),
+                    kind: VariableType::Named,
+                    rule: Rule::seq(vec![Rule::string("y"), Rule::repeat(Rule::string("z"))]),
+                },
+            ],
+            ..Default::default()
+        })
+        .unwrap();
+
+        assert_eq!(node_types.len(), 6);
+
+        assert_eq!(
+            node_types[0],
+            NodeInfoJSON {
+                kind: "v1".to_string(),
+                named: true,
+                root: true,
+                extra: false,
+                subtypes: None,
+                children: None,
+                fields: Some(
+                    vec![
+                        (
+                            "f1".to_string(),
+                            FieldInfoJSON {
+                                multiple: false,
+                                required: true,
+                                types: vec![NodeTypeJSON {
+                                    kind: "v2".to_string(),
+                                    named: true,
+                                }]
+                            }
+                        ),
+                        (
+                            "f2".to_string(),
+                            FieldInfoJSON {
+                                multiple: false,
+                                required: true,
+                                types: vec![NodeTypeJSON {
+                                    kind: ";".to_string(),
+                                    named: false,
+                                }]
+                            }
+                        ),
+                    ]
+                    .into_iter()
+                    .collect()
+                )
+            }
+        );
+        assert_eq!(
+            node_types[1],
+            NodeInfoJSON {
+                kind: "v3".to_string(),
+                named: true,
+                root: false,
+                extra: true,
+                subtypes: None,
+                children: None,
+                fields: Some(BTreeMap::default())
+            }
+        );
+        assert_eq!(
+            node_types[2],
+            NodeInfoJSON {
+                kind: ";".to_string(),
+                named: false,
+                root: false,
+                extra: false,
+                subtypes: None,
+                children: None,
+                fields: None
+            }
+        );
+        assert_eq!(
+            node_types[3],
+            NodeInfoJSON {
+                kind: "v2".to_string(),
+                named: true,
+                root: false,
+                extra: false,
+                subtypes: None,
+                children: None,
+                fields: None
+            }
+        );
+    }
+
+    #[test]
     fn test_node_types_with_supertypes() {
         let node_types = get_node_types(&InputGrammar {
             supertype_symbols: vec!["_v2".to_string()],
@@ -1038,7 +1191,8 @@ mod tests {
                 },
             ],
             ..Default::default()
-        });
+        })
+        .unwrap();
 
         assert_eq!(
             node_types[0],
@@ -1127,7 +1281,8 @@ mod tests {
                 },
             ],
             ..Default::default()
-        });
+        })
+        .unwrap();
 
         assert_eq!(
             node_types[0],
@@ -1212,7 +1367,8 @@ mod tests {
                 },
             ],
             ..Default::default()
-        });
+        })
+        .unwrap();
 
         assert_eq!(
             node_types[0],
@@ -1286,7 +1442,8 @@ mod tests {
                 },
             ],
             ..Default::default()
-        });
+        })
+        .unwrap();
 
         assert_eq!(node_types.iter().find(|t| t.kind == "foo_identifier"), None);
         assert_eq!(
@@ -1342,7 +1499,8 @@ mod tests {
                 },
             ],
             ..Default::default()
-        });
+        })
+        .unwrap();
 
         assert_eq!(
             node_types[0],
@@ -1391,7 +1549,8 @@ mod tests {
                 ]),
             }],
             ..Default::default()
-        });
+        })
+        .unwrap();
 
         assert_eq!(
             node_types,
@@ -1439,7 +1598,8 @@ mod tests {
                 },
             ],
             ..Default::default()
-        });
+        })
+        .unwrap();
 
         assert_eq!(
             &node_types
@@ -1558,7 +1718,8 @@ mod tests {
                 },
             ],
             ..Default::default()
-        });
+        })
+        .unwrap();
 
         assert_eq!(
             node_types.iter().map(|n| &n.kind).collect::<Vec<_>>(),
@@ -1885,7 +2046,7 @@ mod tests {
         );
     }
 
-    fn get_node_types(grammar: &InputGrammar) -> Vec<NodeInfoJSON> {
+    fn get_node_types(grammar: &InputGrammar) -> SuperTypeCycleResult<Vec<NodeInfoJSON>> {
         let (syntax_grammar, lexical_grammar, _, default_aliases) =
             prepare_grammar(grammar).unwrap();
         let variable_info =

@@ -27,7 +27,7 @@ mod tables;
 use build_tables::build_tables;
 pub use build_tables::ParseTableBuilderError;
 use grammars::InputGrammar;
-pub use node_types::VariableInfoError;
+pub use node_types::{SuperTypeCycleError, VariableInfoError};
 use parse_grammar::parse_grammar;
 pub use parse_grammar::ParseGrammarError;
 use prepare_grammar::prepare_grammar;
@@ -70,6 +70,8 @@ pub enum GenerateError {
     BuildTables(#[from] ParseTableBuilderError),
     #[error(transparent)]
     ParseVersion(#[from] ParseVersionError),
+    #[error(transparent)]
+    SuperTypeCycle(#[from] SuperTypeCycleError),
 }
 
 impl From<std::io::Error> for GenerateError {
@@ -183,7 +185,8 @@ pub fn generate_parser_in_directory(
     if grammar_path.file_name().unwrap() != "grammar.json" {
         fs::write(src_path.join("grammar.json"), &grammar_json).map_err(|e| {
             GenerateError::IO(format!(
-                "Failed to write grammar.json to {src_path:?} -- {e}"
+                "Failed to write grammar.json to {} -- {e}",
+                src_path.display()
             ))
         })?;
     }
@@ -249,7 +252,7 @@ fn generate_parser_for_grammar_with_opts(
         &lexical_grammar,
         &simple_aliases,
         &variable_info,
-    );
+    )?;
     let supertype_symbol_map =
         node_types::get_supertype_symbol_map(&syntax_grammar, &simple_aliases, &variable_info);
     let tables = build_tables(

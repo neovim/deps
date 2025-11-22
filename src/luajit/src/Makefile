@@ -302,6 +302,9 @@ endif
 ifneq (,$(INSTALL_LJLIBD))
   TARGET_XCFLAGS+= -DLUA_LJDIR=\"$(INSTALL_LJLIBD)\"
 endif
+ifeq (,$(shell $(TARGET_CC) -o /dev/null -c -x c /dev/null -fno-strict-float-cast-overflow 2>/dev/null || echo 1))
+  TARGET_XCFLAGS+= -fno-strict-float-cast-overflow
+endif
 
 ##############################################################################
 # Target system detection.
@@ -352,6 +355,9 @@ else
     TARGET_XLIBS+= -ldl
   endif
   ifeq (GNU/kFreeBSD,$(TARGET_SYS))
+    TARGET_XLIBS+= -ldl
+  endif
+  ifeq (GNU,$(TARGET_SYS))
     TARGET_XLIBS+= -ldl
   endif
 endif
@@ -439,6 +445,14 @@ endif
 ifneq (,$(findstring LJ_ABI_PAUTH 1,$(TARGET_TESTARCH)))
   DASM_AFLAGS+= -D PAUTH
   TARGET_ARCH+= -DLJ_ABI_PAUTH=1
+endif
+ifneq (,$(findstring LJ_ABI_BRANCH_TRACK 1,$(TARGET_TESTARCH)))
+  DASM_AFLAGS+= -D BRANCH_TRACK
+  TARGET_ARCH+= -DLJ_ABI_BRANCH_TRACK=1
+endif
+ifneq (,$(findstring LJ_ABI_SHADOW_STACK 1,$(TARGET_TESTARCH)))
+  DASM_AFLAGS+= -D SHADOW_STACK
+  TARGET_ARCH+= -DLJ_ABI_SHADOW_STACK=1
 endif
 DASM_AFLAGS+= -D VER=$(subst LJ_ARCH_VERSION_,,$(filter LJ_ARCH_VERSION_%,$(subst LJ_ARCH_VERSION ,LJ_ARCH_VERSION_,$(TARGET_TESTARCH))))
 ifeq (Windows,$(TARGET_SYS))

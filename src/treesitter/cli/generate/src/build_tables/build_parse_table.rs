@@ -312,6 +312,12 @@ impl<'a> ParseTableBuilder<'a> {
             }
         }
 
+        let non_terminal_sets_len = non_terminal_extra_item_sets_by_first_terminal.len();
+        self.non_terminal_extra_states
+            .reserve(non_terminal_sets_len);
+        self.parse_state_info_by_id.reserve(non_terminal_sets_len);
+        self.parse_table.states.reserve(non_terminal_sets_len);
+        self.parse_state_queue.reserve(non_terminal_sets_len);
         // Add a state for each starting terminal of a non-terminal extra rule.
         for (terminal, item_set) in non_terminal_extra_item_sets_by_first_terminal {
             if terminal.is_non_terminal() {
@@ -320,9 +326,10 @@ impl<'a> ParseTableBuilder<'a> {
                 ))?;
             }
 
-            self.non_terminal_extra_states
-                .push((terminal, self.parse_table.states.len()));
-            self.add_parse_state(&Vec::new(), &Vec::new(), item_set);
+            // Add the parse state, and *then* push the terminal and the state id into the
+            // list of nonterminal extra states
+            let state_id = self.add_parse_state(&Vec::new(), &Vec::new(), item_set);
+            self.non_terminal_extra_states.push((terminal, state_id));
         }
 
         while let Some(entry) = self.parse_state_queue.pop_front() {
@@ -908,7 +915,7 @@ impl<'a> ParseTableBuilder<'a> {
 
         let get_rule_names = |items: &[&ParseItem]| -> Vec<String> {
             let mut last_rule_id = None;
-            let mut result = Vec::new();
+            let mut result = Vec::with_capacity(items.len());
             for item in items {
                 if last_rule_id == Some(item.variable_index) {
                     continue;

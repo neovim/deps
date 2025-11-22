@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeMap, HashSet},
     fmt::Write,
     fs,
     io::{self, Write as _},
@@ -82,9 +82,9 @@ impl<'de> Deserialize<'de> for Theme {
     {
         let mut styles = Vec::new();
         let mut highlight_names = Vec::new();
-        if let Ok(colors) = HashMap::<String, Value>::deserialize(deserializer) {
-            highlight_names.reserve(colors.len());
+        if let Ok(colors) = BTreeMap::<String, Value>::deserialize(deserializer) {
             styles.reserve(colors.len());
+            highlight_names.reserve(colors.len());
             for (name, style_value) in colors {
                 let mut style = Style::default();
                 parse_style(&mut style, style_value);
@@ -127,7 +127,7 @@ impl Serialize for Theme {
                 || effects.contains(Effects::ITALIC)
                 || effects.contains(Effects::UNDERLINE)
             {
-                let mut style_json = HashMap::new();
+                let mut style_json = BTreeMap::new();
                 if let Some(color) = color {
                     style_json.insert("color", color);
                 }

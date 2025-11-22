@@ -11,7 +11,7 @@ const PREC = {
 };
 
 // Identifiers cannot start with `.`
-const IDENTIFIER = /[a-zA-Z0-9\-_\$][a-zA-Z0-9.\-_\$]*/;
+const IDENTIFIER = /[a-zA-Z0-9\-_][a-zA-Z0-9.\-_]*/;
 
 module.exports = grammar({
   name: "query",
@@ -51,17 +51,8 @@ module.exports = grammar({
       immediate_child($._named_node_expression),
     ),
 
-    // Taken from https://github.com/tree-sitter/tree-sitter-javascript/blob/3f8b62f9befd3cb3b4cb0de22f6595a0aadf76ca/grammar.js#L827
-    escape_sequence: _ => token.immediate(seq(
-      '\\',
-      choice(
-        /[^xu0-7]/,
-        /[0-7]{1,3}/,
-        /x[0-9a-fA-F]{2}/,
-        /u[0-9a-fA-F]{4}/,
-        /u\{[0-9a-fA-F]+\}/
-      )
-    )),
+    // Taken from https://github.com/tree-sitter/tree-sitter/blob/4339b0fe05b264082bd159a77b21fc5d586c3a29/lib/src/query.c#L2056
+    escape_sequence: _ => token.immediate(seq('\\', /./)),
 
     quantifier: _ => choice("*", "+", "?"),
 
@@ -72,16 +63,16 @@ module.exports = grammar({
     string: $ => seq(
       '"',
       optional($.string_content),
-      '"',
+      token.immediate('"'),
     ),
-    string_content: $ => repeat1(choice(token.immediate(prec(PREC.STRING, /[^"\\]+/)), $.escape_sequence)),
+    string_content: $ => repeat1(choice(token.immediate(prec(PREC.STRING, /[^"\\\n]+/)), $.escape_sequence)),
     parameters: $ => repeat1(choice($.capture, $.string, $._node_identifier)),
     comment: _ => token(prec(PREC.COMMENT, seq(";", /.*/))),
-    list: $ => seq("[", repeat($.definition), "]", quantifier($), captures($)),
+    list: $ => seq("[", repeat1($.definition), "]", quantifier($), captures($)),
 
     grouping: $ => seq(
       "(",
-      repeat(seq($._group_expression, optional("."))),
+      repeat1(seq($._group_expression, optional("."))),
       ")",
       quantifier($),
       captures($),
@@ -136,7 +127,7 @@ module.exports = grammar({
       seq(
         "(",
         field("name", seq(choice("#", "."), $._immediate_identifier, field("type", $.predicate_type))),
-        field("parameters", $.parameters),
+        optional(field("parameters", $.parameters)),
         ")"
       ),
     predicate_type: _ => token.immediate(choice("?", "!")),

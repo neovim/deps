@@ -699,8 +699,7 @@ impl Parser {
             drop(unsafe { Box::from_raw(prev_logger.payload.cast::<Logger>()) });
         }
 
-        let c_logger;
-        if let Some(logger) = logger {
+        let c_logger = if let Some(logger) = logger {
             let container = Box::new(logger);
 
             unsafe extern "C" fn log(
@@ -721,16 +720,16 @@ impl Parser {
 
             let raw_container = Box::into_raw(container);
 
-            c_logger = ffi::TSLogger {
+            ffi::TSLogger {
                 payload: raw_container.cast::<c_void>(),
                 log: Some(log),
-            };
+            }
         } else {
-            c_logger = ffi::TSLogger {
+            ffi::TSLogger {
                 payload: ptr::null_mut(),
                 log: None,
-            };
-        }
+            }
+        };
 
         unsafe { ffi::ts_parser_set_logger(self.0.as_ptr(), c_logger) };
     }
@@ -1222,7 +1221,7 @@ impl Parser {
             len: u32,
             code_point: *mut i32,
         ) -> u32 {
-            let (c, len) = D::decode(std::slice::from_raw_parts(data, len as usize));
+            let (c, len) = D::decode(core::slice::from_raw_parts(data, len as usize));
             if let Some(code_point) = code_point.as_mut() {
                 *code_point = c;
             }
@@ -1422,7 +1421,7 @@ impl Parser {
         if let Some(flag) = flag {
             ffi::ts_parser_set_cancellation_flag(
                 self.0.as_ptr(),
-                std::ptr::from_ref::<AtomicUsize>(flag).cast::<usize>(),
+                core::ptr::from_ref::<AtomicUsize>(flag).cast::<usize>(),
             );
         } else {
             ffi::ts_parser_set_cancellation_flag(self.0.as_ptr(), ptr::null());
@@ -1432,10 +1431,19 @@ impl Parser {
 
 impl Drop for Parser {
     fn drop(&mut self) {
-        self.stop_printing_dot_graphs();
+        #[cfg(feature = "std")]
+        #[cfg(not(target_os = "wasi"))]
+        {
+            self.stop_printing_dot_graphs();
+        }
         self.set_logger(None);
         unsafe { ffi::ts_parser_delete(self.0.as_ptr()) }
     }
+}
+
+#[cfg(windows)]
+extern "C" {
+    fn _open_osfhandle(osfhandle: isize, flags: core::ffi::c_int) -> core::ffi::c_int;
 }
 
 impl Tree {
@@ -1547,7 +1555,8 @@ impl Tree {
         #[cfg(windows)]
         {
             let handle = file.as_raw_handle();
-            unsafe { ffi::ts_tree_print_dot_graph(self.0.as_ptr(), handle as i32) }
+            let fd = unsafe { _open_osfhandle(handle as isize, 0) };
+            unsafe { ffi::ts_tree_print_dot_graph(self.0.as_ptr(), fd) }
         }
     }
 }
@@ -2058,7 +2067,7 @@ impl<'tree> Node<'tree> {
 
     #[must_use]
     pub fn utf16_text<'a>(&self, source: &'a [u16]) -> &'a [u16] {
-        &source[self.start_byte()..self.end_byte()]
+        &source[self.start_byte() / 2..self.end_byte() / 2]
     }
 
     /// Create a new [`TreeCursor`] starting from this node.
@@ -2087,7 +2096,7 @@ impl<'tree> Node<'tree> {
 
 impl PartialEq for Node<'_> {
     fn eq(&self, other: &Self) -> bool {
-        self.0.id == other.0.id
+        core::ptr::eq(self.0.id, other.0.id)
     }
 }
 
@@ -2440,7 +2449,7 @@ impl Query {
                 // Error types that report names
                 ffi::TSQueryErrorNodeType | ffi::TSQueryErrorField | ffi::TSQueryErrorCapture => {
                     let suffix = source.split_at(offset).1;
-                    let in_quotes = source.as_bytes()[offset - 1] == b'"';
+                    let in_quotes = offset > 0 && source.as_bytes()[offset - 1] == b'"';
                     let mut backslashes = 0;
                     let end_offset = suffix
                         .find(|c| {
@@ -3349,9 +3358,11 @@ impl<'tree> QueryMatch<'_, 'tree> {
             .iter()
             .all(|predicate| match predicate {
                 TextPredicateCapture::EqCapture(i, j, is_positive, match_all_nodes) => {
-                    let mut nodes_1 = self.nodes_for_capture_index(*i);
-                    let mut nodes_2 = self.nodes_for_capture_index(*j);
-                    while let (Some(node1), Some(node2)) = (nodes_1.next(), nodes_2.next()) {
+                    let mut nodes_1 = self.nodes_for_capture_index(*i).peekable();
+                    let mut nodes_2 = self.nodes_for_capture_index(*j).peekable();
+                    while nodes_1.peek().is_some() && nodes_2.peek().is_some() {
+                        let node1 = nodes_1.next().unwrap();
+                        let node2 = nodes_2.next().unwrap();
                         let mut text1 = text_provider.text(node1);
                         let mut text2 = text_provider.text(node2);
                         let text1 = node_text1.get_text(&mut text1);

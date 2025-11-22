@@ -169,6 +169,7 @@ pub fn run_wasm(args: &BuildWasm) -> Result<()> {
         "-D", "NDEBUG=",
         "-D", "_POSIX_C_SOURCE=200112L",
         "-D", "_DEFAULT_SOURCE=",
+        "-D", "_DARWIN_C_SOURCE=",
         "-I", "lib/src",
         "-I", "lib/include",
         "--js-library", "lib/binding_web/lib/imports.js",
@@ -223,6 +224,7 @@ pub fn run_wasm_stdlib() -> Result<()> {
             "stdlib.wasm",
             "-Os",
             "-fPIC",
+            "-DTREE_SITTER_FEATURE_WASM",
             "-Wl,--no-entry",
             "-Wl,--stack-first",
             "-Wl,-z",
@@ -234,6 +236,7 @@ pub fn run_wasm_stdlib() -> Result<()> {
             "-Wl,--export=reset_heap",
             "-Wl,--export=__wasm_call_ctors",
             "-Wl,--export=__stack_pointer",
+            "-Wl,--export=reset_heap",
         ])
         .args(export_flags)
         .arg("lib/src/wasm/stdlib.c")

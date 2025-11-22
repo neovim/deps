@@ -29,6 +29,9 @@ serde.workspace = true
 serde_json.workspace = true
 smallbitvec.workspace = true
 thiserror.workspace = true
-url.workspace = true
+topological-sort.workspace = true
 
 tree-sitter.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+url.workspace = true

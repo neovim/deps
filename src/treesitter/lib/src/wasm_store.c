@@ -754,6 +754,7 @@ TSWasmStore *ts_wasm_store_new(TSWasmEngine *engine, TSWasmError *wasm_error) {
   wasmtime_val_t stack_pointer_value = WASM_I32_VAL(0);
   wasmtime_global_t stack_pointer_global;
   error = wasmtime_global_new(context, var_i32_type, &stack_pointer_value, &stack_pointer_global);
+  wasm_globaltype_delete(var_i32_type);
   ts_assert(!error);
 
   *self = (TSWasmStore) {
@@ -946,7 +947,7 @@ void ts_wasm_store_delete(TSWasmStore *self) {
   wasmtime_store_delete(self->store);
   wasm_engine_delete(self->engine);
   for (unsigned i = 0; i < self->language_instances.size; i++) {
-    LanguageWasmInstance *instance = &self->language_instances.contents[i];
+    LanguageWasmInstance *instance = array_get(&self->language_instances, i);
     language_id_delete(instance->language_id);
   }
   array_delete(&self->language_instances);
@@ -956,7 +957,7 @@ void ts_wasm_store_delete(TSWasmStore *self) {
 size_t ts_wasm_store_language_count(const TSWasmStore *self) {
   size_t result = 0;
   for (unsigned i = 0; i < self->language_instances.size; i++) {
-    const WasmLanguageId *id = self->language_instances.contents[i].language_id;
+    const WasmLanguageId *id = array_get(&self->language_instances, i)->language_id;
     if (!id->is_language_deleted) {
       result++;
     }
@@ -1376,11 +1377,12 @@ const TSLanguage *ts_wasm_store_load_language(
       if (symbol == 0) break;
       uint16_t value_count;
       memcpy(&value_count, &memory[wasm_language.alias_map + alias_map_size], sizeof(value_count));
+      alias_map_size += sizeof(uint16_t);
       alias_map_size += value_count * sizeof(TSSymbol);
     }
     language->alias_map = copy(
       &memory[wasm_language.alias_map],
-      alias_map_size * sizeof(TSSymbol)
+      alias_map_size
     );
     language->alias_sequences = copy(
       &memory[wasm_language.alias_sequences],
@@ -1450,7 +1452,7 @@ const TSLanguage *ts_wasm_store_load_language(
 
   // Clear out any instances of languages that have been deleted.
   for (unsigned i = 0; i < self->language_instances.size; i++) {
-    WasmLanguageId *id = self->language_instances.contents[i].language_id;
+    WasmLanguageId *id = array_get(&self->language_instances, i)->language_id;
     if (id->is_language_deleted) {
       language_id_delete(id);
       array_erase(&self->language_instances, i);
@@ -1491,7 +1493,7 @@ bool ts_wasm_store_add_language(
   // instances of languages that have been deleted.
   bool exists = false;
   for (unsigned i = 0; i < self->language_instances.size; i++) {
-    WasmLanguageId *id = self->language_instances.contents[i].language_id;
+    WasmLanguageId *id = array_get(&self->language_instances, i)->language_id;
     if (id->is_language_deleted) {
       language_id_delete(id);
       array_erase(&self->language_instances, i);
@@ -1562,7 +1564,7 @@ bool ts_wasm_store_start(TSWasmStore *self, TSLexer *lexer, const TSLanguage *la
   uint32_t instance_index;
   if (!ts_wasm_store_add_language(self, language, &instance_index)) return false;
   self->current_lexer = lexer;
-  self->current_instance = &self->language_instances.contents[instance_index];
+  self->current_instance = array_get(&self->language_instances, instance_index);
   self->has_error = false;
   ts_wasm_store_reset_heap(self);
   return true;

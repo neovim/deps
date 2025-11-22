@@ -350,12 +350,11 @@ fn test_highlighting_empty_lines() {
 fn test_highlighting_carriage_returns() {
     let source = "a = \"a\rb\"\r\nb\r";
 
-    // FIXME(amaanq): figure why this changed w/ JS's grammar changes
     assert_eq!(
         &to_html(source, &JS_HIGHLIGHT).unwrap(),
         &[
-            "<span class=variable>a</span> <span class=operator>=</span> <span class=string>&quot;a<span class=variable>b</span>&quot;</span>\n",
-            "<span class=variable>b</span>\n",
+            "<span class=variable>a</span> <span class=operator>=</span> <span class=string>&quot;a<span class=carriage-return></span><span class=variable>b</span>&quot;</span>\n",
+            "<span class=variable>b</span><span class=carriage-return></span>\n",
         ],
     );
 }
@@ -598,7 +597,7 @@ fn test_highlighting_via_c_api() {
     let output_line_offsets =
         unsafe { slice::from_raw_parts(output_line_offsets, output_line_count as usize) };
 
-    let mut lines = Vec::new();
+    let mut lines = Vec::with_capacity(output_line_count as usize);
     for i in 0..(output_line_count as usize) {
         let line_start = output_line_offsets[i] as usize;
         let line_end = output_line_offsets

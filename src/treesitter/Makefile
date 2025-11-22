@@ -2,7 +2,7 @@ ifeq ($(OS),Windows_NT)
 $(error Windows is not supported)
 endif
 
-VERSION := 0.25.3
+VERSION := 0.25.10
 DESCRIPTION := An incremental parsing system for programming tools
 HOMEPAGE_URL := https://tree-sitter.github.io/tree-sitter/
 
@@ -27,7 +27,7 @@ OBJ := $(SRC:.c=.o)
 ARFLAGS := rcs
 CFLAGS ?= -O3 -Wall -Wextra -Wshadow -Wpedantic -Werror=incompatible-pointer-types
 override CFLAGS += -std=c11 -fPIC -fvisibility=hidden
-override CFLAGS += -D_POSIX_C_SOURCE=200112L -D_DEFAULT_SOURCE
+override CFLAGS += -D_POSIX_C_SOURCE=200112L -D_DEFAULT_SOURCE -D_DARWIN_C_SOURCE
 override CFLAGS += -Ilib/src -Ilib/src/wasm -Ilib/include
 
 # ABI versioning
@@ -106,21 +106,15 @@ test-wasm:
 lint:
 	cargo update --workspace --locked --quiet
 	cargo check --workspace --all-targets
-	cargo +nightly fmt --all --check
-	cargo +stable clippy --workspace --all-targets -- -D warnings
-
-lint-nightly:
-	cargo update --workspace --locked --quiet
-	cargo check --workspace --all-targets
-	cargo +nightly fmt --all --check
-	cargo +nightly clippy --workspace --all-targets -- -D warnings
+	cargo fmt --all --check
+	cargo clippy --workspace --all-targets -- -D warnings
 
 lint-web:
 	npm --prefix lib/binding_web ci
 	npm --prefix lib/binding_web run lint
 
 format:
-	cargo +nightly fmt --all
+	cargo fmt --all
 
 changelog:
 	@git-cliff --config .github/cliff.toml --prepend CHANGELOG.md --latest --github-token $(shell gh auth token)

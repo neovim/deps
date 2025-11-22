@@ -43,6 +43,7 @@ fn main() {
         .include(&include_path)
         .define("_POSIX_C_SOURCE", "200112L")
         .define("_DEFAULT_SOURCE", None)
+        .define("_DARWIN_C_SOURCE", None)
         .warnings(false)
         .file(src_path.join("lib.c"))
         .compile("tree-sitter");
@@ -112,7 +113,10 @@ fn generate_bindings(out_dir: &std::path::Path) {
         .expect("Failed to generate bindings");
 
     let bindings_rs = out_dir.join("bindings.rs");
-    bindings
-        .write_to_file(&bindings_rs)
-        .unwrap_or_else(|_| panic!("Failed to write bindings into path: {bindings_rs:?}"));
+    bindings.write_to_file(&bindings_rs).unwrap_or_else(|_| {
+        panic!(
+            "Failed to write bindings into path: {}",
+            bindings_rs.display()
+        )
+    });
 }

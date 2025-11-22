@@ -11,6 +11,7 @@ use std::{
     ffi::{OsStr, OsString},
     fs,
     io::{BufRead, BufReader},
+    marker::PhantomData,
     mem,
     path::{Path, PathBuf},
     process::Command,
@@ -18,9 +19,7 @@ use std::{
     time::SystemTime,
 };
 
-#[cfg(any(feature = "tree-sitter-highlight", feature = "tree-sitter-tags"))]
-use anyhow::Error;
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, Context, Error, Result};
 use etcetera::BaseStrategy as _;
 use fs4::fs_std::FileExt;
 use indoc::indoc;
@@ -327,6 +326,7 @@ pub struct LanguageConfiguration<'a> {
     highlight_names: &'a Mutex<Vec<String>>,
     #[cfg(feature = "tree-sitter-highlight")]
     use_all_highlight_names: bool,
+    _phantom: PhantomData<&'a ()>,
 }
 
 pub struct Loader {
@@ -561,8 +561,8 @@ impl Loader {
                 // If multiple language configurations match, then determine which
                 // one to use by applying the configurations' content regexes.
                 else {
-                    let file_contents =
-                        fs::read(path).with_context(|| format!("Failed to read path {path:?}"))?;
+                    let file_contents = fs::read(path)
+                        .with_context(|| format!("Failed to read path {}", path.display()))?;
                     let file_contents = String::from_utf8_lossy(&file_contents);
                     let mut best_score = -2isize;
                     let mut best_configuration_id = None;
@@ -780,8 +780,8 @@ impl Loader {
         if recompile {
             fs::create_dir_all(lock_path.parent().unwrap()).with_context(|| {
                 format!(
-                    "Failed to create directory {:?}",
-                    lock_path.parent().unwrap()
+                    "Failed to create directory {}",
+                    lock_path.parent().unwrap().display()
                 )
             })?;
             let lock_file = fs::OpenOptions::new()
@@ -799,7 +799,7 @@ impl Loader {
         }
 
         let library = unsafe { Library::new(&output_path) }
-            .with_context(|| format!("Error opening dynamic library {output_path:?}"))?;
+            .with_context(|| format!("Error opening dynamic library {}", output_path.display()))?;
         let language = unsafe {
             let language_fn = library
                 .get::<Symbol<unsafe extern "C" fn() -> Language>>(language_fn_name.as_bytes())
@@ -1214,6 +1214,7 @@ impl Loader {
                     highlight_names: &self.highlight_names,
                     #[cfg(feature = "tree-sitter-highlight")]
                     use_all_highlight_names: self.use_all_highlight_names,
+                    _phantom: PhantomData,
                 };
 
                 for file_type in &configuration.file_types {
@@ -1283,6 +1284,7 @@ impl Loader {
                 highlight_names: &self.highlight_names,
                 #[cfg(feature = "tree-sitter-highlight")]
                 use_all_highlight_names: self.use_all_highlight_names,
+                _phantom: PhantomData,
             };
             self.language_configurations.push(unsafe {
                 mem::transmute::<LanguageConfiguration<'_>, LanguageConfiguration<'static>>(
@@ -1564,7 +1566,7 @@ impl LanguageConfiguration<'_> {
         error.row = source[range.start..offset_within_section]
             .matches('\n')
             .count();
-        Error::from(error).context(format!("Error in query file {path:?}"))
+        Error::from(error).context(format!("Error in query file {}", path.display()))
     }
 
     #[allow(clippy::type_complexity)]
@@ -1581,7 +1583,7 @@ impl LanguageConfiguration<'_> {
                 let abs_path = self.root_path.join(path);
                 let prev_query_len = query.len();
                 query += &fs::read_to_string(&abs_path)
-                    .with_context(|| format!("Failed to read query file {path:?}"))?;
+                    .with_context(|| format!("Failed to read query file {}", path.display()))?;
                 path_ranges.push((path.clone(), prev_query_len..query.len()));
             }
         } else {
@@ -1599,7 +1601,7 @@ impl LanguageConfiguration<'_> {
             let path = queries_path.join(default_path);
             if path.exists() {
                 query = fs::read_to_string(&path)
-                    .with_context(|| format!("Failed to read query file {path:?}"))?;
+                    .with_context(|| format!("Failed to read query file {}", path.display()))?;
                 path_ranges.push((PathBuf::from(default_path), 0..query.len()));
             }
         }
@@ -1612,8 +1614,8 @@ fn needs_recompile(lib_path: &Path, paths_to_check: &[PathBuf]) -> Result<bool> 
     if !lib_path.exists() {
         return Ok(true);
     }
-    let lib_mtime =
-        mtime(lib_path).with_context(|| format!("Failed to read mtime of {lib_path:?}"))?;
+    let lib_mtime = mtime(lib_path)
+        .with_context(|| format!("Failed to read mtime of {}", lib_path.display()))?;
     for path in paths_to_check {
         if mtime(path)? > lib_mtime {
             return Ok(true);

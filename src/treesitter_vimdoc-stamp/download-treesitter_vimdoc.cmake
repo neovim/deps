@@ -22,16 +22,16 @@ function(check_file_hash has_hash hash_is_good)
   set("${has_hash}" TRUE PARENT_SCOPE)
 
   message(VERBOSE "verifying file...
-       file='/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter_vimdoc/v3.0.1.tar.gz'")
+       file='/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter_vimdoc/v4.0.0.tar.gz'")
 
-  file("SHA256" "/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter_vimdoc/v3.0.1.tar.gz" actual_value)
+  file("SHA256" "/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter_vimdoc/v4.0.0.tar.gz" actual_value)
 
-  if(NOT "${actual_value}" STREQUAL "76b65e5bee9ff78eb21256619b1995aac4d80f252c19e1c710a4839481ded09e")
+  if(NOT "${actual_value}" STREQUAL "8096794c0f090b2d74b7bff94548ac1be3285b929ec74f839bd9b3ff4f4c6a0b")
     set("${hash_is_good}" FALSE PARENT_SCOPE)
     message(VERBOSE "SHA256 hash of
-    /home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter_vimdoc/v3.0.1.tar.gz
+    /home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter_vimdoc/v4.0.0.tar.gz
   does not match expected value
-    expected: '76b65e5bee9ff78eb21256619b1995aac4d80f252c19e1c710a4839481ded09e'
+    expected: '8096794c0f090b2d74b7bff94548ac1be3285b929ec74f839bd9b3ff4f4c6a0b'
       actual: '${actual_value}'")
   else()
     set("${hash_is_good}" TRUE PARENT_SCOPE)
@@ -71,32 +71,32 @@ function(sleep_before_download attempt)
   execute_process(COMMAND "${CMAKE_COMMAND}" -E sleep "${sleep_seconds}")
 endfunction()
 
-if(EXISTS "/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter_vimdoc/v3.0.1.tar.gz")
+if(EXISTS "/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter_vimdoc/v4.0.0.tar.gz")
   check_file_hash(has_hash hash_is_good)
   if(has_hash)
     if(hash_is_good)
       message(VERBOSE "File already exists and hash match (skip download):
-  file='/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter_vimdoc/v3.0.1.tar.gz'
-  SHA256='76b65e5bee9ff78eb21256619b1995aac4d80f252c19e1c710a4839481ded09e'"
+  file='/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter_vimdoc/v4.0.0.tar.gz'
+  SHA256='8096794c0f090b2d74b7bff94548ac1be3285b929ec74f839bd9b3ff4f4c6a0b'"
       )
       return()
     else()
       message(VERBOSE "File already exists but hash mismatch. Removing...")
-      file(REMOVE "/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter_vimdoc/v3.0.1.tar.gz")
+      file(REMOVE "/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter_vimdoc/v4.0.0.tar.gz")
     endif()
   else()
     message(VERBOSE "File already exists but no hash specified (use URL_HASH):
-  file='/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter_vimdoc/v3.0.1.tar.gz'
+  file='/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter_vimdoc/v4.0.0.tar.gz'
 Old file will be removed and new file downloaded from URL."
     )
-    file(REMOVE "/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter_vimdoc/v3.0.1.tar.gz")
+    file(REMOVE "/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter_vimdoc/v4.0.0.tar.gz")
   endif()
 endif()
 
 set(retry_number 5)
 
 message(VERBOSE "Downloading...
-   dst='/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter_vimdoc/v3.0.1.tar.gz'
+   dst='/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter_vimdoc/v4.0.0.tar.gz'
    timeout='none'
    inactivity timeout='none'"
 )
@@ -107,7 +107,7 @@ foreach(i RANGE ${retry_number})
   if(status_code IN_LIST download_retry_codes)
     sleep_before_download(${i})
   endif()
-  foreach(url IN ITEMS [====[https://github.com/neovim/tree-sitter-vimdoc/archive/v3.0.1.tar.gz]====])
+  foreach(url IN ITEMS [====[https://github.com/neovim/tree-sitter-vimdoc/archive/v4.0.0.tar.gz]====])
     if(NOT url IN_LIST skip_url_list)
       message(VERBOSE "Using src='${url}'")
 
@@ -119,7 +119,7 @@ foreach(i RANGE ${retry_number})
 
       file(
         DOWNLOAD
-        "${url}" "/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter_vimdoc/v3.0.1.tar.gz"
+        "${url}" "/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter_vimdoc/v4.0.0.tar.gz"
         
         # no TIMEOUT
         # no INACTIVITY_TIMEOUT
@@ -136,7 +136,7 @@ foreach(i RANGE ${retry_number})
         check_file_hash(has_hash hash_is_good)
         if(has_hash AND NOT hash_is_good)
           message(VERBOSE "Hash mismatch, removing...")
-          file(REMOVE "/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter_vimdoc/v3.0.1.tar.gz")
+          file(REMOVE "/home/runner/work/deps/deps/neovim/deps/build/downloads/treesitter_vimdoc/v4.0.0.tar.gz")
         else()
           message(VERBOSE "Downloading... done")
           return()

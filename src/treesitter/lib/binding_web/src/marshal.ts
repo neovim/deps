@@ -34,8 +34,8 @@ export function unmarshalCaptures(
  *
  * Marshals a {@link Node} to the transfer buffer.
  */
-export function marshalNode(node: Node) {
-  let address = TRANSFER_BUFFER;
+export function marshalNode(node: Node, index = 0) {
+  let address = TRANSFER_BUFFER + index * SIZE_OF_NODE;
   C.setValue(address, node.id, 'i32');
   address += SIZE_OF_INT;
   C.setValue(address, node.startIndex, 'i32');
@@ -168,10 +168,9 @@ export function marshalEdit(edit: Edit, address = TRANSFER_BUFFER) {
  *
  * Unmarshals a {@link LanguageMetadata} from the transfer buffer.
  */
-export function unmarshalLanguageMetadata(address: number): LanguageMetadata {
-  const result = {} as LanguageMetadata;
-  result.major_version = C.getValue(address, 'i32'); address += SIZE_OF_INT;
-  result.minor_version = C.getValue(address, 'i32'); address += SIZE_OF_INT;
-  result.field_count = C.getValue(address, 'i32');
-  return result;
+export function unmarshalLanguageMetadata(address: number): LanguageMetadata {  
+  const major_version = C.getValue(address, 'i32');
+  const minor_version = C.getValue(address += SIZE_OF_INT, 'i32');
+  const patch_version = C.getValue(address += SIZE_OF_INT, 'i32');
+  return { major_version, minor_version, patch_version };
 }

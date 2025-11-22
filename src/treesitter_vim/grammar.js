@@ -104,6 +104,7 @@ module.exports = grammar({
     [$.binary_operation, $.field_expression],
     [$._ident, $.lambda_expression],
     [$._ident, $._immediate_lambda_expression],
+    [$._complete_range_marker, $._range_marker]
   ],
 
   externals: ($) =>
@@ -204,12 +205,14 @@ module.exports = grammar({
           $.visual_statement,
           $.view_statement,
           $.eval_statement,
+          $.substitute_statement,
           $.user_command
         )
       ),
 
     unknown_builtin_statement: ($) =>
       seq(
+        optional(field("range", alias($._complete_range, $.range))),
         maybe_bang($, $.unknown_command_name),
         alias(repeat($.command_argument), $.arguments)
       ),
@@ -307,7 +310,10 @@ module.exports = grammar({
     colorscheme_statement: ($) =>
       command($, "colorscheme", optional(alias($.filename, $.name))),
 
-    lua_statement: ($) => command($, "lua", choice($.chunk, $.script)),
+    lua_statement: ($) => choice(
+      command($, "lua", choice($.chunk, $.script)),
+      seq("=", choice($.chunk, $.script))
+    ),
     ruby_statement: ($) => command($, "ruby", choice($.chunk, $.script)),
     python_statement: ($) => command($, "python", choice($.chunk, $.script)),
     perl_statement: ($) => command($, "perl", choice($.chunk, $.script)),
@@ -319,6 +325,7 @@ module.exports = grammar({
     script: ($) =>
       seq(
         "<<",
+        optional(alias("trim", $.parameter)),
         choice(alias($._script_heredoc_marker, $.marker_definition), "\n"),
         alias(repeat($._heredoc_line), $.body),
         alias($._heredoc_end, $.endmarker)
@@ -481,6 +488,7 @@ module.exports = grammar({
           $.register,
           $.option,
           $.index_expression,
+          $.slice_expression,
           $.field_expression,
           $.list_assignment
         ),
@@ -591,6 +599,7 @@ module.exports = grammar({
 
     user_command: ($) =>
       seq(
+        optional(field("range", alias($._complete_range, $.range))),
         maybe_bang($, $.command_name),
         alias(repeat($.command_argument), $.arguments)
       ),
@@ -665,6 +674,27 @@ module.exports = grammar({
         $.last_line,
         seq("/", $.pattern, optional(token.immediate("/"))),
         seq("?", $.pattern, optional(token.immediate("?"))),
+        $.previous_pattern,
+        $.mark
+      ),
+
+    _complete_range: ($) =>
+      choice(alias("%", $.file), $._complete_range_explicit),
+
+    _complete_range_explicit: ($) =>
+      seq(
+        field("start", $._complete_range_marker),
+        optional(seq(choice(",", ";"), field("end", $._complete_range_marker)))
+      ),
+
+    _complete_range_marker: ($) =>
+      choice(
+        $.integer_literal,
+        $.current_line,
+        $.next_line,
+        $.last_line,
+        seq("/", $.pattern, token.immediate("/")),
+        seq("?", $.pattern, token.immediate("?")),
         $.previous_pattern,
         $.mark
       ),
@@ -1053,6 +1083,8 @@ module.exports = grammar({
 
     eval_statement: ($) => command($, "eval", $._expression),
 
+    substitute_statement: ($) => range_command($, "substitute", $.pattern),
+
     _method_call_expression: ($) =>
       seq(
         field(
@@ -1244,7 +1276,7 @@ function command_modifier($, name, bang) {
 }
 
 function _cmd_range($) {
-  return seq(field("range", alias($._range, $.range)), optional(":"));
+  return seq(field("range", alias($._complete_range, $.range)), optional(":"));
 }
 function range_command($, cmd, ...args) {
   return seq(optional(_cmd_range($)), keyword($, cmd), ...args);

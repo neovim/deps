@@ -98,6 +98,7 @@ const TESTS_SWIFT_TEMPLATE: &str = include_str!("./templates/tests.swift");
 const BUILD_ZIG_TEMPLATE: &str = include_str!("./templates/build.zig");
 const BUILD_ZIG_ZON_TEMPLATE: &str = include_str!("./templates/build.zig.zon");
 const ROOT_ZIG_TEMPLATE: &str = include_str!("./templates/root.zig");
+const TEST_ZIG_TEMPLATE: &str = include_str!("./templates/test.zig");
 
 const TREE_SITTER_JSON_SCHEMA: &str =
     "https://tree-sitter.github.io/tree-sitter/assets/schemas/config.schema.json";
@@ -301,14 +302,36 @@ pub fn generate_grammar_files(
     };
 
     // Create package.json
-    missing_path(repo_path.join("package.json"), |path| {
-        generate_file(
-            path,
-            PACKAGE_JSON_TEMPLATE,
-            dashed_language_name.as_str(),
-            &generate_opts,
-        )
-    })?;
+    missing_path_else(
+        repo_path.join("package.json"),
+        allow_update,
+        |path| {
+            generate_file(
+                path,
+                PACKAGE_JSON_TEMPLATE,
+                dashed_language_name.as_str(),
+                &generate_opts,
+            )
+        },
+        |path| {
+            let contents = fs::read_to_string(path)?
+                .replace(
+                    r#""node-addon-api": "^8.3.1"#,
+                    r#""node-addon-api": "^8.5.0""#,
+                )
+                .replace(
+                    indoc! {r#"
+                    "prebuildify": "^6.0.1",
+                    "tree-sitter-cli":"#},
+                    indoc! {r#"
+                    "prebuildify": "^6.0.1",
+                    "tree-sitter": "^0.22.4",
+                    "tree-sitter-cli":"#},
+                );
+            write_file(path, contents)?;
+            Ok(())
+        },
+    )?;
 
     // Do not create a grammar.js file in a repo with multiple language configs
     if !tree_sitter_config.has_multiple_language_configs() {
@@ -371,14 +394,25 @@ pub fn generate_grammar_files(
                 generate_file(path, BUILD_RS_TEMPLATE, language_name, &generate_opts)
             })?;
 
-            missing_path(repo_path.join("Cargo.toml"), |path| {
-                generate_file(
-                    path,
-                    CARGO_TOML_TEMPLATE,
-                    dashed_language_name.as_str(),
-                    &generate_opts,
-                )
-            })?;
+            missing_path_else(
+                repo_path.join("Cargo.toml"),
+                allow_update,
+                |path| {
+                    generate_file(
+                        path,
+                        CARGO_TOML_TEMPLATE,
+                        dashed_language_name.as_str(),
+                        &generate_opts,
+                    )
+                },
+                |path| {
+                    let contents = fs::read_to_string(path)?;
+                    if contents.contains("\"LICENSE\"") {
+                        write_file(path, contents.replace("\"LICENSE\"", "\"/LICENSE\""))?;
+                    }
+                    Ok(())
+                },
+            )?;
 
             Ok(())
         })?;
@@ -394,6 +428,7 @@ pub fn generate_grammar_files(
                 |path| {
                     let contents = fs::read_to_string(path)?;
                     if !contents.contains("bun") {
+                        eprintln!("Replacing index.js");
                         generate_file(path, INDEX_JS_TEMPLATE, language_name, &generate_opts)?;
                     }
                     Ok(())
@@ -597,14 +632,32 @@ pub fn generate_grammar_files(
             })?;
 
             missing_path(path.join("tests"), create_dir)?.apply(|path| {
-                missing_path(path.join("test_binding.py"), |path| {
-                    generate_file(
-                        path,
-                        TEST_BINDING_PY_TEMPLATE,
-                        language_name,
-                        &generate_opts,
-                    )
-                })?;
+                missing_path_else(
+                    path.join("test_binding.py"),
+                    allow_update,
+                    |path| {
+                        generate_file(
+                            path,
+                            TEST_BINDING_PY_TEMPLATE,
+                            language_name,
+                            &generate_opts,
+                        )
+                    },
+                    |path| {
+                        let mut contents = fs::read_to_string(path)?;
+                        if !contents.contains("Parser(Language(") {
+                            contents = contents
+                                .replace("tree_sitter.Language(", "Parser(Language(")
+                                .replace(".language())\n", ".language()))\n")
+                                .replace(
+                                    "import tree_sitter\n",
+                                    "from tree_sitter import Language, Parser\n",
+                                );
+                            write_file(path, contents)?;
+                        }
+                        Ok(())
+                    },
+                )?;
                 Ok(())
             })?;
 
@@ -614,7 +667,7 @@ pub fn generate_grammar_files(
                 |path| generate_file(path, SETUP_PY_TEMPLATE, language_name, &generate_opts),
                 |path| {
                     let contents = fs::read_to_string(path)?;
-                    if !contents.contains("egg_info") || !contents.contains("Py_GIL_DISABLED") {
+                    if !contents.contains("build_ext") {
                         eprintln!("Replacing setup.py");
                         generate_file(path, SETUP_PY_TEMPLATE, language_name, &generate_opts)?;
                     }
@@ -653,22 +706,17 @@ pub fn generate_grammar_files(
     // Generate Swift bindings
     if tree_sitter_config.bindings.swift {
         missing_path(bindings_dir.join("swift"), create_dir)?.apply(|path| {
-            let lang_path = path.join(format!("TreeSitter{camel_name}"));
+            let lang_path = path.join(&class_name);
             missing_path(&lang_path, create_dir)?;
 
             missing_path(lang_path.join(format!("{language_name}.h")), |path| {
                 generate_file(path, PARSER_NAME_H_TEMPLATE, language_name, &generate_opts)
             })?;
 
-            missing_path(
-                path.join(format!("TreeSitter{camel_name}Tests")),
-                create_dir,
-            )?
-            .apply(|path| {
-                missing_path(
-                    path.join(format!("TreeSitter{camel_name}Tests.swift")),
-                    |path| generate_file(path, TESTS_SWIFT_TEMPLATE, language_name, &generate_opts),
-                )?;
+            missing_path(path.join(format!("{class_name}Tests")), create_dir)?.apply(|path| {
+                missing_path(path.join(format!("{class_name}Tests.swift")), |path| {
+                    generate_file(path, TESTS_SWIFT_TEMPLATE, language_name, &generate_opts)
+                })?;
 
                 Ok(())
             })?;
@@ -679,10 +727,13 @@ pub fn generate_grammar_files(
                 |path| generate_file(path, PACKAGE_SWIFT_TEMPLATE, language_name, &generate_opts),
                 |path| {
                     let mut contents = fs::read_to_string(path)?;
-                    contents = contents.replace(
-                        "https://github.com/ChimeHQ/SwiftTreeSitter",
-                        "https://github.com/tree-sitter/swift-tree-sitter",
-                    );
+                    contents = contents
+                        .replace(
+                            "https://github.com/ChimeHQ/SwiftTreeSitter",
+                            "https://github.com/tree-sitter/swift-tree-sitter",
+                        )
+                        .replace("version: \"0.8.0\")", "version: \"0.9.0\")")
+                        .replace("(url:", "(name: \"SwiftTreeSitter\", url:");
                     write_file(path, contents)?;
                     Ok(())
                 },
@@ -694,17 +745,54 @@ pub fn generate_grammar_files(
 
     // Generate Zig bindings
     if tree_sitter_config.bindings.zig {
-        missing_path(repo_path.join("build.zig"), |path| {
-            generate_file(path, BUILD_ZIG_TEMPLATE, language_name, &generate_opts)
-        })?;
+        missing_path_else(
+            repo_path.join("build.zig"),
+            allow_update,
+            |path| generate_file(path, BUILD_ZIG_TEMPLATE, language_name, &generate_opts),
+            |path| {
+                let contents = fs::read_to_string(path)?;
+                if !contents.contains("b.pkg_hash.len") {
+                    eprintln!("Replacing build.zig");
+                    generate_file(path, BUILD_ZIG_TEMPLATE, language_name, &generate_opts)
+                } else {
+                    Ok(())
+                }
+            },
+        )?;
 
-        missing_path(repo_path.join("build.zig.zon"), |path| {
-            generate_file(path, BUILD_ZIG_ZON_TEMPLATE, language_name, &generate_opts)
-        })?;
+        missing_path_else(
+            repo_path.join("build.zig.zon"),
+            allow_update,
+            |path| generate_file(path, BUILD_ZIG_ZON_TEMPLATE, language_name, &generate_opts),
+            |path| {
+                let contents = fs::read_to_string(path)?;
+                if !contents.contains(".name = .tree_sitter_") {
+                    eprintln!("Replacing build.zig.zon");
+                    generate_file(path, BUILD_ZIG_ZON_TEMPLATE, language_name, &generate_opts)
+                } else {
+                    Ok(())
+                }
+            },
+        )?;
 
         missing_path(bindings_dir.join("zig"), create_dir)?.apply(|path| {
-            missing_path(path.join("root.zig"), |path| {
-                generate_file(path, ROOT_ZIG_TEMPLATE, language_name, &generate_opts)
+            missing_path_else(
+                path.join("root.zig"),
+                allow_update,
+                |path| generate_file(path, ROOT_ZIG_TEMPLATE, language_name, &generate_opts),
+                |path| {
+                    let contents = fs::read_to_string(path)?;
+                    if contents.contains("ts.Language") {
+                        eprintln!("Replacing root.zig");
+                        generate_file(path, ROOT_ZIG_TEMPLATE, language_name, &generate_opts)
+                    } else {
+                        Ok(())
+                    }
+                },
+            )?;
+
+            missing_path(path.join("test.zig"), |path| {
+                generate_file(path, TEST_ZIG_TEMPLATE, language_name, &generate_opts)
             })?;
 
             Ok(())

@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.10)
 project (luv C ASM)
 
 set(LUV_VERSION_MAJOR 1)
-set(LUV_VERSION_MINOR 50)
+set(LUV_VERSION_MINOR 51)
 set(LUV_VERSION_PATCH 0)
 set(LUV_VERSION ${LUV_VERSION_MAJOR}.${LUV_VERSION_MINOR}.${LUV_VERSION_PATCH})
 
@@ -44,7 +44,7 @@ endif (NOT WITH_LUA_ENGINE)
 
 if (NOT LUA_BUILD_TYPE)
   set(LUA_BUILD_TYPE "Static"
-    CACHE STRING "Build Lua/LuaJIT as static, dynamic libary, or use system one" FORCE)
+    CACHE STRING "Build Lua/LuaJIT as static, dynamic library, or use system one" FORCE)
   set_property(CACHE LUA_BUILD_TYPE
     PROPERTY STRINGS  "Static;Dynamic;System")
 endif (NOT LUA_BUILD_TYPE)
