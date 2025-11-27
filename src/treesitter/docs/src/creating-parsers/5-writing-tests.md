@@ -77,10 +77,10 @@ These tests are important. They serve as the parser's API documentation, and the
 to verify that everything still parses correctly.
 
 By default, the `tree-sitter test` command runs all the tests in your `test/corpus/` folder. To run a particular test, you
-can use the `-f` flag:
+can use the `-i` flag:
 
 ```sh
-tree-sitter test -f 'Return statements'
+tree-sitter test -i 'Return statements'
 ```
 
 The recommendation is to be comprehensive in adding tests. If it's a visible node, add it to a test file in your `test/corpus`
@@ -99,16 +99,18 @@ you can repeat the attribute on a new line.
 
 The following attributes are available:
 
-* `:skip` — This attribute will skip the test when running `tree-sitter test`.
-  This is useful when you want to temporarily disable running a test without deleting it.
+* `:cst` - This attribute specifies that the expected output should be in the form of a CST instead of the normal S-expression. This
+CST matches the format given by `parse --cst`.
 * `:error` — This attribute will assert that the parse tree contains an error. It's useful to just validate that a certain
 input is invalid without displaying the whole parse tree, as such you should omit the parse tree below the `---` line.
-* `:fail-fast` — This attribute will stop the testing additional tests if the test marked with this attribute fails.
+* `:fail-fast` — This attribute will stop the testing of additional cases if the test marked with this attribute fails.
 * `:language(LANG)` — This attribute will run the tests using the parser for the specified language. This is useful for
 multi-parser repos, such as XML and DTD, or Typescript and TSX. The default parser used will always be the first entry in
 the `grammars` field in the `tree-sitter.json` config file, so having a way to pick a second or even third parser is useful.
 * `:platform(PLATFORM)` — This attribute specifies the platform on which the test should run. It is useful to test platform-specific
 behavior (e.g. Windows newlines are different from Unix). This attribute must match up with Rust's [`std::env::consts::OS`][constants].
+* `:skip` — This attribute will skip the test when running `tree-sitter test`.
+This is useful when you want to temporarily disable running a test without deleting it.
 
 Examples using attributes:
 
@@ -165,3 +167,4 @@ file is changed.
 [external-scanners]: ./4-external-scanners.md
 [node-field-names]: ../using-parsers/2-basic-parsing.md#node-field-names
 [s-exp]: https://en.wikipedia.org/wiki/S-expression
+[named-vs-anonymous-nodes]: ../using-parsers/2-basic-parsing.md#named-vs-anonymous-nodes

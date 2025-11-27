@@ -14,7 +14,7 @@ To make changes to Tree-sitter, you should have:
 2. A [Rust toolchain][rust], for compiling the Rust bindings, the highlighting library, and the CLI.
 3. Node.js and NPM, for generating parsers from `grammar.js` files.
 4. Either [Emscripten][emscripten], [Docker][docker], or [podman][podman] for
-compiling the library to WASM.
+compiling the library to Wasm.
 
 ### Building
 
@@ -25,7 +25,7 @@ git clone https://github.com/tree-sitter/tree-sitter
 cd tree-sitter
 ```
 
-Optionally, build the WASM library. If you skip this step, then the `tree-sitter playground` command will require an internet
+Optionally, build the Wasm library. If you skip this step, then the `tree-sitter playground` command will require an internet
 connection. If you have Emscripten installed, this will use your `emcc` compiler. Otherwise, it will use Docker or Podman:
 
 ```sh
@@ -45,7 +45,7 @@ This will create the `tree-sitter` CLI executable in the `target/release` folder
 If you want to automatically install the `tree-sitter` CLI in your system, you can run:
 
 ```sh
-cargo install --path cli
+cargo install --path crates/cli
 ```
 
 If you're going to be in a fast iteration cycle and would like the CLI to build faster, you can use the `release-dev` profile:
@@ -53,7 +53,7 @@ If you're going to be in a fast iteration cycle and would like the CLI to build 
 ```sh
 cargo build --release --profile release-dev
 # or
-cargo install --path cli --profile release-dev
+cargo install --path crates/cli --profile release-dev
 ```
 
 ### Testing
@@ -76,12 +76,24 @@ Then you can run the tests:
 cargo xtask test
 ```
 
-Similarly, to test the WASM binding, you need to compile these parsers to WASM:
+Similarly, to test the Wasm binding, you need to compile these parsers to Wasm:
 
 ```sh
 cargo xtask generate-fixtures --wasm
 cargo xtask test-wasm
 ```
+
+#### Wasm Stdlib
+
+The tree-sitter Wasm stdlib can be built via xtask:
+
+```sh
+cargo xtask build-wasm-stdlib
+```
+
+This command looks for the [Wasi SDK][wasi_sdk] indicated by the `TREE_SITTER_WASI_SDK_PATH`
+environment variable. If you don't have the binary, it can be downloaded from wasi-sdk's [releases][wasi-sdk-releases]
+page.
 
 ### Debugging
 
@@ -108,6 +120,13 @@ Additionally, if you want to run a particular _example_ from the corpus, you can
 cargo xtask test -l javascript -e Arrays
 ```
 
+If you are using `lldb` to debug the C library, tree-sitter provides custom pretty printers for several of its types. 
+You can enable these helpers by importing them:
+
+```sh
+(lldb) command script import /path/to/tree-sitter/lib/lldb_pretty_printers/tree_sitter_types.py
+```
+
 ## Published Packages
 
 The main [`tree-sitter/tree-sitter`][ts repo] repository contains the source code for
@@ -119,7 +138,7 @@ several packages that are published to package registries for different language
   * [`tree-sitter-cli`][cli crate] — The command-line tool
 
 * JavaScript modules on [npmjs.com][npmjs]:
-  * [`web-tree-sitter`][web-ts] — A WASM-based JavaScript binding to the core library
+  * [`web-tree-sitter`][web-ts] — A Wasm-based JavaScript binding to the core library
   * [`tree-sitter-cli`][cli package] — The command-line tool
 
 There are also several other dependent repositories that contain other published packages:
@@ -179,7 +198,7 @@ a short delay. Once you've made a change that you're happy with, you can submit 
 The playground page is a little more complicated, but if you know some basic JavaScript and CSS you should be able to make
 changes. The playground code can be found in [`docs/src/assets/js/playground.js`][playground], and its corresponding css
 at [`docs/src/assets/css/playground.css`][playground css]. The editor of choice we use for the playground is [CodeMirror][codemirror],
-and the tree-sitter module is fetched from [here][js url]. This, along with the wasm module and wasm parsers, live in the
+and the tree-sitter module is fetched from [here][js url]. This, along with the Wasm module and Wasm parsers, live in the
 [.github.io repo][gh.io repo].
 
 [admonish]: https://github.com/tommilligan/mdbook-admonish
@@ -197,7 +216,7 @@ and the tree-sitter module is fetched from [here][js url]. This, along with the 
 [go package]: https://pkg.go.dev/github.com/tree-sitter/go-tree-sitter
 [go ts]: https://github.com/tree-sitter/go-tree-sitter
 [highlight crate]: https://crates.io/crates/tree-sitter-highlight
-[js url]: https://tree-sitter.github.io/tree-sitter.js
+[js url]: https://tree-sitter.github.io/web-tree-sitter.js
 [lib crate]: https://crates.io/crates/tree-sitter
 [mdBook]: https://rust-lang.github.io/mdBook
 [mdbook cli]: https://rust-lang.github.io/mdBook/guide/installation.html
@@ -213,4 +232,6 @@ and the tree-sitter module is fetched from [here][js url]. This, along with the 
 [pypi]: https://pypi.org
 [rust]: https://rustup.rs
 [ts repo]: https://github.com/tree-sitter/tree-sitter
+[wasi_sdk]: https://github.com/WebAssembly/wasi-sdk
+[wasi-sdk-releases]: https://github.com/WebAssembly/wasi-sdk/releases
 [web-ts]: https://www.npmjs.com/package/web-tree-sitter

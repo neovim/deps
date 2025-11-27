@@ -1,10 +1,12 @@
 log*.html
+.direnv
 
 .idea
 *.xcodeproj
 .vscode
 .cache
 .zig-cache
+.direnv
 
 profile*
 fuzz-results
@@ -24,6 +26,7 @@ docs/assets/js/tree-sitter.js
 *.dylib
 *.so
 *.so.[0-9]*
+*.dll
 *.o
 *.obj
 *.exp
@@ -33,3 +36,5 @@ docs/assets/js/tree-sitter.js
 .build
 build
 zig-*
+
+/result

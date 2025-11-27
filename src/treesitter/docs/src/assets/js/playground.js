@@ -106,6 +106,7 @@ window.initializePlayground = async (opts) => {
 
   const codeInput = document.getElementById("code-input");
   const languageSelect = document.getElementById("language-select");
+  const languageVersion = document.getElementById('language-version');
   const loggingCheckbox = document.getElementById("logging-checkbox");
   const anonymousNodes = document.getElementById('anonymous-nodes-checkbox');
   const outputContainer = document.getElementById("output-container");
@@ -117,6 +118,7 @@ window.initializePlayground = async (opts) => {
   const queryContainer = document.getElementById("query-container");
   const queryInput = document.getElementById("query-input");
   const accessibilityCheckbox = document.getElementById("accessibility-checkbox");
+  const copyButton = document.getElementById("copy-button");
   const updateTimeSpan = document.getElementById("update-time");
   const languagesByName = {};
 
@@ -126,16 +128,15 @@ window.initializePlayground = async (opts) => {
 
   const parser = new Parser();
 
-  console.log(parser, codeInput, queryInput);
-
   const codeEditor = CodeMirror.fromTextArea(codeInput, {
     lineNumbers: true,
     showCursorWhenSelecting: true
   });
 
   codeEditor.on('keydown', (_, event) => {
-    if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
-      event.stopPropagation(); // Prevent mdBook from going back/forward
+    const key = event.key;
+    if (key === 'ArrowLeft' || key === 'ArrowRight' || key === '?') {
+      event.stopPropagation(); // Prevent mdBook from going back/forward, or showing help
     }
   });
 
@@ -145,8 +146,9 @@ window.initializePlayground = async (opts) => {
   });
 
   queryEditor.on('keydown', (_, event) => {
-    if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
-      event.stopPropagation(); // Prevent mdBook from going back/forward
+    const key = event.key;
+    if (key === 'ArrowLeft' || key === 'ArrowRight' || key === '?') {
+      event.stopPropagation(); // Prevent mdBook from going back/forward, or showing help
     }
   });
 
@@ -173,11 +175,12 @@ window.initializePlayground = async (opts) => {
   queryEditor.on("changes", debounce(handleQueryChange, 150));
 
   loggingCheckbox.addEventListener("change", handleLoggingChange);
-  anonymousNodes.addEventListener('change', renderTree);
+  anonymousNodes.addEventListener("change", renderTree);
   queryCheckbox.addEventListener("change", handleQueryEnableChange);
   accessibilityCheckbox.addEventListener("change", handleQueryChange);
   languageSelect.addEventListener("change", handleLanguageChange);
   outputContainer.addEventListener("click", handleTreeClick);
+  copyButton?.addEventListener("click", handleCopy);
 
   handleQueryEnableChange();
   await handleLanguageChange();
@@ -202,6 +205,15 @@ window.initializePlayground = async (opts) => {
 
     tree = null;
     languageName = newLanguageName;
+
+    const metadata = languagesByName[languageName].metadata;
+    if (languageVersion && metadata) {
+      languageVersion.textContent = `v${metadata.major_version}.${metadata.minor_version}.${metadata.patch_version}`;
+      languageVersion.style.visibility = 'visible';
+    } else if (languageVersion) {
+      languageVersion.style.visibility = 'hidden';
+    }
+
     parser.setLanguage(languagesByName[newLanguageName]);
     handleCodeChange();
     handleQueryChange();
@@ -292,10 +304,10 @@ window.initializePlayground = async (opts) => {
 
           const nodeClass =
             displayName === 'ERROR' || displayName.startsWith('MISSING')
-              ? 'node-link error'
+              ? 'node-link error plain'
               : cursor.nodeIsNamed
-                ? 'node-link named'
-                : 'node-link anonymous';
+                ? 'node-link named plain'
+                : 'node-link anonymous plain';
 
           row = `<div class="tree-row">${"  ".repeat(indentLevel)}${fieldName}` +
             `<a class='${nodeClass}' href="#" data-id=${id} ` +
@@ -486,14 +498,25 @@ window.initializePlayground = async (opts) => {
       const containerHeight = outputContainerScroll.clientHeight;
       const offset = treeRowHighlightedIndex * lineHeight;
       if (scrollTop > offset - 20) {
-        $(outputContainerScroll).animate({ scrollTop: offset - 20 }, 150);
+        outputContainerScroll.scrollTo({ top: offset - 20, behavior: 'smooth' });
       } else if (scrollTop < offset + lineHeight + 40 - containerHeight) {
-        $(outputContainerScroll).animate(
-          { scrollTop: offset - containerHeight + 40 },
-          150,
-        );
+        outputContainerScroll.scrollTo({
+          top: offset - containerHeight + 40,
+          behavior: 'smooth'
+        });
       }
     }
+  }
+
+  function handleCopy() {
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    const range = document.createRange();
+    range.selectNodeContents(outputContainer);
+    selection.addRange(range);
+    navigator.clipboard.writeText(selection.toString());
+    selection.removeRange(range);
+    showToast('Tree copied to clipboard!');
   }
 
   function handleTreeClick(event) {
@@ -618,5 +641,24 @@ window.initializePlayground = async (opts) => {
       timeout = setTimeout(later, wait);
       if (callNow) func.apply(context, args);
     };
+  }
+
+  function showToast(message) {
+    const existingToast = document.querySelector('.toast');
+    if (existingToast) {
+      existingToast.remove();
+    }
+
+    const toast = document.createElement('div');
+    toast.className = 'toast';
+    toast.textContent = message;
+    document.body.appendChild(toast);
+
+    setTimeout(() => toast.classList.add('show'), 50);
+
+    setTimeout(() => {
+      toast.classList.remove('show');
+      setTimeout(() => toast.remove(), 200);
+    }, 1000);
   }
 };

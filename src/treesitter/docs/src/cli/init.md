@@ -14,6 +14,10 @@ tree-sitter init [OPTIONS] # Aliases: i
 
 Update outdated generated files, if needed.
 
+### `-p/--grammar-path <PATH>`
+
+The path to the directory containing the grammar.
+
 ## Structure of `tree-sitter.json`
 
 The main file of interest for users to configure is `tree-sitter.json`, which tells the CLI information about your grammar,
@@ -100,7 +104,7 @@ Typically, this will all be set up when you run `tree-sitter init`, but you are 
 - `description` — The brief description of your grammar
 - `authors` (required) — An array of objects that contain a `name` field, and optionally an `email` and `url` field.
 Each field is a string
-- `links` — An object that contains a `repository` field, and optionally a `homepage` field. Each field is a string
+- `links` — An object that contains a `repository` field, and optionally a `funding` field. Each field is a string
 - `namespace` — The namespace for the `Java` and `Kotlin` bindings, defaults to `io.github.tree-sitter` if not provided
 
 ### The `bindings` field

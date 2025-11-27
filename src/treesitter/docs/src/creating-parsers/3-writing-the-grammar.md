@@ -74,11 +74,11 @@ you might start with something like this:
 
     return_statement: $ => seq(
       'return',
-      $._expression,
+      $.expression,
       ';'
     ),
 
-    _expression: $ => choice(
+    expression: $ => choice(
       $.identifier,
       $.number
       // TODO: other kinds of expressions
@@ -202,7 +202,7 @@ To produce a readable syntax tree, we'd like to model JavaScript expressions usi
 {
   // ...
 
-  _expression: $ => choice(
+  expression: $ => choice(
     $.identifier,
     $.unary_expression,
     $.binary_expression,
@@ -210,14 +210,14 @@ To produce a readable syntax tree, we'd like to model JavaScript expressions usi
   ),
 
   unary_expression: $ => choice(
-    seq('-', $._expression),
-    seq('!', $._expression),
+    seq('-', $.expression),
+    seq('!', $.expression),
     // ...
   ),
 
   binary_expression: $ => choice(
-    seq($._expression, '*', $._expression),
-    seq($._expression, '+', $._expression),
+    seq($.expression, '*', $.expression),
+    seq($.expression, '+', $.expression),
     // ...
   ),
 }
@@ -252,7 +252,7 @@ ambiguity.
 For an expression like `-a * b`, it's not clear whether the `-` operator applies to the `a * b` or just to the `a`. This
 is where the `prec` function [described in the previous page][grammar dsl] comes into play. By wrapping a rule with `prec`,
 we can indicate that certain sequence of symbols should _bind to each other more tightly_ than others. For example, the
-`'-', $._expression` sequence in `unary_expression` should bind more tightly than the `$._expression, '+', $._expression`
+`'-', $.expression` sequence in `unary_expression` should bind more tightly than the `$.expression, '+', $.expression`
 sequence in `binary_expression`:
 
 ```js
@@ -263,8 +263,8 @@ sequence in `binary_expression`:
     prec(
       2,
       choice(
-        seq("-", $._expression),
-        seq("!", $._expression),
+        seq("-", $.expression),
+        seq("!", $.expression),
         // ...
       ),
     );
@@ -299,8 +299,8 @@ This is where `prec.left` and `prec.right` come into use. We want to select the 
   // ...
 
   binary_expression: $ => choice(
-    prec.left(2, seq($._expression, '*', $._expression)),
-    prec.left(1, seq($._expression, '+', $._expression)),
+    prec.left(2, seq($.expression, '*', $.expression)),
+    prec.left(1, seq($.expression, '+', $.expression)),
     // ...
   ),
 }
@@ -313,7 +313,7 @@ A construct like `[x, y]` could be legitimately parsed as both an array literal 
 pattern (like in `let [x, y] = arr`).
 
 ```js
-module.exports = grammar({
+export default grammar({
   name: "javascript",
 
   rules: {
@@ -395,6 +395,131 @@ function_definition: $ =>
 
 Adding fields like this allows you to retrieve nodes using the [field APIs][field-names-section].
 
+## Using Extras
+
+Extras are tokens that can appear anywhere in the grammar, without being explicitly mentioned in a rule. This is useful
+for things like whitespace and comments, which can appear between any two tokens in most programming languages. To define
+an extra, you can use the `extras` function:
+
+```js
+module.exports = grammar({
+  name: "my_language",
+
+  extras: ($) => [
+    /\s/, // whitespace
+    $.comment,
+  ],
+
+  rules: {
+    comment: ($) =>
+      token(
+        choice(seq("//", /.*/), seq("/*", /[^*]*\*+([^/*][^*]*\*+)*/, "/")),
+      ),
+  },
+});
+```
+
+```admonish warning
+When adding more complicated tokens to `extras`, it's preferable to associate the pattern
+with a rule. This way, you avoid the lexer inlining this pattern in a bunch of spots,
+which can dramatically reduce the parser size.
+```
+
+For example, instead of defining the `comment` token inline in `extras`:
+
+```js
+// ❌ Less preferable
+
+const comment = token(
+  choice(seq("//", /.*/), seq("/*", /[^*]*\*+([^/*][^*]*\*+)*/, "/")),
+);
+
+module.exports = grammar({
+  name: "my_language",
+  extras: ($) => [
+    /\s/, // whitespace
+    comment,
+  ],
+  rules: {
+    // ...
+  },
+});
+```
+
+We can define it as a rule and then reference it in `extras`:
+
+```js
+// ✅ More preferable
+
+module.exports = grammar({
+  name: "my_language",
+
+  extras: ($) => [
+    /\s/, // whitespace
+    $.comment,
+  ],
+
+  rules: {
+    // ...
+
+    comment: ($) =>
+      token(
+        choice(seq("//", /.*/), seq("/*", /[^*]*\*+([^/*][^*]*\*+)*/, "/")),
+      ),
+  },
+});
+```
+
+```admonish note
+Tree-sitter intentionally simplifies the whitespace character class, `\s`, to `[ \t\n\r]` as a performance
+optimization. This is because typically users do not require the full Unicode definition of whitespace.
+```
+
+## Using Supertypes
+
+Some rules in your grammar will represent abstract categories of syntax nodes, such as "expression", "type", or "declaration".
+These rules are often defined as simple choices between several other rules. For example, in the JavaScript grammar, the
+`_expression` rule is defined as a choice between many different kinds of expressions:
+
+```js
+expression: $ => choice(
+  $.identifier,
+  $.unary_expression,
+  $.binary_expression,
+  $.call_expression,
+  $.member_expression,
+  // ...
+),
+```
+
+By default, Tree-sitter will generate a visible node type for each of these abstract category rules, which can lead to
+unnecessarily deep and complex syntax trees. To avoid this, you can add these abstract category rules to the grammar's `supertypes`
+definition. Tree-sitter will then treat these rules as _supertypes_, and will not generate visible node types for them in
+the syntax tree.
+
+```js
+module.exports = grammar({
+  name: "javascript",
+
+  supertypes: $ => [
+    $.expression,
+  ],
+
+  rules: {
+    expression: $ => choice(
+      $.identifier,
+      // ...
+    ),
+
+    // ...
+  },
+});
+_
+```
+
+Although supertype rules are hidden from the syntax tree, they can still be used in queries. See the chapter on
+[Query Syntax][query syntax] for more information.
+
 # Lexical Analysis
 
 Tree-sitter's parsing process is divided into two phases: parsing (which is described above) and [lexing][lexing] — the
@@ -473,7 +598,7 @@ grammar({
   word: $ => $.identifier,
 
   rules: {
-    _expression: $ =>
+    expression: $ =>
       choice(
         $.identifier,
         $.unary_expression,
@@ -483,13 +608,13 @@ grammar({
 
     binary_expression: $ =>
       choice(
-        prec.left(1, seq($._expression, "instanceof", $._expression)),
+        prec.left(1, seq($.expression, "instanceof", $.expression)),
         // ...
       ),
 
     unary_expression: $ =>
       choice(
-        prec.left(2, seq("typeof", $._expression)),
+        prec.left(2, seq("typeof", $.expression)),
         // ...
       ),
 
@@ -526,5 +651,6 @@ rule that's called something else, you should just alias the word token instead,
 [field-names-section]: ../using-parsers/2-basic-parsing.md#node-field-names
 [non-terminal]: https://en.wikipedia.org/wiki/Terminal_and_nonterminal_symbols
 [peg]: https://en.wikipedia.org/wiki/Parsing_expression_grammar
+[query syntax]: ../using-parsers/queries/1-syntax.md#supertype-nodes
 [tree-sitter-javascript]: https://github.com/tree-sitter/tree-sitter-javascript
 [yacc]: https://en.wikipedia.org/wiki/Yacc

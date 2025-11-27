@@ -180,6 +180,16 @@ The capture names are as follows:
 - `@local.reference` — indicates that a syntax node contains the *name*, which *may* refer to an earlier definition within
 some enclosing scope.
 
+Additionally, to ignore certain nodes from being tagged, you can use the `@ignore` capture. This is useful if you want to
+exclude a subset of nodes from being tagged. When writing a query leveraging this, you should ensure this pattern comes
+before any other patterns that would be used for tagging, for example:
+
+```scheme
+(expression (identifier) @ignore)
+
+(identifier) @local.reference
+```
+
 When highlighting a file, Tree-sitter will keep track of the set of scopes that contains any given position, and the set
 of definitions within each scope. When processing a syntax node that is captured as a `local.reference`, Tree-sitter will
 try to find a definition for a name that matches the node's text. If it finds a match, Tree-sitter will ensure that the
@@ -423,7 +433,7 @@ not the `keyword` class.
 ```
 
 [erb]: https://en.wikipedia.org/wiki/ERuby
-[highlight crate]: https://github.com/tree-sitter/tree-sitter/tree/master/highlight
+[highlight crate]: https://github.com/tree-sitter/tree-sitter/tree/master/crates/highlight
 [init-config]: ./cli/init-config.md
 [init]: ./cli/init.md#structure-of-tree-sitterjson
 [js grammar]: https://github.com/tree-sitter/tree-sitter-javascript

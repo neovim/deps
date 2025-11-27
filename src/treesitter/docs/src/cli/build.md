@@ -1,7 +1,7 @@
 # `tree-sitter build`
 
 The `build` command compiles your parser into a dynamically-loadable library,
-either as a shared object (`.so`, `.dylib`, or `.dll`) or as a WASM module.
+either as a shared object (`.so`, `.dylib`, or `.dll`) or as a Wasm module.
 
 ```bash
 tree-sitter build [OPTIONS] [PATH] # Aliases: b
@@ -18,16 +18,13 @@ will attempt to build the parser in the current working directory.
 
 ### `-w/--wasm`
 
-Compile the parser as a WASM module.
-
-### `-d/--docker`
-
-Use Docker or Podman to supply Emscripten. This removes the need to install Emscripten on your machine locally.
-Note that this flag is only available when compiling to WASM.
+Compile the parser as a Wasm module. This command looks for the [Wasi SDK][wasi_sdk] indicated by the `TREE_SITTER_WASI_SDK_PATH`
+environment variable. If you don't have the binary, the CLI will attempt to download it for you to `<CACHE_DIR>/tree-sitter/wasi-sdk/`, where
+`<CACHE_DIR>` is resolved according to the [XDG base directory][XDG] or Window's [Known_Folder_Locations][Known_Folder].
 
 ### `-o/--output`
 
-Specify where to output the shared object file (native or WASM). This flag accepts either an absolute path or a relative
+Specify where to output the shared object file (native or Wasm). This flag accepts either an absolute path or a relative
 path. If you don't supply this flag, the CLI will attempt to figure out what the language name is based on the parent
 directory name to use for the output file. If the CLI can't figure it out, it will default to `parser`, thus generating
 `parser.so` or `parser.wasm` in the current working directory.
@@ -41,3 +38,7 @@ in the external scanner does so using their allocator.
 ### `-0/--debug`
 
 Compile the parser with debug flags enabled. This is useful when debugging issues that require a debugger like `gdb` or `lldb`.
+
+[Known_Folder]: https://learn.microsoft.com/en-us/windows/win32/shell/knownfolderid
+[wasi_sdk]: https://github.com/WebAssembly/wasi-sdk
+[XDG]: https://specifications.freedesktop.org/basedir/latest/

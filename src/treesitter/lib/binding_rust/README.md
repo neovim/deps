@@ -17,13 +17,6 @@ use tree_sitter::{InputEdit, Language, Parser, Point};
 let mut parser = Parser::new();
 ```
 
-Add the `cc` crate to your `Cargo.toml` under `[build-dependencies]`:
-
-```toml
-[build-dependencies]
-cc="*"
-```
-
 Then, add a language as a dependency:
 
 ```toml
@@ -32,7 +25,7 @@ tree-sitter = "0.24"
 tree-sitter-rust = "0.23"
 ```
 
-To then use a language, you assign them to the parser.
+To use a language, you assign them to the parser.
 
 ```rust
 parser.set_language(&tree_sitter_rust::LANGUAGE.into()).expect("Error loading Rust grammar");
@@ -102,6 +95,49 @@ let tree = parser.parse_with(&mut |_byte: usize, position: Point| -> &[u8] {
 assert_eq!(
   tree.root_node().to_sexp(),
   "(source_file (function_item (visibility_modifier) (identifier) (parameters) (block (number_literal))))"
+);
+```
+
+## Using Wasm Grammar Files
+
+> Requires the feature **wasm** to be enabled.
+
+First, create a parser with a Wasm store:
+
+```rust
+use tree_sitter::{wasmtime::Engine, Parser, WasmStore};
+
+let engine = Engine::default();
+let store = WasmStore::new(&engine).unwrap();
+
+let mut parser = Parser::new();
+parser.set_wasm_store(store).unwrap();
+```
+
+Then, load the language from a Wasm file:
+
+```rust
+const JAVASCRIPT_GRAMMAR: &[u8] = include_bytes!("path/to/tree-sitter-javascript.wasm");
+
+let mut store = WasmStore::new(&engine).unwrap();
+let javascript = store
+    .load_language("javascript", JAVASCRIPT_GRAMMAR)
+    .unwrap();
+
+// The language may be loaded from a different WasmStore than the one set on
+// the parser but it must use the same underlying WasmEngine.
+parser.set_language(&javascript).unwrap();
+```
+
+Now you can parse source code:
+
+```rust
+let source_code = "let x = 1;";
+let tree = parser.parse(source_code, None).unwrap();
+
+assert_eq!(
+    tree.root_node().to_sexp(),
+    "(program (lexical_declaration (variable_declarator name: (identifier) value: (number))))"
 );
 ```
 

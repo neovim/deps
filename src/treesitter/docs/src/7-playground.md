@@ -7,47 +7,52 @@
 
 <h2>Code</h2>
 
-<div class="custom-select">
-  <button id="language-button" class="select-button">
-    <span class="selected-value">JavaScript</span>
-    <svg class="arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <polyline points="6 9 12 15 18 9"></polyline>
-    </svg>
-  </button>
-  <div class="select-dropdown">
-    <div class="option" data-value="bash">Bash</div>
-    <div class="option" data-value="c">C</div>
-    <div class="option" data-value="cpp">C++</div>
-    <div class="option" data-value="c_sharp">C#</div>
-    <div class="option" data-value="go">Go</div>
-    <div class="option" data-value="html">HTML</div>
-    <div class="option" data-value="java">Java</div>
-    <div class="option" data-value="javascript">JavaScript</div>
-    <div class="option" data-value="php">PHP</div>
-    <div class="option" data-value="python">Python</div>
-    <div class="option" data-value="ruby">Ruby</div>
-    <div class="option" data-value="rust">Rust</div>
-    <div class="option" data-value="toml">TOML</div>
-    <div class="option" data-value="typescript">TypeScript</div>
-    <div class="option" data-value="yaml">YAML</div>
+<div class="language-container">
+  <div class="custom-select">
+    <button id="language-button" class="select-button">
+      <span class="selected-value">JavaScript</span>
+      <svg class="arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="6 9 12 15 18 9"></polyline>
+      </svg>
+    </button>
+    <div class="select-dropdown">
+      <div class="option" data-value="bash">Bash</div>
+      <div class="option" data-value="c">C</div>
+      <div class="option" data-value="cpp">C++</div>
+      <div class="option" data-value="c_sharp">C#</div>
+      <div class="option" data-value="go">Go</div>
+      <div class="option" data-value="html">HTML</div>
+      <div class="option" data-value="java">Java</div>
+      <div class="option" data-value="javascript">JavaScript</div>
+      <div class="option" data-value="php">PHP</div>
+      <div class="option" data-value="python">Python</div>
+      <div class="option" data-value="ruby">Ruby</div>
+      <div class="option" data-value="rust">Rust</div>
+      <div class="option" data-value="toml">TOML</div>
+      <div class="option" data-value="typescript">TypeScript</div>
+      <div class="option" data-value="yaml">YAML</div>
+    </div>
+    <select id="language-select" style="display: none;">
+      <option value="bash">Bash</option>
+      <option value="c">C</option>
+      <option value="cpp">C++</option>
+      <option value="c_sharp">C#</option>
+      <option value="go">Go</option>
+      <option value="html">HTML</option>
+      <option value="java">Java</option>
+      <option value="javascript" selected="selected">JavaScript</option>
+      <option value="php">PHP</option>
+      <option value="python">Python</option>
+      <option value="ruby">Ruby</option>
+      <option value="rust">Rust</option>
+      <option value="toml">TOML</option>
+      <option value="typescript">TypeScript</option>
+      <option value="yaml">YAML</option>
+    </select>
   </div>
-  <select id="language-select" style="display: none;">
-    <option value="bash">Bash</option>
-    <option value="c">C</option>
-    <option value="cpp">C++</option>
-    <option value="c_sharp">C#</option>
-    <option value="go">Go</option>
-    <option value="html">HTML</option>
-    <option value="java">Java</option>
-    <option value="javascript" selected="selected">JavaScript</option>
-    <option value="php">PHP</option>
-    <option value="python">Python</option>
-    <option value="ruby">Ruby</option>
-    <option value="rust">Rust</option>
-    <option value="toml">TOML</option>
-    <option value="typescript">TypeScript</option>
-    <option value="yaml">YAML</option>
-  </select>
+
+  <div id="language-version">
+  </div>
 </div>
 
 <input id="logging-checkbox" type="checkbox"></input>
@@ -70,7 +75,16 @@
 <textarea id="query-input"></textarea>
 </div>
 
-<h2>Tree</h2>
+<h2>
+  Tree
+  <button type="button" id="copy-button" class="theme-toggle" aria-label="Copy tree">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+      stroke-linecap="round" stroke-linejoin="round">
+      <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
+      <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
+    </svg>
+  </button>
+</h2>
 <span id="update-time"></span>
 <div id="output-container-scroll">
 <pre id="output-container" class="highlight"></pre>
@@ -79,7 +93,7 @@
 <h2 id="about">About </h2>
 <p>You can try out tree-sitter with a few pre-selected grammars on this page.
 You can also run playground locally (with your own grammar) using the
-<a href="/cli/playground.html">CLI</a>'s <code>tree-sitter playground</code> subcommand.
+<a href="/tree-sitter/cli/playground.html">CLI</a>'s <code>tree-sitter playground</code> subcommand.
 </p>
 
 ```admonish info
@@ -102,7 +116,7 @@ you must use at least one capture, like <code>(node_name) @capture-name</code></
 
 <script>LANGUAGE_BASE_URL = "https://tree-sitter.github.io";</script>
 <script type="module">
-import * as TreeSitter from 'https://tree-sitter.github.io/tree-sitter.js';
+import * as TreeSitter from 'https://tree-sitter.github.io/web-tree-sitter.js';
 window.TreeSitter = TreeSitter;
 setTimeout(() => window.initializePlayground({local: false}), 1);
 </script>

@@ -24,7 +24,7 @@ on any platform. See [the contributing docs](../6-contributing.md#developing-tre
 running the following command: `cargo install tree-sitter-cli --locked`
 
 - Install the `tree-sitter-cli` [Node.js module][node-module] using [`npm`][npm], the Node package manager. This approach
-is fast, but is only works on certain platforms, because it relies on pre-built binaries.
+is fast, but it only works on certain platforms, because it relies on pre-built binaries.
 
 - Download a binary for your platform from [the latest GitHub release][releases], and put it into a directory on your `PATH`.
 
@@ -38,7 +38,7 @@ cd tree-sitter-${LOWER_PARSER_NAME}
 ```
 
 ```admonish note
-The `LOWER-` prefix here means the "lowercase" name of the language.
+The `LOWER_` prefix here means the "lowercase" name of the language.
 ```
 
 ### Init
@@ -64,7 +64,7 @@ There should be a file called `grammar.js` with the following contents:
 /// <reference types="tree-sitter-cli/dsl" />
 // @ts-check
 
-module.exports = grammar({
+export default grammar({
   name: 'LOWER_PARSER_NAME',
 
   rules: {
@@ -131,6 +131,6 @@ To learn more about this command, check the [reference page](../cli/generate.md)
 [npm]: https://docs.npmjs.com
 [path-env]: https://en.wikipedia.org/wiki/PATH_(variable)
 [releases]: https://github.com/tree-sitter/tree-sitter/releases/latest
-[tree-sitter-cli]: https://github.com/tree-sitter/tree-sitter/tree/master/cli
+[tree-sitter-cli]: https://github.com/tree-sitter/tree-sitter/tree/master/crates/cli
 [triple-slash]: https://www.typescriptlang.org/docs/handbook/triple-slash-directives.html
 [ts-check]: https://www.typescriptlang.org/docs/handbook/intro-to-js-ts.html
