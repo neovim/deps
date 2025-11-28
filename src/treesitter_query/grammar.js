@@ -65,17 +65,21 @@ module.exports = grammar({
       optional($.string_content),
       token.immediate('"'),
     ),
+    _immediate_string: $ => seq(
+      token.immediate('"'),
+      optional($.string_content),
+      token.immediate('"'),
+    ),
     string_content: $ => repeat1(choice(token.immediate(prec(PREC.STRING, /[^"\\\n]+/)), $.escape_sequence)),
-    parameters: $ => repeat1(choice($.capture, $.string, $._node_identifier)),
+    parameters: $ => repeat1(choice($.capture, $.string, $.identifier)),
     comment: _ => token(prec(PREC.COMMENT, seq(";", /.*/))),
-    list: $ => seq("[", repeat1($.definition), "]", quantifier($), captures($)),
+    list: $ => seq("[", repeat1($.definition), "]", suffix($)),
 
     grouping: $ => seq(
       "(",
       repeat1(seq($._group_expression, optional("."))),
       ")",
-      quantifier($),
-      captures($),
+      suffix($),
     ),
 
     missing_node: ($) => seq(
@@ -83,21 +87,23 @@ module.exports = grammar({
       "MISSING",
       optional(field("name", choice($.identifier, $.string))),
       ")",
-      quantifier($),
-      captures($),
+      suffix($),
     ),
 
     anonymous_node: $ => seq(
       field("name", choice($.string, "_")),
-      quantifier($),
-      captures($),
+      suffix($),
     ),
 
     named_node: $ => seq(
       "(",
       choice(
         field("name", $._node_identifier),
-        seq(field("supertype", $.identifier), token.immediate('/'), field("name", $._immediate_identifier)),
+        seq(
+          field("supertype", $.identifier),
+          token.immediate('/'),
+          field("name", choice($._immediate_identifier, alias($._immediate_string, $.string)))
+        ),
       ),
       optional(
         seq(
@@ -112,8 +118,7 @@ module.exports = grammar({
         ),
       ),
       ")",
-      quantifier($),
-      captures($),
+      suffix($),
     ),
     _field_name: $ => seq($.identifier, ":"),
     field_definition: $ => seq(
@@ -134,12 +139,8 @@ module.exports = grammar({
   }
 });
 
-function captures($) {
-  return repeat($.capture);
-}
-
-function quantifier($) {
-  return optional(field("quantifier", $.quantifier));
+function suffix($) {
+  return repeat(choice($.capture, field("quantifier", $.quantifier)))
 }
 
 function immediate_child(expression) {

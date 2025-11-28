@@ -207,6 +207,27 @@ Quantifiers (*)
       quantifier: (quantifier))))
 
 ================================================================================
+Quantifiers (complex)
+================================================================================
+
+(program
+  (identifier)? @variable* @spell)
+
+--------------------------------------------------------------------------------
+
+(program
+  (named_node
+    name: (identifier)
+    (named_node
+      name: (identifier)
+      quantifier: (quantifier)
+      (capture
+        name: (identifier))
+      quantifier: (quantifier)
+      (capture
+        name: (identifier)))))
+
+================================================================================
 Groups
 ================================================================================
 
@@ -310,7 +331,7 @@ Predicates
 ================================================================================
 
 ((identifier) @v
-  (#eq? @v "test" local))
+  (#eq? @v "test" local _))
 
 ((identifier) @v
   (.match? @v "test"))
@@ -334,6 +355,7 @@ Predicates
           name: (identifier))
         (string
           (string_content))
+        (identifier)
         (identifier))))
   (grouping
     (named_node
@@ -753,6 +775,11 @@ Supertypes
     name: (identifier)
     (supertype/subtype)))
 
+(program
+  (named_node
+    name: (identifier)
+    (supertype/"anonymous subtype")))
+
 --------------------------------------------------------------------------------
 
 (program
@@ -766,7 +793,19 @@ Supertypes
           name: (identifier)))
       (named_node
         supertype: (identifier)
-        name: (identifier)))))
+        name: (identifier))))
+  (named_node
+    name: (identifier)
+    (named_node
+      name: (identifier)
+      (field_definition
+        name: (identifier)
+        (named_node
+          name: (identifier)))
+      (named_node
+        supertype: (identifier)
+        name: (string
+          (string_content))))))
 
 ================================================================================
 Missing keyword
