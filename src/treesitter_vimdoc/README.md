@@ -32,6 +32,7 @@ Overview
     nature; parsing the contents would require loading a "child" language
     (injection). See [#2](https://github.com/neovim/tree-sitter-vimdoc/issues/2).
   - the terminating `<` (and any following whitespace) is discarded (anonymous).
+- `url` intentionally does not capture `.,)` at the end of the URL. See also [Known issues](#known-issues).
 - `h1` = "Heading 1": `======` followed by text and optional `*tags*`.
 - `h2` = "Heading 2": `------` followed by text and optional `*tags*`.
 - `h3` = "Heading 3": UPPERCASE WORDS, followed by optional `*tags*`, followed
@@ -45,8 +46,11 @@ Known issues
 - Spec requires that `codeblock` delimiter ">" must be preceded by a space
   (" >"), not a tab. But currently the grammar doesn't enforce this. Example:
   `:help lcs-tab`.
-- `url` doesn't handle _surrounding_ parens. E.g. `(https://example.com/#yay)` yields `word`
-- `url` doesn't handle _nested_ parens. E.g. `(https://example.com/(foo)#yay)`
+- `url` cannot contain a closing bracket `]` anywhere in the URL. (Workaround:
+  URL-encode the bracket.) This is a tradeoff so that markdown hyperlinks work:
+  ```
+  [https://example.com](https://example.com)
+  ```
 - `column_heading` currently only recognizes tilde `~` preceded by space (i.e.
   `foo ~` not `foo~`). This covers 99% of :help files.
 - `column_heading` children should be plaintext, but currently are parsed as `$._atom`.
@@ -55,34 +59,37 @@ Known issues
 TODO
 ----
 
-- `tag_heading` : line(s) containing only tags, typically implies a "heading"
-  before a block.
+- `h4` ("tag heading") : a line containing only tags, or ending with a tag, is
+  a "h4" heading.
 
 Release
 -------
 
-Steps to perform a release:
+Steps to perform a release: https://tree-sitter.github.io/tree-sitter/creating-parsers/6-publishing.html
 
-1. Bump and tag the version:
-
-   **First** bump `Cargo.toml`, `pyproject.toml`, and `Makefile` to the new version. **Then** bump the package:
-   ```bash
-   npm version patch -m "release %s"
+1. Update tree-sitter CLI.
    ```
-
-   Choose `patch`/`minor`/`major` to indicate query compatibility:
-     - `patch` for bugfixes (no changes to queries needed)
-     - `minor` for added nodes (queries may need changes to use new nodes but will not error)
-     - `major` for removed or renamed nodes (queries will error if not adapted), other breaking changes
-
-2. Bump to prerelease, without creating a tag:
-   ```bash
-   npm version --no-git-tag-version prerelease --preid dev
-   git add package*.json Cargo.toml pyproject.toml Makefile
-   git commit -m bump
+   npm install tree-sitter-cli
    ```
-3. Push:
-   ```bash
-   git push && git push --tags
+2. Bump the version.
    ```
-4. Release the tagged commit: https://github.com/neovim/tree-sitter-vimdoc/releases/new
+   tree-sitter version x.y.z
+   ```
+    - Choose `patch`/`minor`/`major` to indicate query compatibility:
+        - `patch` for bugfixes (no changes to queries needed)
+        - `minor` for added nodes (queries may need changes to use new nodes but will not error)
+        - `major` for removed or renamed nodes (queries will error if not adapted), other breaking changes
+3. Regenerate and test.
+   ```
+   tree-sitter generate && tree-sitter test
+   ```
+4. Commit the generated files
+   ```
+   git add .
+   git commit -m 'release'
+   ```
+5. Push
+   ```
+   git push
+   ```
+6. Tag and release: https://github.com/neovim/tree-sitter-vimdoc/releases/new
