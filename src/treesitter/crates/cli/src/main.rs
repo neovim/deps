@@ -223,7 +223,7 @@ struct Parse {
     #[arg(long, short = 'D')]
     pub debug_graph: bool,
     /// Compile parsers to Wasm instead of native dynamic libraries
-    #[arg(long)]
+    #[arg(long, hide = cfg!(not(feature = "wasm")))]
     pub wasm: bool,
     /// Output the parse data with graphviz dot
     #[arg(long = "dot")]
@@ -323,7 +323,7 @@ struct Test {
     #[arg(long, short = 'D')]
     pub debug_graph: bool,
     /// Compile parsers to Wasm instead of native dynamic libraries
-    #[arg(long)]
+    #[arg(long, hide = cfg!(not(feature = "wasm")))]
     pub wasm: bool,
     /// Open `log.html` in the default browser, if `--debug-graph` is supplied
     #[arg(long)]
@@ -448,6 +448,14 @@ struct Query {
     /// The range of rows in which the query will be executed
     #[arg(long)]
     pub row_range: Option<String>,
+    /// The range of byte offsets in which the query will be executed. Only the matches that are fully contained within the provided
+    /// byte range will be returned.
+    #[arg(long)]
+    pub containing_byte_range: Option<String>,
+    /// The range of rows in which the query will be executed. Only the matches that are fully contained within the provided row range
+    /// will be returned.
+    #[arg(long)]
+    pub containing_row_range: Option<String>,
     /// Select a language by the scope instead of a file extension
     #[arg(long)]
     pub scope: Option<String>,
@@ -587,6 +595,20 @@ pub enum Shell {
     PowerShell,
     Zsh,
     Nushell,
+}
+
+/// Complete `action` if the wasm feature is enabled, otherwise return an error
+macro_rules! checked_wasm {
+    ($action:block) => {
+        #[cfg(feature = "wasm")]
+        {
+            $action
+        }
+        #[cfg(not(feature = "wasm"))]
+        {
+            Err(anyhow!("--wasm flag specified, but this build of tree-sitter-cli does not include the wasm feature"))?;
+        }
+    };
 }
 
 impl InitConfig {
@@ -750,6 +772,14 @@ impl Init {
                     .map(|e| Some(e.trim().to_string()))
             };
 
+            let namespace = || {
+                Input::<String>::with_theme(&ColorfulTheme::default())
+                    .with_prompt("Package namespace")
+                    .default("io.github.tree-sitter".to_string())
+                    .allow_empty(true)
+                    .interact()
+            };
+
             let bindings = || {
                 let languages = Bindings::default().languages();
 
@@ -779,6 +809,7 @@ impl Init {
                 "author",
                 "email",
                 "url",
+                "namespace",
                 "bindings",
                 "exit",
             ];
@@ -799,6 +830,7 @@ impl Init {
                         "author" => opts.author = author()?,
                         "email" => opts.email = email()?,
                         "url" => opts.url = url()?,
+                        "namespace" => opts.namespace = Some(namespace()?),
                         "bindings" => opts.bindings = bindings()?,
                         "exit" => break,
                         _ => unreachable!(),
@@ -1005,13 +1037,14 @@ impl Parse {
         loader.debug_build(self.debug_build);
         loader.force_rebuild(self.rebuild || self.grammar_path.is_some());
 
-        #[cfg(feature = "wasm")]
         if self.wasm {
-            let engine = tree_sitter::wasmtime::Engine::default();
-            parser
-                .set_wasm_store(tree_sitter::WasmStore::new(&engine).unwrap())
-                .unwrap();
-            loader.use_wasm(&engine);
+            checked_wasm!({
+                let engine = tree_sitter::wasmtime::Engine::default();
+                parser
+                    .set_wasm_store(tree_sitter::WasmStore::new(&engine).unwrap())
+                    .unwrap();
+                loader.use_wasm(&engine);
+            });
         }
 
         let timeout = self.timeout.unwrap_or_default();
@@ -1086,7 +1119,7 @@ impl Parse {
                     let path = Path::new(&path);
                     let language = loader
                         .select_language(
-                            path,
+                            Some(path),
                             current_dir,
                             self.scope.as_deref(),
                             lib_info.as_ref(),
@@ -1117,7 +1150,12 @@ impl Parse {
 
                 let language = if let Some(ref lib_path) = self.lib_path {
                     &loader
-                        .select_language(lib_path, current_dir, None, lib_info.as_ref())
+                        .select_language(
+                            None,
+                            current_dir,
+                            self.scope.as_deref(),
+                            lib_info.as_ref(),
+                        )
                         .with_context(|| {
                             anyhow!(
                                 "Failed to load language for path \"{}\"",
@@ -1151,8 +1189,12 @@ impl Parse {
 
                 let path = get_tmp_source_file(&contents)?;
                 let name = "stdin";
-                let language =
-                    loader.select_language(&path, current_dir, None, lib_info.as_ref())?;
+                let language = loader.select_language(
+                    None,
+                    current_dir,
+                    self.scope.as_deref(),
+                    lib_info.as_ref(),
+                )?;
 
                 parse::parse_file_at_path(
                     &mut parser,
@@ -1215,13 +1257,14 @@ impl Test {
 
         let mut parser = Parser::new();
 
-        #[cfg(feature = "wasm")]
         if self.wasm {
-            let engine = tree_sitter::wasmtime::Engine::default();
-            parser
-                .set_wasm_store(tree_sitter::WasmStore::new(&engine).unwrap())
-                .unwrap();
-            loader.use_wasm(&engine);
+            checked_wasm!({
+                let engine = tree_sitter::wasmtime::Engine::default();
+                parser
+                    .set_wasm_store(tree_sitter::WasmStore::new(&engine).unwrap())
+                    .unwrap();
+                loader.use_wasm(&engine);
+            });
         }
 
         if self.lib_path.is_none() && self.lang_name.is_some() {
@@ -1232,7 +1275,7 @@ impl Test {
             let lib_info =
                 get_lib_info(self.lib_path.as_ref(), self.lang_name.as_ref(), current_dir);
             &loader
-                .select_language(lib_path, current_dir, None, lib_info.as_ref())
+                .select_language(None, current_dir, None, lib_info.as_ref())
                 .with_context(|| {
                     anyhow!(
                         "Failed to load language for path \"{}\"",
@@ -1413,7 +1456,7 @@ impl Fuzz {
             let lang_name = lib_info.1.to_string();
             &(
                 loader
-                    .select_language(lib_path, current_dir, None, Some(&lib_info))
+                    .select_language(None, current_dir, None, Some(&lib_info))
                     .with_context(|| {
                         anyhow!(
                             "Failed to load language for path \"{}\"",
@@ -1458,18 +1501,11 @@ impl Query {
         loader.find_all_languages(&loader_config)?;
         let query_path = Path::new(&self.query_path);
 
-        let byte_range = self.byte_range.as_ref().and_then(|range| {
-            let mut parts = range.split(':');
-            let start = parts.next()?.parse().ok()?;
-            let end = parts.next().unwrap().parse().ok()?;
-            Some(start..end)
-        });
-        let point_range = self.row_range.as_ref().and_then(|range| {
-            let mut parts = range.split(':');
-            let start = parts.next()?.parse().ok()?;
-            let end = parts.next().unwrap().parse().ok()?;
-            Some(Point::new(start, 0)..Point::new(end, 0))
-        });
+        let byte_range = parse_range(&self.byte_range, |x| x)?;
+        let point_range = parse_range(&self.row_range, |row| Point::new(row, 0))?;
+        let containing_byte_range = parse_range(&self.containing_byte_range, |x| x)?;
+        let containing_point_range =
+            parse_range(&self.containing_row_range, |row| Point::new(row, 0))?;
 
         let cancellation_flag = util::cancel_on_signal();
 
@@ -1488,7 +1524,7 @@ impl Query {
         match input {
             CliInput::Paths(paths) => {
                 let language = loader.select_language(
-                    Path::new(&paths[0]),
+                    Some(Path::new(&paths[0])),
                     current_dir,
                     self.scope.as_deref(),
                     lib_info.as_ref(),
@@ -1498,6 +1534,8 @@ impl Query {
                     ordered_captures: self.captures,
                     byte_range,
                     point_range,
+                    containing_byte_range,
+                    containing_point_range,
                     quiet: self.quiet,
                     print_time: self.time,
                     stdin: false,
@@ -1522,7 +1560,7 @@ impl Query {
                 let languages = loader.languages_at_path(current_dir)?;
                 let language = if let Some(ref lib_path) = self.lib_path {
                     &loader
-                        .select_language(lib_path, current_dir, None, lib_info.as_ref())
+                        .select_language(None, current_dir, None, lib_info.as_ref())
                         .with_context(|| {
                             anyhow!(
                                 "Failed to load language for path \"{}\"",
@@ -1541,6 +1579,8 @@ impl Query {
                     ordered_captures: self.captures,
                     byte_range,
                     point_range,
+                    containing_byte_range,
+                    containing_point_range,
                     quiet: self.quiet,
                     print_time: self.time,
                     stdin: true,
@@ -1554,11 +1594,13 @@ impl Query {
 
                 let path = get_tmp_source_file(&contents)?;
                 let language =
-                    loader.select_language(&path, current_dir, None, lib_info.as_ref())?;
+                    loader.select_language(None, current_dir, None, lib_info.as_ref())?;
                 let opts = QueryFileOptions {
                     ordered_captures: self.captures,
                     byte_range,
                     point_range,
+                    containing_byte_range,
+                    containing_point_range,
                     quiet: self.quiet,
                     print_time: self.time,
                     stdin: true,
@@ -2062,5 +2104,34 @@ fn get_lib_info<'a>(
         }
     } else {
         None
+    }
+}
+
+/// Parse a range string of the form "start:end" into an optional Range<T>.
+fn parse_range<T>(
+    range_str: &Option<String>,
+    make: impl Fn(usize) -> T,
+) -> Result<Option<std::ops::Range<T>>> {
+    if let Some(range) = range_str.as_ref() {
+        let err_msg = format!("Invalid range '{range}', expected 'start:end'");
+        let mut parts = range.split(':');
+
+        let Some(part) = parts.next() else {
+            Err(anyhow!(err_msg))?
+        };
+        let Ok(start) = part.parse::<usize>() else {
+            Err(anyhow!(err_msg))?
+        };
+
+        let Some(part) = parts.next() else {
+            Err(anyhow!(err_msg))?
+        };
+        let Ok(end) = part.parse::<usize>() else {
+            Err(anyhow!(err_msg))?
+        };
+
+        Ok(Some(make(start)..make(end)))
+    } else {
+        Ok(None)
     }
 }

@@ -21,6 +21,8 @@ pub struct QueryFileOptions {
     pub ordered_captures: bool,
     pub byte_range: Option<Range<usize>>,
     pub point_range: Option<Range<Point>>,
+    pub containing_byte_range: Option<Range<usize>>,
+    pub containing_point_range: Option<Range<Point>>,
     pub quiet: bool,
     pub print_time: bool,
     pub stdin: bool,
@@ -47,6 +49,12 @@ pub fn query_file_at_path(
     }
     if let Some(ref range) = opts.point_range {
         query_cursor.set_point_range(range.clone());
+    }
+    if let Some(ref range) = opts.containing_byte_range {
+        query_cursor.set_containing_byte_range(range.clone());
+    }
+    if let Some(ref range) = opts.containing_point_range {
+        query_cursor.set_containing_point_range(range.clone());
     }
 
     let mut parser = Parser::new();
@@ -80,11 +88,13 @@ pub fn query_file_at_path(
                         capture.node.utf8_text(&source_code).unwrap_or("")
                     )?;
             }
-            results.push(query_testing::CaptureInfo {
-                name: (*capture_name).to_string(),
-                start: to_utf8_point(capture.node.start_position(), source_code.as_slice()),
-                end: to_utf8_point(capture.node.end_position(), source_code.as_slice()),
-            });
+            if should_test {
+                results.push(query_testing::CaptureInfo {
+                    name: (*capture_name).to_string(),
+                    start: to_utf8_point(capture.node.start_position(), source_code.as_slice()),
+                    end: to_utf8_point(capture.node.end_position(), source_code.as_slice()),
+                });
+            }
         }
     } else {
         let mut matches = query_cursor.matches(&query, tree.root_node(), source_code.as_slice());
@@ -111,15 +121,17 @@ pub fn query_file_at_path(
                         )?;
                     }
                 }
-                results.push(query_testing::CaptureInfo {
-                    name: (*capture_name).to_string(),
-                    start: to_utf8_point(capture.node.start_position(), source_code.as_slice()),
-                    end: to_utf8_point(capture.node.end_position(), source_code.as_slice()),
-                });
+                if should_test {
+                    results.push(query_testing::CaptureInfo {
+                        name: (*capture_name).to_string(),
+                        start: to_utf8_point(capture.node.start_position(), source_code.as_slice()),
+                        end: to_utf8_point(capture.node.end_position(), source_code.as_slice()),
+                    });
+                }
             }
         }
     }
-    if !query_cursor.did_exceed_match_limit() {
+    if query_cursor.did_exceed_match_limit() {
         warn!("Query exceeded maximum number of in-progress captures!");
     }
     if should_test {
