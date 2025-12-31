@@ -22,16 +22,16 @@ function(check_file_hash has_hash hash_is_good)
   set("${has_hash}" TRUE PARENT_SCOPE)
 
   message(VERBOSE "verifying file...
-       file='/home/runner/work/deps/deps/neovim/deps/build/downloads/utf8proc/v2.11.2.tar.gz'")
+       file='/home/runner/work/deps/deps/neovim/deps/build/downloads/utf8proc/v2.11.3.tar.gz'")
 
-  file("SHA256" "/home/runner/work/deps/deps/neovim/deps/build/downloads/utf8proc/v2.11.2.tar.gz" actual_value)
+  file("SHA256" "/home/runner/work/deps/deps/neovim/deps/build/downloads/utf8proc/v2.11.3.tar.gz" actual_value)
 
-  if(NOT "${actual_value}" STREQUAL "a9b8d8fd57fb3aeca2aede62fd58958036d3bd29871afc1b871e3916c48420a7")
+  if(NOT "${actual_value}" STREQUAL "abfed50b6d4da51345713661370290f4f4747263ee73dc90356299dfc7990c78")
     set("${hash_is_good}" FALSE PARENT_SCOPE)
     message(VERBOSE "SHA256 hash of
-    /home/runner/work/deps/deps/neovim/deps/build/downloads/utf8proc/v2.11.2.tar.gz
+    /home/runner/work/deps/deps/neovim/deps/build/downloads/utf8proc/v2.11.3.tar.gz
   does not match expected value
-    expected: 'a9b8d8fd57fb3aeca2aede62fd58958036d3bd29871afc1b871e3916c48420a7'
+    expected: 'abfed50b6d4da51345713661370290f4f4747263ee73dc90356299dfc7990c78'
       actual: '${actual_value}'")
   else()
     set("${hash_is_good}" TRUE PARENT_SCOPE)
@@ -71,32 +71,32 @@ function(sleep_before_download attempt)
   execute_process(COMMAND "${CMAKE_COMMAND}" -E sleep "${sleep_seconds}")
 endfunction()
 
-if(EXISTS "/home/runner/work/deps/deps/neovim/deps/build/downloads/utf8proc/v2.11.2.tar.gz")
+if(EXISTS "/home/runner/work/deps/deps/neovim/deps/build/downloads/utf8proc/v2.11.3.tar.gz")
   check_file_hash(has_hash hash_is_good)
   if(has_hash)
     if(hash_is_good)
       message(VERBOSE "File already exists and hash match (skip download):
-  file='/home/runner/work/deps/deps/neovim/deps/build/downloads/utf8proc/v2.11.2.tar.gz'
-  SHA256='a9b8d8fd57fb3aeca2aede62fd58958036d3bd29871afc1b871e3916c48420a7'"
+  file='/home/runner/work/deps/deps/neovim/deps/build/downloads/utf8proc/v2.11.3.tar.gz'
+  SHA256='abfed50b6d4da51345713661370290f4f4747263ee73dc90356299dfc7990c78'"
       )
       return()
     else()
       message(VERBOSE "File already exists but hash mismatch. Removing...")
-      file(REMOVE "/home/runner/work/deps/deps/neovim/deps/build/downloads/utf8proc/v2.11.2.tar.gz")
+      file(REMOVE "/home/runner/work/deps/deps/neovim/deps/build/downloads/utf8proc/v2.11.3.tar.gz")
     endif()
   else()
     message(VERBOSE "File already exists but no hash specified (use URL_HASH):
-  file='/home/runner/work/deps/deps/neovim/deps/build/downloads/utf8proc/v2.11.2.tar.gz'
+  file='/home/runner/work/deps/deps/neovim/deps/build/downloads/utf8proc/v2.11.3.tar.gz'
 Old file will be removed and new file downloaded from URL."
     )
-    file(REMOVE "/home/runner/work/deps/deps/neovim/deps/build/downloads/utf8proc/v2.11.2.tar.gz")
+    file(REMOVE "/home/runner/work/deps/deps/neovim/deps/build/downloads/utf8proc/v2.11.3.tar.gz")
   endif()
 endif()
 
 set(retry_number 5)
 
 message(VERBOSE "Downloading...
-   dst='/home/runner/work/deps/deps/neovim/deps/build/downloads/utf8proc/v2.11.2.tar.gz'
+   dst='/home/runner/work/deps/deps/neovim/deps/build/downloads/utf8proc/v2.11.3.tar.gz'
    timeout='none'
    inactivity timeout='none'"
 )
@@ -107,7 +107,7 @@ foreach(i RANGE ${retry_number})
   if(status_code IN_LIST download_retry_codes)
     sleep_before_download(${i})
   endif()
-  foreach(url IN ITEMS [====[https://github.com/juliastrings/utf8proc/archive/v2.11.2.tar.gz]====])
+  foreach(url IN ITEMS [====[https://github.com/juliastrings/utf8proc/archive/v2.11.3.tar.gz]====])
     if(NOT url IN_LIST skip_url_list)
       message(VERBOSE "Using src='${url}'")
 
@@ -119,7 +119,7 @@ foreach(i RANGE ${retry_number})
 
       file(
         DOWNLOAD
-        "${url}" "/home/runner/work/deps/deps/neovim/deps/build/downloads/utf8proc/v2.11.2.tar.gz"
+        "${url}" "/home/runner/work/deps/deps/neovim/deps/build/downloads/utf8proc/v2.11.3.tar.gz"
         
         # no TIMEOUT
         # no INACTIVITY_TIMEOUT
@@ -136,7 +136,7 @@ foreach(i RANGE ${retry_number})
         check_file_hash(has_hash hash_is_good)
         if(has_hash AND NOT hash_is_good)
           message(VERBOSE "Hash mismatch, removing...")
-          file(REMOVE "/home/runner/work/deps/deps/neovim/deps/build/downloads/utf8proc/v2.11.2.tar.gz")
+          file(REMOVE "/home/runner/work/deps/deps/neovim/deps/build/downloads/utf8proc/v2.11.3.tar.gz")
         else()
           message(VERBOSE "Downloading... done")
           return()
