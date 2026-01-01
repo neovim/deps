@@ -32,7 +32,7 @@ const optional_block = ($) => alias(optional($._block), $.block);
 // namelist ::= Name {',' Name}
 const name_list = ($) => list_seq(field('name', $.identifier), ',');
 
-module.exports = grammar({
+export default grammar({
   name: 'lua',
 
   extras: ($) => [$.comment, /\s/],
@@ -531,7 +531,7 @@ module.exports = grammar({
             precedence,
             seq(
               field('left', $.expression),
-              operator,
+              field('operator', operator),
               field('right', $.expression)
             )
           )
@@ -544,7 +544,7 @@ module.exports = grammar({
             precedence,
             seq(
               field('left', $.expression),
-              operator,
+              field('operator', operator),
               field('right', $.expression)
             )
           )
@@ -555,7 +555,10 @@ module.exports = grammar({
     unary_expression: ($) =>
       prec.left(
         PREC.UNARY,
-        seq(choice('not', '#', '-', '~'), field('operand', $.expression))
+        seq(
+          field('operator', choice('not', '#', '-', '~')),
+          field('operand', $.expression),
+        )
       ),
 
     // Name
