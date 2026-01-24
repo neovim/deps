@@ -1808,9 +1808,12 @@ local doc = {
                 },
                 {
                   'env',
-                  opt(dict('string', 'string')),
+                  opt('string[]'),
                   nil,
-                  'Set environment variables for the new process.',
+                  [[
+                    Set environment variables for the new process.
+                    Each entry should be a string in the form of `NAME=VALUE`.
+                  ]]
                 },
                 {
                   'cwd',
@@ -1871,8 +1874,9 @@ local doc = {
             },
           },
           returns = {
-            { 'uv_process_t', 'handle' },
-            { 'integer', 'pid' },
+            { opt('uv_process_t'), 'handle' },
+            { union('integer', 'string'), 'pid or err' },
+            { opt('uv.error_name'), 'err_name' },
           },
         },
         {
@@ -4425,7 +4429,7 @@ local doc = {
             and therefore not subject to clock drift. The primary use is for measuring
             time between intervals.
           ]],
-          returns = 'number',
+          returns = 'integer',
         },
         {
           name = 'clock_gettime',
@@ -4636,19 +4640,20 @@ local doc = {
         },
         {
           name = 'os_get_passwd',
-          desc = 'Returns password file information.',
-          returns = {
-            {
-              table({
-                { 'username', 'string' },
-                { 'uid', 'integer' },
-                { 'gid', 'integer' },
-                { 'shell', 'string' },
-                { 'homedir', 'string' },
-              }),
-              'passwd',
-            },
-          },
+          desc = [[
+            Gets a subset of the password file entry for the current effective uid (not the
+            real uid). On Windows, `uid`, `gid`, and `shell` are set to `nil`.
+          ]],
+          returns = ret_or_fail(
+            table({
+              { 'username', 'string' },
+              { 'uid', 'integer?', nil, "(nil on Windows)" },
+              { 'gid', 'integer?', nil, "(nil on Windows)" },
+              { 'shell', 'string?', nil, "(nil on Windows)"},
+              { 'homedir', 'string' },
+            }),
+            'passwd'
+          )
         },
         {
           name = 'os_getpid',

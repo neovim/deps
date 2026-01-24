@@ -1301,8 +1301,9 @@ a better job on Windows than it does on Unix.
     available to the child process only if the child processes uses the MSVCRT
     runtime.
     - `[1, 2, 3, ..., n]`: `integer` or `userdata` for sub-type of `uv_stream_t` or `nil`
-  - `env`: `table` or `nil` Set environment variables for the new process.
-    - `[string]`: `string`
+  - `env`: `string[]` or `nil`
+    Set environment variables for the new process.
+    Each entry should be a string in the form of `NAME=VALUE`.
   - `cwd`: `string` or `nil` Set the current working directory for the sub-process.
   - `uid`: `string` or `nil` Set the child process' user id.
   - `gid`: `string` or `nil` Set the child process' group id.
@@ -1381,7 +1382,7 @@ end)
 
 When the child process exits, `on_exit` is called with an exit code and signal.
 
-**Returns:** `uv_process_t userdata`, `integer`
+**Returns:** `uv_process_t userdata` or `nil`, `integer` or `string`, `uv.error_name` or `nil`
 
 ### `uv.process_kill(process, [signame])`
 
@@ -4123,7 +4124,7 @@ relative to an arbitrary time in the past. It is not related to the time of day
 and therefore not subject to clock drift. The primary use is for measuring
 time between intervals.
 
-**Returns:** `number`
+**Returns:** `integer`
 
 ### `uv.clock_gettime(clock_id)`
 
@@ -4316,13 +4317,14 @@ Returns a temporary directory.
 
 ### `uv.os_get_passwd()`
 
-Returns password file information.
+Gets a subset of the password file entry for the current effective uid (not the
+real uid). On Windows, `uid`, `gid`, and `shell` are set to `nil`.
 
-**Returns:** `table`
+**Returns:** `table` or `fail`
 - `username`: `string`
-- `uid`: `integer`
-- `gid`: `integer`
-- `shell`: `string`
+- `uid`: `integer?` (nil on Windows)
+- `gid`: `integer?` (nil on Windows)
+- `shell`: `string?` (nil on Windows)
 - `homedir`: `string`
 
 ### `uv.os_getpid()`
