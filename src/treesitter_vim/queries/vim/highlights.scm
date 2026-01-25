@@ -110,6 +110,7 @@
   "cnext"
   "cprevious"
   "cNext"
+  "tab"
   "vertical"
   "leftabove"
   "aboveleft"
@@ -240,6 +241,8 @@
 (comment) @comment
 
 (line_continuation_comment) @comment
+
+(shebang) @keyword.directive
 
 (pattern) @string.special
 

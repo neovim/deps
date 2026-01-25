@@ -175,6 +175,10 @@
             },
             {
               "type": "SYMBOL",
+              "name": "tab_statement"
+            },
+            {
+              "type": "SYMBOL",
               "name": "vertical_statement"
             },
             {
@@ -332,6 +336,10 @@
             {
               "type": "SYMBOL",
               "name": "user_command"
+            },
+            {
+              "type": "SYMBOL",
+              "name": "shebang"
             }
           ]
         }
@@ -3848,6 +3856,24 @@
         }
       ]
     },
+    "tab_statement": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_tab"
+          },
+          "named": false,
+          "value": "tab"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "_statement"
+        }
+      ]
+    },
     "vertical_statement": {
       "type": "SEQ",
       "members": [
@@ -4022,6 +4048,27 @@
           },
           "named": true,
           "value": "arguments"
+        }
+      ]
+    },
+    "shebang": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "STRING",
+          "value": "#!"
+        },
+        {
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "PATTERN",
+              "value": ".+"
+            },
+            {
+              "type": "BLANK"
+            }
+          ]
         }
       ]
     },
@@ -9616,6 +9663,14 @@
             },
             {
               "type": "PATTERN",
+              "value": "[sS][aA][fF][eE][sS][tT][aA][tT][eE]"
+            },
+            {
+              "type": "PATTERN",
+              "value": "[sS][aA][fF][eE][sS][tT][aA][tT][eE][aA][gG][aA][iI][nN]"
+            },
+            {
+              "type": "PATTERN",
               "value": "[sS][eE][aA][rR][cC][hH][wW][rR][aA][pP][pP][eE][dD]"
             },
             {
@@ -14334,6 +14389,10 @@
     {
       "type": "SYMBOL",
       "name": "_continue"
+    },
+    {
+      "type": "SYMBOL",
+      "name": "_tab"
     },
     {
       "type": "SYMBOL",

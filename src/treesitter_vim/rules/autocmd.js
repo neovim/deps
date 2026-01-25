@@ -1,4 +1,4 @@
-const { maybe_bang, keyword, commaSep1, case_insensitive } = require("./utils");
+import { maybe_bang, keyword, commaSep1, case_insensitive } from "./utils.js";
 
 // :h events
 const EVENTS = [
@@ -84,6 +84,8 @@ const EVENTS = [
   "RecordingEnter", // when starting to record a macro
   "RecordingLeave", // just before a macro stops recording
   "RemoteReply", // upon string reception from a remote vim
+  "SafeState", // when nothing is pending, going to wait for the user to type a character
+  "SafeStateAgain", // like SafeState but after processing any messages and invoking callbacks
   "SearchWrapped", // after the search wrapped around
   "SessionLoadPost", // after loading a session file
   "ShellCmdPost", // after ":!cmd"
@@ -134,17 +136,17 @@ const EVENTS = [
   "FileEncoding", // alias for EncodingChanged
 ].map(case_insensitive);
 
-module.exports = {
+export default {
   // If an event is valid, it should take precedence over identifier
-  au_event: ($) => token(prec(1, choice(...EVENTS))),
+  au_event: (_) => token(prec(1, choice(...EVENTS))),
   au_event_list: ($) => commaSep1($.au_event),
 
   _augroup_name: ($) => alias($.identifier, $.augroup_name),
 
   _autocmd_pattern: ($) => commaSep1(alias(/[^ \t\n,]+/, $.pattern)),
 
-  au_once: ($) => "++once",
-  au_nested: ($) => "++nested",
+  au_once: (_) => "++once",
+  au_nested: (_) => "++nested",
 
   _autocmd_command: ($) =>
     seq(
