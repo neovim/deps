@@ -16,11 +16,11 @@ use semver::Version as SemverVersion;
 use tree_sitter::{ffi, Parser, Point};
 use tree_sitter_cli::{
     fuzz::{
-        fuzz_language_corpus, FuzzOptions, EDIT_COUNT, ITERATION_COUNT, LOG_ENABLED,
-        LOG_GRAPH_ENABLED, START_SEED,
+        fuzz_language_corpus, FuzzOptions, DEFAULT_EDIT_COUNT, DEFAULT_ITERATION_COUNT, EDIT_COUNT,
+        ITERATION_COUNT, LOG_ENABLED, LOG_GRAPH_ENABLED, START_SEED,
     },
     highlight::{self, HighlightOptions},
-    init::{generate_grammar_files, JsonConfigOpts},
+    init::{generate_grammar_files, JsonConfigOpts, TREE_SITTER_JSON_SCHEMA},
     input::{get_input, get_tmp_source_file, CliInput},
     logger,
     parse::{self, ParseDebugType, ParseFileOptions, ParseOutput, ParseTheme},
@@ -391,11 +391,15 @@ struct Fuzz {
     /// library's language function
     #[arg(long)]
     pub lang_name: Option<String>,
-    /// Maximum number of edits to perform per fuzz test
-    #[arg(long)]
+    #[arg(
+        long,
+        help=format!("Maximum number of edits to perform per fuzz test (Default: {DEFAULT_EDIT_COUNT})")
+    )]
     pub edits: Option<usize>,
-    /// Number of fuzzing iterations to run per test
-    #[arg(long)]
+    #[arg(
+        long,
+        help=format!("Number of fuzzing iterations to run per test (Default: {DEFAULT_ITERATION_COUNT})")
+    )]
     pub iterations: Option<usize>,
     /// Only fuzz corpus test cases whose name matches the given regex
     #[arg(long, short)]
@@ -867,10 +871,26 @@ impl Init {
 
             (opts.name.clone(), Some(opts))
         } else {
-            let mut json = serde_json::from_str::<TreeSitterJSON>(
-                &fs::read_to_string(current_dir.join("tree-sitter.json"))
-                    .with_context(|| "Failed to read tree-sitter.json")?,
-            )?;
+            let old_config = fs::read_to_string(current_dir.join("tree-sitter.json"))
+                .with_context(|| "Failed to read tree-sitter.json")?;
+
+            let mut json = serde_json::from_str::<TreeSitterJSON>(&old_config)?;
+            if json.schema.is_none() {
+                json.schema = Some(TREE_SITTER_JSON_SCHEMA.to_string());
+            }
+
+            let new_config = format!("{}\n", serde_json::to_string_pretty(&json)?);
+            // Write the re-serialized config back, as newly added optional boolean fields
+            // will be included with explicit `false`s rather than implict `null`s
+            if self.update && !old_config.trim().eq(new_config.trim()) {
+                info!("Updating tree-sitter.json");
+                fs::write(
+                    current_dir.join("tree-sitter.json"),
+                    serde_json::to_string_pretty(&json)?,
+                )
+                .with_context(|| "Failed to write tree-sitter.json")?;
+            }
+
             (json.grammars.swap_remove(0).name, None)
         };
 
@@ -955,11 +975,21 @@ impl Build {
         } else {
             let output_path = if let Some(ref path) = self.output {
                 let path = Path::new(path);
-                if path.is_absolute() {
+                let full_path = if path.is_absolute() {
                     path.to_path_buf()
                 } else {
                     current_dir.join(path)
-                }
+                };
+                let parent_path = full_path
+                    .parent()
+                    .context("Output path must have a parent")?;
+                let name = full_path
+                    .file_name()
+                    .context("Ouput path must have a filename")?;
+                fs::create_dir_all(parent_path).context("Failed to create output path")?;
+                let mut canon_path = parent_path.canonicalize().context("Invalid output path")?;
+                canon_path.push(name);
+                canon_path
             } else {
                 let file_name = grammar_path
                     .file_stem()
@@ -984,7 +1014,7 @@ impl Build {
 
             loader
                 .compile_parser_at_path(&grammar_path, output_path, flags)
-                .unwrap();
+                .context("Failed to compile parser")?;
         }
         Ok(())
     }
@@ -1622,6 +1652,7 @@ impl Highlight {
         let loader_config = config.get()?;
         loader.find_all_languages(&loader_config)?;
         loader.force_rebuild(self.rebuild || self.grammar_path.is_some());
+        let languages = loader.languages_at_path(current_dir)?;
 
         let cancellation_flag = util::cancel_on_signal();
 
@@ -1702,7 +1733,6 @@ impl Highlight {
             } => {
                 let path = get_tmp_source_file(&contents)?;
 
-                let languages = loader.languages_at_path(current_dir)?;
                 let language = languages
                     .iter()
                     .find(|(_, n)| language_names.contains(&Box::from(n.as_str())))
@@ -1733,7 +1763,6 @@ impl Highlight {
                     if let (Some(l), Some(lc)) = (language.clone(), language_configuration) {
                         (l, lc)
                     } else {
-                        let languages = loader.languages_at_path(current_dir)?;
                         let language = languages
                             .first()
                             .map(|(l, _)| l.clone())

@@ -515,7 +515,6 @@ pub fn parse_file_at_path(
 
         if opts.output == ParseOutput::Cst {
             render_cst(&source_code, &tree, &mut cursor, opts, &mut stdout)?;
-            println!();
         }
 
         if opts.output == ParseOutput::Xml {
@@ -785,7 +784,7 @@ pub fn render_cst<'a, 'b: 'a>(
         .map(|(row, col)| (row as f64).log10() as usize + (col.len() as f64).log10() as usize + 1)
         .max()
         .unwrap_or(1);
-    let mut indent_level = 1;
+    let mut indent_level = usize::from(!opts.no_ranges);
     let mut did_visit_children = false;
     let mut in_error = false;
     loop {
@@ -883,35 +882,24 @@ fn write_node_text(
                     0
                 };
             let formatted_line = render_line_feed(line, opts);
-            if !opts.no_ranges {
-                write!(
-                    out,
-                    "{}{}{}{}{}{}",
-                    if multiline { "\n" } else { "" },
-                    if multiline {
-                        render_node_range(opts, cursor, is_named, true, total_width, node_range)
-                    } else {
-                        String::new()
-                    },
-                    if multiline {
-                        "  ".repeat(indent_level + 1)
-                    } else {
-                        String::new()
-                    },
-                    paint(quote_color, &String::from(quote)),
-                    &paint(color, &render_node_text(&formatted_line)),
-                    paint(quote_color, &String::from(quote)),
-                )?;
-            } else {
-                write!(
-                    out,
-                    "\n{}{}{}{}",
-                    "  ".repeat(indent_level + 1),
-                    paint(quote_color, &String::from(quote)),
-                    &paint(color, &render_node_text(&formatted_line)),
-                    paint(quote_color, &String::from(quote)),
-                )?;
-            }
+            write!(
+                out,
+                "{}{}{}{}{}{}",
+                if multiline { "\n" } else { " " },
+                if multiline && !opts.no_ranges {
+                    render_node_range(opts, cursor, is_named, true, total_width, node_range)
+                } else {
+                    String::new()
+                },
+                if multiline {
+                    "  ".repeat(indent_level + 1)
+                } else {
+                    String::new()
+                },
+                paint(quote_color, &String::from(quote)),
+                paint(color, &render_node_text(&formatted_line)),
+                paint(quote_color, &String::from(quote)),
+            )?;
         }
     }
 
@@ -1011,10 +999,9 @@ fn cst_render_node(
         } else {
             opts.parse_theme.node_kind
         };
-        write!(out, "{}", paint(kind_color, node.kind()),)?;
+        write!(out, "{}", paint(kind_color, node.kind()))?;
 
         if node.child_count() == 0 {
-            write!(out, " ")?;
             // Node text from a pattern or external scanner
             write_node_text(
                 opts,

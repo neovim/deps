@@ -1,6 +1,8 @@
 #![cfg_attr(not(any(test, doctest)), doc = include_str!("../README.md"))]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
+#[cfg(unix)]
+use std::fmt::Write as _;
 #[cfg(any(feature = "tree-sitter-highlight", feature = "tree-sitter-tags"))]
 use std::ops::Range;
 #[cfg(feature = "tree-sitter-highlight")]
@@ -8,6 +10,7 @@ use std::sync::Mutex;
 use std::{
     collections::HashMap,
     env, fs,
+    hash::{Hash as _, Hasher as _},
     io::{BufRead, BufReader},
     marker::PhantomData,
     mem,
@@ -75,8 +78,6 @@ pub enum LoaderError {
     NoLanguage,
     #[error(transparent)]
     Query(LoaderQueryError),
-    #[error(transparent)]
-    ScannerSymbols(ScannerSymbolError),
     #[error("Failed to load language for scope '{0}':\n{1}")]
     ScopeLoad(String, Box<Self>),
     #[error(transparent)]
@@ -194,28 +195,6 @@ impl std::fmt::Display for SymbolError {
             f,
             "Failed to load symbol {} from {} -- {}",
             self.symbol_name, self.path, self.error
-        )?;
-        Ok(())
-    }
-}
-
-#[derive(Debug, Error)]
-pub struct ScannerSymbolError {
-    pub missing: Vec<String>,
-}
-
-impl std::fmt::Display for ScannerSymbolError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(
-            f,
-            "Missing required functions in the external scanner, parsing won't work without these!\n"
-        )?;
-        for symbol in &self.missing {
-            writeln!(f, "  `{symbol}`")?;
-        }
-        writeln!(
-            f,
-            "You can read more about this at https://tree-sitter.github.io/tree-sitter/creating-parsers/4-external-scanners\n"
         )?;
         Ok(())
     }
@@ -1025,20 +1004,26 @@ impl Loader {
             return Ok(wasm_store.load_language(&config.name, &wasm_bytes)?);
         }
 
+        // Create a unique lock path based on the output path hash to prevent
+        // interference when multiple processes build the same grammar (by name)
+        // to different output locations
+        let lock_hash = {
+            let mut hasher = std::hash::DefaultHasher::new();
+            output_path.hash(&mut hasher);
+            format!("{:x}", hasher.finish())
+        };
+
         let lock_path = if env::var("CROSS_RUNNER").is_ok() {
             tempfile::tempdir()
-                .unwrap()
+                .expect("create a temp dir")
                 .path()
-                .join("tree-sitter")
-                .join("lock")
-                .join(format!("{}.lock", config.name))
+                .to_path_buf()
         } else {
-            etcetera::choose_base_strategy()?
-                .cache_dir()
-                .join("tree-sitter")
-                .join("lock")
-                .join(format!("{}.lock", config.name))
-        };
+            etcetera::choose_base_strategy()?.cache_dir()
+        }
+        .join("tree-sitter")
+        .join("lock")
+        .join(format!("{}-{lock_hash}.lock", config.name));
 
         if let Ok(lock_file) = fs::OpenOptions::new().write(true).open(&lock_path) {
             recompile = false;
@@ -1085,8 +1070,28 @@ impl Loader {
             self.compile_parser_to_dylib(&config, &lock_file, &lock_path)?;
 
             if config.scanner_path.is_some() {
-                self.check_external_scanner(&config.name, &output_path)?;
+                self.check_external_scanner(&output_path)?;
             }
+        }
+
+        // Ensure the dynamic library exists before trying to load it. This can
+        // happen in race conditions where we couldn't acquire the lock because
+        // another process was compiling but it still hasn't finished by the
+        // time we reach this point, so the output file still doesn't exist.
+        //
+        // Instead of allowing the `load_language` call below to fail, return a
+        // clearer error to the user here.
+        if !output_path.exists() {
+            let msg = format!(
+                "Dynamic library `{}` not found after build attempt. \
+                Are you running multiple processes building to the same output location?",
+                output_path.display()
+            );
+
+            Err(LoaderError::IO(IoError::new(
+                std::io::Error::new(std::io::ErrorKind::NotFound, msg),
+                Some(output_path.as_path()),
+            )))?;
         }
 
         Self::load_language(&output_path, &language_fn_name)
@@ -1187,6 +1192,7 @@ impl Loader {
                 command.arg("-UTREE_SITTER_REUSE_ALLOCATOR");
             } else {
                 command.arg("-shared");
+                command.arg("-Wl,--no-undefined");
             }
             command.args(cc_config.get_files());
             command.arg("-o").arg(output_path);
@@ -1221,25 +1227,15 @@ impl Loader {
     }
 
     #[cfg(unix)]
-    fn check_external_scanner(&self, name: &str, library_path: &Path) -> LoaderResult<()> {
-        let prefix = if cfg!(any(target_os = "macos", target_os = "ios")) {
-            "_"
+    fn check_external_scanner(&self, library_path: &Path) -> LoaderResult<()> {
+        let section = " T ";
+        // Older ppc toolchains incorrectly report functions in the Data section. This bug has been
+        // fixed, but we still need to account for older systems.
+        let old_ppc_section = if cfg!(all(target_arch = "powerpc64", target_os = "linux")) {
+            Some(" D ")
         } else {
-            ""
+            None
         };
-        let section = if cfg!(all(target_arch = "powerpc64", target_os = "linux")) {
-            " D "
-        } else {
-            " T "
-        };
-        let mut must_have = vec![
-            format!("{prefix}tree_sitter_{name}_external_scanner_create"),
-            format!("{prefix}tree_sitter_{name}_external_scanner_destroy"),
-            format!("{prefix}tree_sitter_{name}_external_scanner_serialize"),
-            format!("{prefix}tree_sitter_{name}_external_scanner_deserialize"),
-            format!("{prefix}tree_sitter_{name}_external_scanner_scan"),
-        ];
-
         let nm_cmd = env::var("NM").unwrap_or_else(|_| "nm".to_owned());
         let command = Command::new(nm_cmd)
             .arg("--defined-only")
@@ -1247,54 +1243,41 @@ impl Loader {
             .output();
         if let Ok(output) = command {
             if output.status.success() {
-                let mut found_non_static = false;
+                let mut non_static_symbols = String::new();
                 for line in String::from_utf8_lossy(&output.stdout).lines() {
-                    if line.contains(section) {
+                    if line.contains(section) || old_ppc_section.is_some_and(|s| line.contains(s)) {
                         if let Some(function_name) =
                             line.split_whitespace().collect::<Vec<_>>().get(2)
                         {
                             if !line.contains("tree_sitter_") {
-                                if !found_non_static {
-                                    found_non_static = true;
-                                    warn!("Found non-static non-tree-sitter functions in the external scanner");
-                                }
-                                warn!("  `{function_name}`");
-                            } else {
-                                must_have.retain(|f| f != function_name);
+                                writeln!(&mut non_static_symbols, "  `{function_name}`").unwrap();
                             }
                         }
                     }
                 }
-                if found_non_static {
-                    warn!(concat!(
-                        "Consider making these functions static, they can cause conflicts ",
-                        "when another tree-sitter project uses the same function name."
-                    ));
-                }
-
-                if !must_have.is_empty() {
-                    return Err(LoaderError::ScannerSymbols(ScannerSymbolError {
-                        missing: must_have,
-                    }));
+                if !non_static_symbols.is_empty() {
+                    warn!(
+                        "Found non-static non-tree-sitter functions in the external scanner\n{non_static_symbols}\n{}",
+                        concat!(
+                            "Consider making these functions static, they can cause conflicts ",
+                            "when another tree-sitter project uses the same function name."
+                        )
+                    );
                 }
             }
+        } else {
+            warn!(
+                "Failed to run `nm` to verify symbols in {}",
+                library_path.display()
+            );
         }
 
         Ok(())
     }
 
     #[cfg(windows)]
-    fn check_external_scanner(&self, _name: &str, _library_path: &Path) -> LoaderResult<()> {
+    fn check_external_scanner(&self, _library_path: &Path) -> LoaderResult<()> {
         // TODO: there's no nm command on windows, whoever wants to implement this can and should :)
-
-        // let mut must_have = vec![
-        //     format!("tree_sitter_{name}_external_scanner_create"),
-        //     format!("tree_sitter_{name}_external_scanner_destroy"),
-        //     format!("tree_sitter_{name}_external_scanner_serialize"),
-        //     format!("tree_sitter_{name}_external_scanner_deserialize"),
-        //     format!("tree_sitter_{name}_external_scanner_scan"),
-        // ];
-
         Ok(())
     }
 

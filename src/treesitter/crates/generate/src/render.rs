@@ -7,6 +7,8 @@ use std::{
 
 use crate::LANGUAGE_VERSION;
 use indoc::indoc;
+use serde::Serialize;
+use thiserror::Error;
 
 use super::{
     build_tables::Tables,
@@ -24,6 +26,16 @@ const SMALL_STATE_THRESHOLD: usize = 64;
 pub const ABI_VERSION_MIN: usize = 14;
 pub const ABI_VERSION_MAX: usize = LANGUAGE_VERSION;
 const ABI_VERSION_WITH_RESERVED_WORDS: usize = 15;
+
+pub type RenderResult<T> = Result<T, RenderError>;
+
+#[derive(Debug, Error, Serialize)]
+pub enum RenderError {
+    #[error("Parse table action count {0} exceeds maximum value of {max}", max=u16::MAX)]
+    ParseTable(usize),
+    #[error("This version of Tree-sitter can only generate parsers with ABI version {ABI_VERSION_MIN} - {ABI_VERSION_MAX}, not {0}")]
+    ABI(usize),
+}
 
 #[clippy::format_args]
 macro_rules! add {
@@ -104,7 +116,7 @@ struct Metadata {
 }
 
 impl Generator {
-    fn generate(mut self) -> String {
+    fn generate(mut self) -> RenderResult<String> {
         self.init();
         self.add_header();
         self.add_includes();
@@ -161,7 +173,7 @@ impl Generator {
             self.add_reserved_word_sets();
         }
 
-        self.add_parse_table();
+        self.add_parse_table()?;
 
         if !self.syntax_grammar.external_tokens.is_empty() {
             self.add_external_token_enum();
@@ -171,7 +183,7 @@ impl Generator {
 
         self.add_parser_export();
 
-        self.buffer
+        Ok(self.buffer)
     }
 
     fn init(&mut self) {
@@ -1273,7 +1285,7 @@ impl Generator {
         add_line!(self, "");
     }
 
-    fn add_parse_table(&mut self) {
+    fn add_parse_table(&mut self) -> RenderResult<()> {
         let mut parse_table_entries = HashMap::new();
         let mut next_parse_action_list_index = 0;
 
@@ -1443,6 +1455,9 @@ impl Generator {
             add_line!(self, "}};");
             add_line!(self, "");
         }
+        if next_parse_action_list_index >= usize::from(u16::MAX) {
+            Err(RenderError::ParseTable(next_parse_action_list_index))?;
+        }
 
         let mut parse_table_entries = parse_table_entries
             .into_iter()
@@ -1450,6 +1465,8 @@ impl Generator {
             .collect::<Vec<_>>();
         parse_table_entries.sort_by_key(|(index, _)| *index);
         self.add_parse_action_list(parse_table_entries);
+
+        Ok(())
     }
 
     fn add_parse_action_list(&mut self, parse_table_entries: Vec<(usize, ParseTableEntry)>) {
@@ -1942,11 +1959,10 @@ pub fn render_c_code(
     abi_version: usize,
     semantic_version: Option<(u8, u8, u8)>,
     supertype_symbol_map: BTreeMap<Symbol, Vec<ChildType>>,
-) -> String {
-    assert!(
-        (ABI_VERSION_MIN..=ABI_VERSION_MAX).contains(&abi_version),
-        "This version of Tree-sitter can only generate parsers with ABI version {ABI_VERSION_MIN} - {ABI_VERSION_MAX}, not {abi_version}",
-    );
+) -> RenderResult<String> {
+    if !(ABI_VERSION_MIN..=ABI_VERSION_MAX).contains(&abi_version) {
+        Err(RenderError::ABI(abi_version))?;
+    }
 
     Generator {
         language_name: name.to_string(),
