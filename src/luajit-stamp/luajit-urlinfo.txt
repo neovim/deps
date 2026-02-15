@@ -6,7 +6,7 @@ method=url
 command=/usr/local/bin/cmake;-DCMAKE_MESSAGE_LOG_LEVEL=VERBOSE;-P;/home/runner/work/deps/deps/neovim/deps/build/src/luajit-stamp/download-luajit.cmake;COMMAND;/usr/local/bin/cmake;-DCMAKE_MESSAGE_LOG_LEVEL=VERBOSE;-P;/home/runner/work/deps/deps/neovim/deps/build/src/luajit-stamp/verify-luajit.cmake;COMMAND;/usr/local/bin/cmake;-DCMAKE_MESSAGE_LOG_LEVEL=VERBOSE;-P;/home/runner/work/deps/deps/neovim/deps/build/src/luajit-stamp/extract-luajit.cmake
 source_dir=/home/runner/work/deps/deps/neovim/deps/build/src/luajit
 work_dir=/home/runner/work/deps/deps/neovim/deps/build/src
-url(s)=https://github.com/luajit/luajit/archive/233ad24035944ece5367157e824e8357df3417d9.tar.gz
-hash=SHA256=0450adf6fce3f7991de93ad75570345b11dfe0b4139d6f81094a9fc2e241b059
+url(s)=https://github.com/luajit/luajit/archive/26fd1a7d6770b2237240a071e6f01132877a2425.tar.gz
+hash=SHA256=b4223a54fafc3546ce794a682381ab06423570219a98c9cadc8d41d89a86847d
       no_extract=
 
