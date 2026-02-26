@@ -1,4 +1,4 @@
-VERSION := 0.26.5
+VERSION := 0.26.6
 DESCRIPTION := An incremental parsing system for programming tools
 HOMEPAGE_URL := https://tree-sitter.github.io/tree-sitter/
 
@@ -122,7 +122,6 @@ test-wasm:
 
 lint:
 	cargo update --workspace --locked --quiet
-	cargo check --workspace --all-targets
 	cargo fmt --all --check
 	cargo clippy --workspace --all-targets -- -D warnings
 
