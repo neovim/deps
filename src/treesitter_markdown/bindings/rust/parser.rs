@@ -1,7 +1,9 @@
+use core::num::NonZeroU16;
 use std::collections::HashMap;
-use std::num::NonZeroU16;
 
-use tree_sitter::{InputEdit, Language, Node, Parser, Point, Range, Tree, TreeCursor};
+use tree_sitter::{
+    InputEdit, Language, Node, ParseOptions, Parser, Point, Range, Tree, TreeCursor,
+};
 
 use crate::{INLINE_LANGUAGE, LANGUAGE};
 
@@ -16,27 +18,31 @@ pub struct MarkdownParser {
 
 /// A stateful object for walking a [`MarkdownTree`] efficiently.
 ///
-/// This exposes the same methdos as [`TreeCursor`], but abstracts away the
+/// This exposes the same methods as [`TreeCursor`], but abstracts away the
 /// double block / inline structure of [`MarkdownTree`].
-pub struct MarkdownCursor<'a> {
-    markdown_tree: &'a MarkdownTree,
-    block_cursor: TreeCursor<'a>,
-    inline_cursor: Option<TreeCursor<'a>>,
+#[derive(Clone)]
+pub struct MarkdownCursor<'tree> {
+    markdown_tree: &'tree MarkdownTree,
+    block_cursor: TreeCursor<'tree>,
+    inline_cursor: Option<TreeCursor<'tree>>,
 }
 
-impl<'a> MarkdownCursor<'a> {
+impl<'tree> MarkdownCursor<'tree> {
     /// Get the cursor's current [`Node`].
-    pub fn node(&self) -> Node<'a> {
+    #[doc(alias = "ts_tree_cursor_current_node")]
+    #[must_use]
+    pub fn node(&self) -> Node<'tree> {
         match &self.inline_cursor {
             Some(cursor) => cursor.node(),
             None => self.block_cursor.node(),
         }
     }
 
-    /// Returns `true` if the current node is from the (inline language)[INLINE_LANGUAGE]
+    /// Returns `true` if the current node is from the [INLINE_LANGUAGE](inline language)
     ///
     /// This information is needed to handle "tree-sitter internal" data like
     /// [`field_id`](Self::field_id) correctly.
+    #[must_use]
     pub fn is_inline(&self) -> bool {
         self.inline_cursor.is_some()
     }
@@ -47,6 +53,8 @@ impl<'a> MarkdownCursor<'a> {
     /// current node is an inline or block node.
     ///
     /// See also [`field_name`](Self::field_name).
+    #[doc(alias = "ts_tree_cursor_current_field_id")]
+    #[must_use]
     pub fn field_id(&self) -> Option<NonZeroU16> {
         match &self.inline_cursor {
             Some(cursor) => cursor.field_id(),
@@ -58,11 +66,25 @@ impl<'a> MarkdownCursor<'a> {
     ///
     /// You will need to call [`is_inline`](Self::is_inline) to find out if the
     /// current node is an inline or block node.
+    #[doc(alias = "ts_tree_cursor_current_field_name")]
+    #[must_use]
     pub fn field_name(&self) -> Option<&'static str> {
         match &self.inline_cursor {
             Some(cursor) => cursor.field_name(),
             None => self.block_cursor.field_name(),
         }
+    }
+
+    /// Get the depth of the cursor's current node.
+    #[doc(alias = "ts_tree_cursor_current_depth")]
+    #[must_use]
+    pub fn depth(&self) -> u32 {
+        self.block_cursor.depth()
+            + self
+                .inline_cursor
+                .as_ref()
+                .map(TreeCursor::depth)
+                .unwrap_or(0)
     }
 
     fn move_to_inline_tree(&mut self) -> bool {
@@ -87,8 +109,10 @@ impl<'a> MarkdownCursor<'a> {
     ///
     /// This returns `true` if the cursor successfully moved, and returns `false` if there were no
     /// children.
-    /// If the cursor is currently at a node in the block tree and it has an associated inline tree, it
-    /// will descend into the inline tree.
+    ///
+    /// If the cursor is currently at a node in the block tree and it has an associated inline tree,
+    /// it will descend into the inline tree.
+    #[doc(alias = "ts_tree_cursor_goto_first_child")]
     pub fn goto_first_child(&mut self) -> bool {
         match &mut self.inline_cursor {
             Some(cursor) => cursor.goto_first_child(),
@@ -107,12 +131,41 @@ impl<'a> MarkdownCursor<'a> {
         }
     }
 
+    /// Move this cursor to the last child of its current node.
+    ///
+    /// This returns `true` if the cursor successfully moved, and returns
+    /// `false` if there were no children.
+    ///
+    /// Note that this function may be slower than
+    /// [`goto_first_child`](MarkdownCursor::goto_first_child) because it needs to
+    /// iterate through all the children to compute the child's position.
+    #[doc(alias = "ts_tree_cursor_goto_last_child")]
+    pub fn goto_last_child(&mut self) -> bool {
+        match &mut self.inline_cursor {
+            Some(cursor) => cursor.goto_last_child(),
+            None => {
+                if self.move_to_inline_tree() {
+                    if !self.inline_cursor.as_mut().unwrap().goto_last_child() {
+                        self.move_to_block_tree();
+                        false
+                    } else {
+                        true
+                    }
+                } else {
+                    self.block_cursor.goto_last_child()
+                }
+            }
+        }
+    }
+
     /// Move this cursor to the parent of its current node.
     ///
-    /// This returns true if the cursor successfully moved, and returns false if there was no
+    /// This returns `true` if the cursor successfully moved, and returns `false` if there was no
     /// parent node (the cursor was already on the root node).
-    /// If the cursor moves to the root node of an inline tree, the it ascents to the associated
+    ///
+    /// If the cursor moves to the root node of an inline tree, then it ascents to the associated
     /// node in the block tree.
+    #[doc(alias = "ts_tree_cursor_goto_parent")]
     pub fn goto_parent(&mut self) -> bool {
         match &mut self.inline_cursor {
             Some(inline_cursor) => {
@@ -128,12 +181,30 @@ impl<'a> MarkdownCursor<'a> {
 
     /// Move this cursor to the next sibling of its current node.
     ///
-    /// This returns true if the cursor successfully moved, and returns false if there was no next
-    /// sibling node.
+    /// This returns `true` if the cursor successfully moved, and returns `false` if there was no
+    /// next sibling node.
+    #[doc(alias = "ts_tree_cursor_goto_next_sibling")]
     pub fn goto_next_sibling(&mut self) -> bool {
         match &mut self.inline_cursor {
             Some(inline_cursor) => inline_cursor.goto_next_sibling(),
             None => self.block_cursor.goto_next_sibling(),
+        }
+    }
+
+    /// Move this cursor to the previous sibling of its current node.
+    ///
+    /// This returns `true` if the cursor successfully moved, and returns `false` if there was no
+    /// previous sibling node.
+    ///
+    /// Note, that this function may be slower than
+    /// [`goto_next_sibling`](MarkdownCursor::goto_next_sibling) due to how node positions are
+    /// stored. In the worst case, this will need to iterate through all the children up to the
+    /// previous sibling node to recalculate its position.
+    #[doc(alias = "ts_tree_cursor_goto_previous_sibling")]
+    pub fn goto_previous_sibling(&mut self) -> bool {
+        match &mut self.inline_cursor {
+            Some(inline_cursor) => inline_cursor.goto_previous_sibling(),
+            None => self.block_cursor.goto_previous_sibling(),
         }
     }
 
@@ -142,6 +213,7 @@ impl<'a> MarkdownCursor<'a> {
     /// This returns the index of the child node if one was found, and returns None if no such child was found.
     /// If the cursor is currently at a node in the block tree and it has an associated inline tree, it
     /// will descend into the inline tree.
+    #[doc(alias = "ts_tree_cursor_goto_first_child_for_byte")]
     pub fn goto_first_child_for_byte(&mut self, index: usize) -> Option<usize> {
         match &mut self.inline_cursor {
             Some(cursor) => cursor.goto_first_child_for_byte(index),
@@ -163,6 +235,7 @@ impl<'a> MarkdownCursor<'a> {
     /// This returns the index of the child node if one was found, and returns None if no such child was found.
     /// If the cursor is currently at a node in the block tree and it has an associated inline tree, it
     /// will descend into the inline tree.
+    #[doc(alias = "ts_tree_cursor_goto_first_child_for_point")]
     pub fn goto_first_child_for_point(&mut self, index: Point) -> Option<usize> {
         match &mut self.inline_cursor {
             Some(cursor) => cursor.goto_first_child_for_point(index),
@@ -221,11 +294,33 @@ impl MarkdownTree {
     }
 
     /// Create a new [`MarkdownCursor`] starting from the root of the tree.
-    pub fn walk(&self) -> MarkdownCursor {
+    pub fn walk(&self) -> MarkdownCursor<'_> {
         MarkdownCursor {
             markdown_tree: self,
             block_cursor: self.block_tree.walk(),
             inline_cursor: None,
+        }
+    }
+}
+
+/// The options used while parsing a [`MarkdownTree`].
+///
+/// This abstracts away the double block / inline structure of [`MarkdownParser`].
+#[derive(Default)]
+pub struct MarkdownParseOptions<'a> {
+    block_options: Option<ParseOptions<'a>>,
+    inline_options: Option<ParseOptions<'a>>,
+}
+
+impl<'a> MarkdownParseOptions<'a> {
+    /// Creates a new [MarkdownParseOptions] instance.
+    pub fn new(
+        block_options: Option<ParseOptions<'a>>,
+        inline_options: Option<ParseOptions<'a>>,
+    ) -> Self {
+        MarkdownParseOptions {
+            block_options,
+            inline_options,
         }
     }
 }
@@ -252,14 +347,17 @@ impl MarkdownParser {
     ///   If the text of the document has changed since `old_tree` was
     ///   created, then you must edit `old_tree` to match the new text using
     ///   [MarkdownTree::edit].
+    /// * `options` The [options][MarkdownParseOptions] used for parsing.
+    ///   Use `MarkdownParseOptions::default()` if you don't need to pass any options.
     ///
     /// Returns a [MarkdownTree] if parsing succeeded, or `None` if:
     ///  * The timeout set with [tree_sitter::Parser::set_timeout_micros] expired
     ///  * The cancellation flag set with [tree_sitter::Parser::set_cancellation_flag] was flipped
-    pub fn parse_with<T: AsRef<[u8]>, F: FnMut(usize, Point) -> T>(
+    pub fn parse_with_options<T: AsRef<[u8]>, F: FnMut(usize, Point) -> T>(
         &mut self,
         callback: &mut F,
         old_tree: Option<&MarkdownTree>,
+        mut options: MarkdownParseOptions<'_>,
     ) -> Option<MarkdownTree> {
         let MarkdownParser {
             parser,
@@ -272,7 +370,11 @@ impl MarkdownParser {
         parser
             .set_language(block_language)
             .expect("Could not load block grammar");
-        let block_tree = parser.parse_with(callback, old_tree.map(|tree| &tree.block_tree))?;
+        let block_tree = parser.parse_with_options(
+            callback,
+            old_tree.map(|tree| &tree.block_tree),
+            options.block_options.as_mut().map(|b_opt| b_opt.reborrow()),
+        )?;
         let (mut inline_trees, mut inline_indices) = if let Some(old_tree) = old_tree {
             let len = old_tree.inline_trees.len();
             (Vec::with_capacity(len), HashMap::with_capacity(len))
@@ -322,9 +424,13 @@ impl MarkdownParser {
             }
             ranges.push(range);
             parser.set_included_ranges(&ranges).ok()?;
-            let inline_tree = parser.parse_with(
+            let inline_tree = parser.parse_with_options(
                 callback,
                 old_tree.and_then(|old_tree| old_tree.inline_trees.get(i)),
+                options
+                    .inline_options
+                    .as_mut()
+                    .map(|b_opt| b_opt.reborrow()),
             )?;
             inline_trees.push(inline_tree);
             inline_indices.insert(node.id(), i);
@@ -353,7 +459,11 @@ impl MarkdownParser {
     ///  * The timeout set with [tree_sitter::Parser::set_timeout_micros] expired
     ///  * The cancellation flag set with [tree_sitter::Parser::set_cancellation_flag] was flipped
     pub fn parse(&mut self, text: &[u8], old_tree: Option<&MarkdownTree>) -> Option<MarkdownTree> {
-        self.parse_with(&mut |byte, _| &text[byte..], old_tree)
+        self.parse_with_options(
+            &mut |byte, _| &text[byte..],
+            old_tree,
+            MarkdownParseOptions::default(),
+        )
     }
 }
 
@@ -365,7 +475,11 @@ mod tests {
 
     #[test]
     fn inline_ranges() {
-        let code = "# title\n\nInline [content].\n";
+        let code = "\
+            # title\n\
+            \n\
+            Inline [content].\n\
+        ";
         let mut parser = MarkdownParser::default();
         let mut tree = parser.parse(code.as_bytes(), None).unwrap();
 
@@ -387,7 +501,11 @@ mod tests {
             "shortcut_link"
         );
 
-        let code = "# Title\n\nInline [content].\n";
+        let code = "\
+            # Title\n\
+            \n\
+            Inline [content].\n\
+        ";
         tree.edit(&InputEdit {
             start_byte: 2,
             old_end_byte: 3,
@@ -419,31 +537,95 @@ mod tests {
 
     #[test]
     fn markdown_cursor() {
-        let code = "# title\n\nInline [content].\n";
+        let code = "\
+            # title\n\
+            \n\
+            Inline [content].\n\
+        ";
         let mut parser = MarkdownParser::default();
         let tree = parser.parse(code.as_bytes(), None).unwrap();
         let mut cursor = tree.walk();
+
         assert_eq!(cursor.node().kind(), "document");
+        assert_eq!(cursor.depth(), 0);
+
         assert!(cursor.goto_first_child());
         assert_eq!(cursor.node().kind(), "section");
+        assert_eq!(cursor.depth(), 1);
+
         assert!(cursor.goto_first_child());
         assert_eq!(cursor.node().kind(), "atx_heading");
+        assert_eq!(cursor.depth(), 2);
+
         assert!(cursor.goto_next_sibling());
         assert_eq!(cursor.node().kind(), "paragraph");
+        assert_eq!(cursor.depth(), 2);
+
         assert!(cursor.goto_first_child());
         assert_eq!(cursor.node().kind(), "inline");
+        assert_eq!(cursor.depth(), 3);
+
         assert!(cursor.goto_first_child());
         assert_eq!(cursor.node().kind(), "shortcut_link");
+        assert_eq!(cursor.depth(), 4);
+
+        assert!(cursor.goto_next_sibling());
+        assert_eq!(cursor.node().kind(), ".");
+        assert_eq!(cursor.depth(), 4);
+
         assert!(cursor.goto_parent());
+        assert_eq!(cursor.depth(), 3);
+
         assert!(cursor.goto_parent());
+        assert_eq!(cursor.depth(), 2);
+
         assert!(cursor.goto_parent());
+        assert_eq!(cursor.depth(), 1);
+
         assert!(cursor.goto_parent());
         assert_eq!(cursor.node().kind(), "document");
+        assert_eq!(cursor.depth(), 0);
+
+        assert!(cursor.goto_last_child());
+        assert_eq!(cursor.node().kind(), "section");
+        assert_eq!(cursor.depth(), 1);
+
+        assert!(cursor.goto_last_child());
+        assert_eq!(cursor.node().kind(), "paragraph");
+        assert_eq!(cursor.depth(), 2);
+
+        assert!(cursor.goto_previous_sibling());
+        assert_eq!(cursor.node().kind(), "atx_heading");
+        assert_eq!(cursor.depth(), 2);
+
+        assert!(cursor.goto_next_sibling());
+
+        assert!(cursor.goto_last_child());
+        assert_eq!(cursor.node().kind(), "inline");
+        assert_eq!(cursor.depth(), 3);
+
+        assert!(cursor.goto_last_child());
+        assert_eq!(cursor.node().kind(), ".");
+        assert_eq!(cursor.depth(), 4);
+
+        assert!(cursor.goto_previous_sibling());
+        assert_eq!(cursor.node().kind(), "shortcut_link");
+        assert_eq!(cursor.depth(), 4);
+
+        let mut cursor2 = cursor.clone();
+
+        assert!(cursor2.goto_parent());
+        assert_eq!(cursor2.depth(), 3);
+        assert_eq!(cursor.depth(), 4);
     }
 
     #[test]
     fn table() {
-        let code = "| foo |\n| --- |\n| *bar*|\n";
+        let code = "\
+            | foo |\n\
+            | --- |\n\
+            | *bar*|\n\
+        ";
         let mut parser = MarkdownParser::default();
         let tree = parser.parse(code.as_bytes(), None).unwrap();
         dbg!(&tree.inline_trees());

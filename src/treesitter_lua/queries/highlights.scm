@@ -5,6 +5,7 @@
   "goto"
   "in"
   "local"
+  "global"
 ] @keyword
 
 (label_statement) @label
@@ -77,6 +78,8 @@
 
 (unary_expression
   operator: _ @operator)
+
+"=" @operator
 
 [
   "and"

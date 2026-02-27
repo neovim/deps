@@ -6,7 +6,7 @@ method=url
 command=/usr/local/bin/cmake;-DCMAKE_MESSAGE_LOG_LEVEL=VERBOSE;-P;/home/runner/work/deps/deps/neovim/deps/build/src/treesitter_vim-stamp/download-treesitter_vim.cmake;COMMAND;/usr/local/bin/cmake;-DCMAKE_MESSAGE_LOG_LEVEL=VERBOSE;-P;/home/runner/work/deps/deps/neovim/deps/build/src/treesitter_vim-stamp/verify-treesitter_vim.cmake;COMMAND;/usr/local/bin/cmake;-DCMAKE_MESSAGE_LOG_LEVEL=VERBOSE;-P;/home/runner/work/deps/deps/neovim/deps/build/src/treesitter_vim-stamp/extract-treesitter_vim.cmake
 source_dir=/home/runner/work/deps/deps/neovim/deps/build/src/treesitter_vim
 work_dir=/home/runner/work/deps/deps/neovim/deps/build/src
-url(s)=https://github.com/tree-sitter-grammars/tree-sitter-vim/archive/v0.8.0.tar.gz
-hash=SHA256=aa0a45027408bc33da0f2244272dbdc0b4e71bd18f71e5b885f6f7cbae407338
+url(s)=https://github.com/tree-sitter-grammars/tree-sitter-vim/archive/v0.8.1.tar.gz
+hash=SHA256=93cafb9a0269420362454ace725a118ff1c3e08dcdfdc228aa86334b54d53c2a
       no_extract=
 

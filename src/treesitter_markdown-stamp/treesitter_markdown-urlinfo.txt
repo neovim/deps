@@ -6,7 +6,7 @@ method=url
 command=/usr/local/bin/cmake;-DCMAKE_MESSAGE_LOG_LEVEL=VERBOSE;-P;/home/runner/work/deps/deps/neovim/deps/build/src/treesitter_markdown-stamp/download-treesitter_markdown.cmake;COMMAND;/usr/local/bin/cmake;-DCMAKE_MESSAGE_LOG_LEVEL=VERBOSE;-P;/home/runner/work/deps/deps/neovim/deps/build/src/treesitter_markdown-stamp/verify-treesitter_markdown.cmake;COMMAND;/usr/local/bin/cmake;-DCMAKE_MESSAGE_LOG_LEVEL=VERBOSE;-P;/home/runner/work/deps/deps/neovim/deps/build/src/treesitter_markdown-stamp/extract-treesitter_markdown.cmake
 source_dir=/home/runner/work/deps/deps/neovim/deps/build/src/treesitter_markdown
 work_dir=/home/runner/work/deps/deps/neovim/deps/build/src
-url(s)=https://github.com/tree-sitter-grammars/tree-sitter-markdown/archive/v0.5.1.tar.gz
-hash=SHA256=acaffe5a54b4890f1a082ad6b309b600b792e93fc6ee2903d022257d5b15e216
+url(s)=https://github.com/tree-sitter-grammars/tree-sitter-markdown/archive/v0.5.3.tar.gz
+hash=SHA256=df845b1ab7c7c163ec57d7fa17170c92b04be199bddab02523636efec5224ab6
       no_extract=
 
