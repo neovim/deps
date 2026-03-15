@@ -1193,6 +1193,8 @@ impl Loader {
             } else {
                 command.arg("-shared");
                 command.arg("-Wl,--no-undefined");
+                #[cfg(target_os = "openbsd")]
+                command.arg("-lc");
             }
             command.args(cc_config.get_files());
             command.arg("-o").arg(output_path);
@@ -1292,6 +1294,7 @@ impl Loader {
 
         let mut command = Command::new(&clang_executable);
         command.current_dir(src_path).args([
+            "--target=wasm32-unknown-wasi",
             "-o",
             output_path.to_str().unwrap(),
             "-fPIC",
