@@ -82,10 +82,21 @@ static int luv_tcp_keepalive(lua_State* L) {
   unsigned int delay = 0;
   luaL_checktype(L, 2, LUA_TBOOLEAN);
   enable = lua_toboolean(L, 2);
+  #if LUV_UV_VERSION_GEQ(1, 52, 0)
+  unsigned int intvl = 1; // defaults chosen in uv_tcp_keepalive on libuv 1.52.0
+  unsigned int cnt = 10; // defaults chosen in uv_tcp_keepalive on libuv 1.52.0
+  if (enable) {
+    delay = luaL_checkinteger(L, 3);
+    intvl = luaL_optinteger(L, 4, intvl);
+    cnt = luaL_optinteger(L, 5, cnt);
+  }
+  ret = uv_tcp_keepalive_ex(handle, enable, delay, intvl, cnt);
+  #else
   if (enable) {
     delay = luaL_checkinteger(L, 3);
   }
   ret = uv_tcp_keepalive(handle, enable, delay);
+  #endif
   return luv_result(L, ret);
 }
 
@@ -131,6 +142,8 @@ static void parse_sockaddr(lua_State* L, struct sockaddr_storage* address) {
     struct sockaddr_in6* addrin6 = (struct sockaddr_in6*)address;
     uv_inet_ntop(AF_INET6, &(addrin6->sin6_addr), ip, INET6_ADDRSTRLEN);
     port = ntohs(addrin6->sin6_port);
+  } else {
+    ip[0] = '\0';
   }
 
   lua_pushstring(L, luv_af_num_to_string(addr->sa_family));

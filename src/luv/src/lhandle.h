@@ -50,4 +50,8 @@ typedef struct {
   luv_handle_extra_gc extra_gc;
 } luv_handle_t;
 
+static void luv_handle_free(uv_handle_t* handle);
+
+static const char* luv_handle_key = "LUV_HANDLES";
+
 #endif

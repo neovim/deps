@@ -102,7 +102,12 @@ static int luv_new_udp(lua_State* L) {
   if (flags & UV_UDP_RECVMMSG) {
     // store the number of msgs to be received for use in alloc_cb
     int* extra_data = malloc(sizeof(int));
-    assert(extra_data);
+    if (!extra_data) {
+      uv_close((uv_handle_t*)handle, NULL);
+      free(handle->data);
+      free(handle);
+      return luaL_error(L, "Failed to allocate UDP recvmmsg state");
+    }
     *extra_data = mmsg_num_msgs;
     ((luv_handle_t*)handle->data)->extra = extra_data;
     ((luv_handle_t*)handle->data)->extra_gc = free;
@@ -126,7 +131,28 @@ static int luv_udp_get_send_queue_count(lua_State* L) {
 static int luv_udp_open(lua_State* L) {
   uv_udp_t* handle = luv_check_udp(L, 1);
   uv_os_sock_t sock = luaL_checkinteger(L, 2);
+  #if LUV_UV_VERSION_GEQ(1, 52, 0)
+  unsigned int flags = 0;
+
+  if (!lua_isnoneornil(L, 3)) {
+    if (lua_isinteger(L, 3)) {
+      flags = (unsigned int)lua_tointeger(L, 3);
+    } else if (lua_istable(L, 3)) {
+      lua_getfield(L, 3, "reuseaddr");
+      if (lua_toboolean(L, -1)) flags |= UV_UDP_REUSEADDR;
+      lua_pop(L, 1);
+      lua_getfield(L, 3, "reuseport");
+      if (lua_toboolean(L, -1)) flags |= UV_UDP_REUSEPORT;
+      lua_pop(L, 1);
+    } else {
+      return luaL_argerror(L, 3, "expected integer or table");
+    }
+  }
+
+  int ret = uv_udp_open_ex(handle, sock, flags);
+  #else
   int ret = uv_udp_open(handle, sock);
+  #endif
   return luv_result(L, ret);
 }
 
@@ -149,6 +175,16 @@ static int luv_udp_bind(lua_State* L) {
     lua_getfield(L, 4, "ipv6only");
     if (lua_toboolean(L, -1)) flags |= UV_UDP_IPV6ONLY;
     lua_pop(L, 1);
+#if LUV_UV_VERSION_GEQ(1, 42, 0)
+    lua_getfield(L, 4, "linux_recverr");
+    if (lua_toboolean(L, -1)) flags |= UV_UDP_LINUX_RECVERR;
+    lua_pop(L, 1);
+#endif
+#if LUV_UV_VERSION_GEQ(1, 49, 0)
+    lua_getfield(L, 4, "reuseport");
+    if (lua_toboolean(L, -1)) flags |= UV_UDP_REUSEPORT;
+    lua_pop(L, 1);
+#endif
   }
   ret = uv_udp_bind(handle, (struct sockaddr*)&addr, flags);
   return luv_result(L, ret);
@@ -352,17 +388,35 @@ static int luv_udp_try_send2(lua_State* L) {
   }
 
   addrs = malloc(sizeof(struct sockaddr_storage) * num_msgs);
+  if (!addrs) return luaL_error(L, "Failed to allocate addrs");
   addr_ptrs = malloc(sizeof(struct sockaddr_storage*) * num_msgs);
+  if (!addr_ptrs) {
+    free(addrs);
+    return luaL_error(L, "Failed to allocate addr_ptrs");
+  }
   counts = malloc(sizeof(unsigned int) * num_msgs);
+  if (!counts) {
+    free(addrs); free(addr_ptrs);
+    return luaL_error(L, "Failed to allocate counts");
+  }
   bufs = malloc(sizeof(uv_buf_t*) * num_msgs);
+  if (!bufs) {
+    free(addrs); free(addr_ptrs); free(counts);
+    return luaL_error(L, "Failed to allocate bufs");
+  }
+  memset(bufs, 0, sizeof(uv_buf_t*) * num_msgs);
   for (unsigned int i=0; i<num_msgs; i++) {
     lua_rawgeti(L, 2, i+1);
     int element_index = lua_gettop(L);
     lua_getfield(L, element_index, "data");
     size_t count;
     bufs[i] = luv_check_bufs_noref(L, -1, &count);
-    if (count > UINT_MAX)
-      return luaL_error(L, "data at index %d contains too many bufs (max is %d)", UINT_MAX);
+    if (count > UINT_MAX) {
+      unsigned int j;
+      for (j = 0; j <= i; ++j) free(bufs[j]);
+      free(bufs); free(counts); free(addr_ptrs); free(addrs);
+      return luaL_error(L, "data at index %d contains too many bufs", i+1);
+    }
     counts[i] = count;
     lua_pop(L, 1);
     lua_getfield(L, element_index, "addr");
@@ -473,7 +527,10 @@ static void luv_udp_alloc_cb(uv_handle_t* handle, size_t suggested_size, uv_buf_
     buffer_size = MAX_DGRAM_SIZE * num_msgs;
   }
   buf->base = (char*)malloc(buffer_size);
-  assert(buf->base);
+  if (!buf->base) {
+    buf->len = 0;
+    return;
+  }
   buf->len = buffer_size;
 }
 #endif

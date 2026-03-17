@@ -18,9 +18,12 @@
 
 static void* luv_newuserdata(lua_State* L, size_t sz) {
   void* handle = malloc(sz);
-  if (handle) {
-    *(void**)lua_newuserdata(L, sizeof(void*)) = handle;
+  if (!handle) {
+    luaL_error(L, "out of memory");
+    return NULL; // unreachable
   }
+
+  *(void**)lua_newuserdata(L, sizeof(void*)) = handle;
   return handle;
 }
 
@@ -120,8 +123,8 @@ static void luv_handle_free(uv_handle_t* handle) {
   if (data) {
     luv_ctx_t* ctx = data->ctx;
     lua_State* L = ctx->L;
-    // release handle in ht_ref
-    lua_rawgeti(L, LUA_REGISTRYINDEX, ctx->ht_ref);
+    // release handle in handle registry
+    lua_getfield(L, LUA_REGISTRYINDEX, luv_handle_key);
     lua_pushnil(L);
     lua_rawsetp(L, -2, data);
     lua_pop(L, 1);

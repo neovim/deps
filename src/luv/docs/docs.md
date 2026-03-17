@@ -15,7 +15,7 @@ Here is a small example showing a TCP echo server:
 local uv = require("luv") -- "luv" when stand-alone, "uv" in luvi apps
 
 local server = uv.new_tcp()
-server:bind("127.0.0.1", 1337)
+assert(server:bind("127.0.0.1", 1337))
 server:listen(128, function (err)
   assert(not err, err)
   local client = uv.new_tcp()
@@ -1701,19 +1701,23 @@ Enable / disable Nagle's algorithm.
 
 **Returns:** `0` or `fail`
 
-### `uv.tcp_keepalive(tcp, enable, [delay])`
+### `uv.tcp_keepalive(tcp, enable, [delay], [intvl], [cnt])`
 
-> method form `tcp:keepalive(enable, [delay])`
+> method form `tcp:keepalive(enable, [delay], [intvl], [cnt])`
 
 **Parameters:**
 - `tcp`: `uv_tcp_t userdata`
 - `enable`: `boolean`
 - `delay`: `integer` or `nil`
+- `intvl`: `integer` or `nil`
+- `cnt`: `integer` or `nil`
 
-Enable / disable TCP keep-alive. `delay` is the initial delay in seconds,
+Enable / disable TCP keep-alive. `delay` is the initial delay in seconds, `intvl` is the time in seconds between individual keep-alive probes, and `cnt` is the number of probes to send before assuming the connection is dead.
 ignored when enable is `false`.
 
 **Returns:** `0` or `fail`
+
+**Note**: `intvl` and `cnt` are only supported with Libuv >= 1.52.0.
 
 ### `uv.tcp_simultaneous_accepts(tcp, enable)`
 
@@ -2282,13 +2286,16 @@ Returns the handle's send queue count.
 
 **Returns:** `integer`
 
-### `uv.udp_open(udp, fd)`
+### `uv.udp_open(udp, fd, [flags])`
 
-> method form `udp:open(fd)`
+> method form `udp:open(fd, [flags])`
 
 **Parameters:**
 - `udp`: `uv_udp_t userdata`
 - `fd`: `integer`
+- `flags`: `table` or `integer` or `nil`
+  - `reuseaddr`: `boolean` or `nil`
+  - `reuseport`: `boolean` or `nil`
 
 Opens an existing file descriptor or Windows SOCKET as a UDP handle.
 
@@ -2304,6 +2311,8 @@ it's required that it represents a valid datagram socket.
 
 **Returns:** `0` or `fail`
 
+**Note**: `flags` is only supported with Libuv >= 1.52.0.
+
 ### `uv.udp_bind(udp, host, port, [flags])`
 
 > method form `udp:bind(host, port, [flags])`
@@ -2315,11 +2324,40 @@ it's required that it represents a valid datagram socket.
 - `flags`: `table` or `nil`
   - `ipv6only`: `boolean` or `nil`
   - `reuseaddr`: `boolean` or `nil`
+  - `linux_recverr`: `boolean` or `nil`
+  - `reuseport`: `boolean` or `nil`
 
 Bind the UDP handle to an IP address and port. Any `flags` are set with a table
-with fields `reuseaddr` or `ipv6only` equal to `true` or `false`.
+with fields `reuseaddr`, `ipv6only`, `linux_recverr`, `reuseport` equal to `true` or `false`.
+
+- `reuseaddr`: Indicates if SO_REUSEADDR will be set when binding the handle.
+  This sets the SO_REUSEPORT socket flag on the BSDs (except for
+  DragonFlyBSD), OS X, and other platforms where SO_REUSEPORTs don't
+  have the capability of load balancing, as the opposite of what
+  `reuseport` would do. On other Unix platforms, it sets the
+  SO_REUSEADDR flag. What that means is that multiple threads or
+  processes can bind to the same address without error (provided
+  they all set the flag) but only the last one to bind will receive
+  any traffic, in effect "stealing" the port from the previous listener.
+- `ipv6only`: Disables dual stack mode.
+- `linux_recverr`: Indicates if IP_RECVERR/IPV6_RECVERR will be set when binding the handle.
+  This sets IP_RECVERR for IPv4 and IPV6_RECVERR for IPv6 UDP sockets on
+  Linux. This stops the Linux kernel from suppressing some ICMP error messages
+  and enables full ICMP error reporting for faster failover.
+  This flag is no-op on platforms other than Linux.
+- `reuseport`: Indicates if SO_REUSEPORT will be set when binding the handle.
+  This sets the SO_REUSEPORT socket option on supported platforms.
+  Unlike `reuseaddr`, this flag will make multiple threads or
+  processes that are binding to the same address and port "share"
+  the port, which means incoming datagrams are distributed across
+  the receiving sockets among threads or processes.
+  This flag is available only on Linux 3.9+, DragonFlyBSD 3.6+,
+  FreeBSD 12.0+, Solaris 11.4, and AIX 7.2.5+ for now.
 
 **Returns:** `0` or `fail`
+
+**Note**: The flag `linux_recverr` is only supported with Libuv >= 1.42.0.
+The flag `reuseport` is only supported with Libuv >= 1.49.0.
 
 ### `uv.udp_getsockname(udp)`
 
@@ -3514,6 +3552,7 @@ Closes a directory stream returned by a successful `uv.fs_opendir()` call.
     - `bavail`: `integer`
     - `files`: `integer`
     - `ffree`: `integer`
+    - `frsize`: `integer` or `nil`
 
 Equivalent to `statfs(2)`.
 
@@ -3525,6 +3564,7 @@ Equivalent to `statfs(2)`.
 - `bavail`: `integer`
 - `files`: `integer`
 - `ffree`: `integer`
+- `frsize`: `integer` or `nil`
 
 **Returns (async version):** `uv_fs_t userdata`
 
@@ -4201,7 +4241,7 @@ is an array of address information where fields are `ip`, `family`, `netmask`,
 
 See [Constants][] for supported address `family` output values.
 
-**Returns:** `table`
+**Returns:** `table` or `fail`
 - `[string]`: `table`
   - `ip`: `string`
   - `family`: `string`

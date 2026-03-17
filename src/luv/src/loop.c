@@ -95,31 +95,47 @@ static int luv_update_time(lua_State* L) {
 }
 
 static void luv_walk_cb(uv_handle_t* handle, void* arg) {
-  luv_ctx_t* ctx = (luv_ctx_t*)arg;
-  lua_State* L = ctx->L;
+  // This function expects to be passed a lua_State* with a callback function
+  // at index 1 and the handle registry table at index 2. Libuv always calls
+  // this function synchronously in uv_walk, so we can rely on the Lua state
+  // from the caller of luv_walk instead of dispatching to the loop's main
+  // thread both to avoid the xmove and to allow tracebacks to pass through
+  // luv_walk.
+
+  lua_State* L = (lua_State*)arg;
   luv_handle_t* data = (luv_handle_t*)handle->data;
 
-  // Skip foreign handles (shared event loop)
-  lua_rawgeti(L, LUA_REGISTRYINDEX, ctx->ht_ref);
-  lua_rawgetp(L, -1, data);
+  // check if registry[luv_handle_key][data] is not nil, which will only be true
+  // if the data refers to a valid luv_handle_t* that is still in use.
+  lua_rawgetp(L, 2, data);
   if (lua_isnil(L, -1)) {
-    lua_pop(L, 2);
+    lua_pop(L, 1);
     return;
   }
+  lua_pop(L, 1);
 
-  // Sanity check
-  // Most invalid values are large and refs are small, 0x1000000 is arbitrary.
-  assert(data && data->ref < 0x1000000);
+  // We know that data is a valid luv_handle_t* because the above check succeeded.
 
   lua_pushvalue(L, 1);           // Copy the function
   luv_find_handle(L, data);      // Get the userdata
+  uv_handle_t **udata = (uv_handle_t**)lua_touserdata(L, -1);
+  if (udata == NULL || *udata != handle) {
+    // This will only happen if someone forged a uv_handle_t* that points to a
+    // uv_handle_t* created by luv. This is very unlikely, but if data does
+    // happen to be unintentionally pointer-like we should avoid treating it
+    // as valid.
+    lua_pop(L, 2); // Pop the function and the userdata
+    return;
+  }
+
   data->ctx->cb_pcall(L, 1, 0, 0);  // Call the function
 }
 
 static int luv_walk(lua_State* L) {
-  luv_ctx_t* ctx = luv_context(L);
-  luaL_checktype(L, 1, LUA_TFUNCTION);
-  uv_walk(luv_loop(L), luv_walk_cb, ctx);
+  luaL_checktype(L, 1, LUA_TFUNCTION);                // Ensure index 1 is a function
+  lua_settop(L, 1);                                   // Remove any extra arguments
+  lua_getfield(L, LUA_REGISTRYINDEX, luv_handle_key); // Place the handle registry table at index 2
+  uv_walk(luv_loop(L), luv_walk_cb, L);
   return 0;
 }
 

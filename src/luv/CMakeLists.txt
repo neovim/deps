@@ -3,8 +3,8 @@ cmake_minimum_required(VERSION 3.10)
 project (luv C ASM)
 
 set(LUV_VERSION_MAJOR 1)
-set(LUV_VERSION_MINOR 51)
-set(LUV_VERSION_PATCH 0)
+set(LUV_VERSION_MINOR 52)
+set(LUV_VERSION_PATCH 1)
 set(LUV_VERSION ${LUV_VERSION_MAJOR}.${LUV_VERSION_MINOR}.${LUV_VERSION_PATCH})
 
 if(NOT ${CMAKE_VERSION} VERSION_LESS "3.5.0")
@@ -165,36 +165,28 @@ else (LUA)
 endif (LUA)
 
 if (EXISTS "${LUA_INCLUDE_DIR}/lua.h")
-    # At least 5.[012] have different ways to express the version
-    # so all of them need to be tested. Lua 5.2 defines LUA_VERSION
-    # and LUA_RELEASE as joined by the C preprocessor, so avoid those.
+  # At least 5.[012] have different ways to express the version
+  # so all of them need to be tested. Lua 5.2 defines LUA_VERSION
+  # and LUA_RELEASE as joined by the C preprocessor, so avoid those.
+  file(STRINGS "${LUA_INCLUDE_DIR}/lua.h" lua_version_strings
+       REGEX "^#define[ \t]+LUA_(RELEASE[ \t]+\"Lua [0-9]|VERSION([ \t]+\"Lua [0-9]|_[MR])).*")
 
-    # lua 5.2 and above
-    file(STRINGS "${LUA_INCLUDE_DIR}/lua.h" LUA_VERSION_MAJOR
-         REGEX "^#define[ \t]+LUA_VERSION_MAJOR[ \t]+\"Lua [0-9]+")
-    file(STRINGS "${LUA_INCLUDE_DIR}/lua.h" LUA_VERSION_MINOR
-         REGEX "^#define[ \t]+LUA_VERSION_MINOR[ \t]+\"Lua [0-9]+")
+  string(REGEX REPLACE ".*;#define[ \t]+LUA_VERSION_MAJOR(_N)?[ \t]+\"?([0-9])\"?[ \t]*;.*" "\\2" LUA_VERSION_MAJOR ";${lua_version_strings};")
+  if (LUA_VERSION_MAJOR MATCHES "^[0-9]+$")
+    string(REGEX REPLACE ".*;#define[ \t]+LUA_VERSION_MINOR(_N)?[ \t]+\"?([0-9])\"?[ \t]*;.*" "\\2" LUA_VERSION_MINOR ";${lua_version_strings};")
+    string(REGEX REPLACE ".*;#define[ \t]+LUA_VERSION_RELEASE(_N)?[ \t]+\"?([0-9])\"?[ \t]*;.*" "\\2" LUA_VERSION_PATCH ";${lua_version_strings};")
+    set(LUA_VERSION_STRING "${LUA_VERSION_MAJOR}.${LUA_VERSION_MINOR}.${LUA_VERSION_PATCH}")
+  else ()
+    string(REGEX REPLACE ".*;#define[ \t]+LUA_RELEASE[ \t]+\"Lua ([0-9.]+)\"[ \t]*;.*" "\\1" LUA_VERSION_STRING ";${lua_version_strings};")
+    if (NOT LUA_VERSION_STRING MATCHES "^[0-9.]+$")
+      string(REGEX REPLACE ".*;#define[ \t]+LUA_VERSION[ \t]+\"Lua ([0-9.]+)\"[ \t]*;.*" "\\1" LUA_VERSION_STRING ";${lua_version_strings};")
+    endif ()
+    string(REGEX REPLACE "^([0-9]+)\\.[0-9.]*$" "\\1" LUA_VERSION_MAJOR "${LUA_VERSION_STRING}")
+    string(REGEX REPLACE "^[0-9]+\\.([0-9]+)[0-9.]*$" "\\1" LUA_VERSION_MINOR "${LUA_VERSION_STRING}")
+    string(REGEX REPLACE "^[0-9]+\\.[0-9]+\\.([0-9]).*" "\\1" LUA_VERSION_PATCH "${LUA_VERSION_STRING}")
+  endif ()
 
-    if(NOT LUA_VERSION_MAJOR AND NOT LUA_VERSION_MINOR)
-      file(STRINGS "${LUA_INCLUDE_DIR}/lua.h" lua_version_strings
-           REGEX "^#define[ \t]+LUA_VERSION([ \t]+\"Lua [0-9]|_[MR]).*")
-      string(REGEX REPLACE ".*;#define[ \t]+LUA_VERSION_MAJOR[ \t]+\"([0-9])\"[ \t]*;.*" "\\1" LUA_VERSION_MAJOR ";${lua_version_strings};")
-      if (LUA_VERSION_MAJOR MATCHES "^[0-9]+$")
-          string(REGEX REPLACE ".*;#define[ \t]+LUA_VERSION_MINOR[ \t]+\"([0-9])\"[ \t]*;.*" "\\1" LUA_VERSION_MINOR ";${lua_version_strings};")
-          string(REGEX REPLACE ".*;#define[ \t]+LUA_VERSION_RELEASE[ \t]+\"([0-9])\"[ \t]*;.*" "\\1" LUA_VERSION_PATCH ";${lua_version_strings};")
-          set(LUA_VERSION_STRING "${LUA_VERSION_MAJOR}.${LUA_VERSION_MINOR}.${LUA_VERSION_PATCH}")
-      else ()
-          string(REGEX REPLACE ".*;#define[ \t]+LUA_RELEASE[ \t]+\"Lua ([0-9.]+)\"[ \t]*;.*" "\\1" LUA_VERSION_STRING ";${lua_version_strings};")
-          if (NOT LUA_VERSION_STRING MATCHES "^[0-9.]+$")
-              string(REGEX REPLACE ".*;#define[ \t]+LUA_VERSION[ \t]+\"Lua ([0-9.]+)\"[ \t]*;.*" "\\1" LUA_VERSION_STRING ";${lua_version_strings};")
-          endif ()
-          string(REGEX REPLACE "^([0-9]+)\\.[0-9.]*$" "\\1" LUA_VERSION_MAJOR "${LUA_VERSION_STRING}")
-          string(REGEX REPLACE "^[0-9]+\\.([0-9]+)[0-9.]*$" "\\1" LUA_VERSION_MINOR "${LUA_VERSION_STRING}")
-          string(REGEX REPLACE "^[0-9]+\\.[0-9]+\\.([0-9]).*" "\\1" LUA_VERSION_PATCH "${LUA_VERSION_STRING}")
-      endif ()
-
-      unset(lua_version_strings)
-    endif()
+  unset(lua_version_strings)
 endif()
 
 if (BUILD_MODULE)
@@ -278,7 +270,8 @@ if (NOT LUA)
     if (WIN32)
       set(MODULE_INSTALL_LIB_DIR "${CMAKE_INSTALL_PREFIX}/lib")
     else (WIN32)
-      set(MODULE_INSTALL_LIB_DIR "${CMAKE_INSTALL_PREFIX}/lib/lua/${LUA_VERSION_MAJOR}.${LUA_VERSION_MINOR}")
+      set(MODULE_INSTALL_LIB_DIR "${CMAKE_INSTALL_PREFIX}/lib/lua/${LUA_VERSION_MAJOR}.${LUA_VERSION_MINOR}"
+        CACHE PATH "Installation directory for module")
     endif (WIN32)
   endif (BUILD_MODULE)
   if (BUILD_STATIC_LIBS)

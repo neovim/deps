@@ -93,7 +93,7 @@ typedef int (*luv_CFcpcall) (lua_State* L, lua_CFunction func, void* ud, int fla
 /* Default implementation of event callback */
 LUALIB_API int luv_cfpcall(lua_State* L, int nargs, int nresult, int flags);
 
-/* Default implementation of thread entory function */
+/* Default implementation of thread entry function */
 LUALIB_API int luv_cfcpcall(lua_State* L, lua_CFunction func, void* ud, int flags);
 
 typedef struct {
@@ -104,8 +104,6 @@ typedef struct {
   luv_CFcpcall thrd_cpcall; /* luv thread c function in protected mode*/
 
   int          mode;        /* the mode used to run the loop (-1 if not running) */
-  int          ht_ref;      /* bookkeeping: maintain table of luv_handle_t pointers,
-                               to distinguish between internal and external handles */
 
   void* extra;              /* extra data */
 } luv_ctx_t;
