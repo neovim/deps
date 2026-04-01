@@ -433,7 +433,7 @@ pub fn parse_file_at_path(
     let parse_duration = parse_time.elapsed();
 
     let stdout = io::stdout();
-    let mut stdout = stdout.lock();
+    let mut stdout = io::BufWriter::with_capacity(64 * 1024, stdout.lock());
 
     if let Some(mut tree) = tree {
         if opts.debug_graph && !opts.edits.is_empty() {
@@ -510,7 +510,7 @@ pub fn parse_file_at_path(
                 }
             }
             cursor.reset(tree.root_node());
-            println!();
+            writeln!(&mut stdout)?;
         }
 
         if opts.output == ParseOutput::Cst {
@@ -581,11 +581,11 @@ pub fn parse_file_at_path(
                         }
                         let start = node.start_position();
                         let end = node.end_position();
-                        write!(&mut stdout, " srow=\"{}\"", start.row)?;
-                        write!(&mut stdout, " scol=\"{}\"", start.column)?;
-                        write!(&mut stdout, " erow=\"{}\"", end.row)?;
-                        write!(&mut stdout, " ecol=\"{}\"", end.column)?;
-                        write!(&mut stdout, ">")?;
+                        write!(
+                            &mut stdout,
+                            " srow=\"{}\" scol=\"{}\" erow=\"{}\" ecol=\"{}\">",
+                            start.row, start.column, end.row, end.column
+                        )?;
                         tags.push(node.kind());
                         needs_newline = true;
                     }
