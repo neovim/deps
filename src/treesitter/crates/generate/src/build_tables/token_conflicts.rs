@@ -28,7 +28,7 @@ pub struct TokenConflictMap<'a> {
 
 impl<'a> TokenConflictMap<'a> {
     /// Create a token conflict map based on a lexical grammar, which describes the structure
-    /// of each token, and a `following_token` map, which indicates which tokens may be appear
+    /// of each token, and a `following_token` map, which indicates which tokens may appear
     /// immediately after each other token.
     ///
     /// This analyzes the possible kinds of overlap between each pair of tokens and stores
@@ -73,10 +73,12 @@ impl<'a> TokenConflictMap<'a> {
 
     /// Does token `i` match any strings that token `j` also matches, where
     /// token `i` is preferred over token `j`?
+    #[inline]
     pub fn does_match_same_string(&self, i: usize, j: usize) -> bool {
         self.status_matrix[matrix_index(self.n, i, j)].matches_same_string
     }
 
+    #[inline]
     pub fn does_conflict(&self, i: usize, j: usize) -> bool {
         let entry = &self.status_matrix[matrix_index(self.n, i, j)];
         entry.does_match_valid_continuation
@@ -85,6 +87,7 @@ impl<'a> TokenConflictMap<'a> {
     }
 
     /// Does token `i` match any strings that are *prefixes* of strings matched by `j`?
+    #[inline]
     pub fn does_match_prefix(&self, i: usize, j: usize) -> bool {
         self.status_matrix[matrix_index(self.n, i, j)].matches_prefix
     }
@@ -96,6 +99,7 @@ impl<'a> TokenConflictMap<'a> {
             && !reverse_entry.does_match_separators
     }
 
+    #[inline]
     pub fn does_overlap(&self, i: usize, j: usize) -> bool {
         let status = &self.status_matrix[matrix_index(self.n, i, j)];
         status.does_match_separators
@@ -201,6 +205,7 @@ impl fmt::Debug for TokenConflictMap<'_> {
     }
 }
 
+#[inline]
 const fn matrix_index(variable_count: usize, i: usize, j: usize) -> usize {
     variable_count * i + j
 }
@@ -375,7 +380,7 @@ mod tests {
     use super::*;
     use crate::{
         grammars::{Variable, VariableType},
-        prepare_grammar::{expand_tokens, ExtractedLexicalGrammar},
+        prepare_grammar::{ExtractedLexicalGrammar, expand_tokens},
         rules::{Precedence, Rule, Symbol},
     };
 

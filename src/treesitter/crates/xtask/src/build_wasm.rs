@@ -8,18 +8,18 @@ use std::{
     time::Duration,
 };
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use etcetera::BaseStrategy as _;
 use indoc::indoc;
 use notify::{
-    event::{AccessKind, AccessMode},
     EventKind, RecursiveMode,
+    event::{AccessKind, AccessMode},
 };
 use notify_debouncer_full::new_debouncer;
-use tree_sitter_loader::{IoError, LoaderError, WasiSDKClangError};
+use tree_sitter_loader::{IoError, LoaderError, WasmToolError};
 
 use crate::{
-    bail_on_err, embed_sources::embed_sources_in_map, watch_wasm, BuildWasm, EMSCRIPTEN_TAG,
+    BuildWasm, EMSCRIPTEN_TAG, bail_on_err, embed_sources::embed_sources_in_map, watch_wasm,
 };
 
 #[derive(PartialEq, Eq)]
@@ -53,6 +53,40 @@ const EXPORTED_RUNTIME_METHODS: [&str; 20] = [
 ];
 
 const WASI_SDK_VERSION: &str = include_str!("../../loader/wasi-sdk-version").trim_ascii();
+const BINARYEN_VERSION: &str = include_str!("../../loader/binaryen-version").trim_ascii();
+
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+const ARCH_OS: Result<&str, LoaderError> = Ok("arm64-macos");
+#[cfg(all(target_os = "macos", target_arch = "x86_64"))]
+const ARCH_OS: Result<&str, LoaderError> = Ok("x86_64-macos");
+#[cfg(all(
+    target_os = "macos",
+    not(any(target_arch = "aarch64", target_arch = "x86_64"))
+))]
+const ARCH_OS: Result<&str, LoaderError> = Err(LoaderError::WasiSDKPlatform);
+
+#[cfg(all(target_os = "windows", target_arch = "aarch64"))]
+const ARCH_OS: Result<&str, LoaderError> = Ok("arm64-windows");
+#[cfg(all(target_os = "windows", target_arch = "x86_64"))]
+const ARCH_OS: Result<&str, LoaderError> = Ok("x86_64-windows");
+#[cfg(all(
+    target_os = "windows",
+    not(any(target_arch = "aarch64", target_arch = "x86_64"))
+))]
+const ARCH_OS: Result<&str, LoaderError> = Err(LoaderError::WasiSDKPlatform);
+
+#[cfg(all(target_os = "linux", target_arch = "aarch64"))]
+const ARCH_OS: Result<&str, LoaderError> = Ok("arm64-linux");
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+const ARCH_OS: Result<&str, LoaderError> = Ok("x86_64-linux");
+#[cfg(all(
+    target_os = "linux",
+    not(any(target_arch = "aarch64", target_arch = "x86_64"))
+))]
+const ARCH_OS: Result<&str, LoaderError> = Err(LoaderError::WasiSDKPlatform);
+
+#[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+const ARCH_OS: Result<&str, LoaderError> = Err(LoaderError::WasiSDKPlatform);
 
 pub fn run_wasm(args: &BuildWasm) -> Result<()> {
     let mut emscripten_flags = if args.debug {
@@ -97,7 +131,7 @@ pub fn run_wasm(args: &BuildWasm) -> Result<()> {
             let mut command = match source {
                 EmccSource::Docker => Command::new("docker"),
                 EmccSource::Podman => Command::new("podman"),
-                _ => unreachable!(),
+                EmccSource::Native => unreachable!(),
             };
             command.args(["run", "--rm"]);
 
@@ -119,7 +153,7 @@ pub fn run_wasm(args: &BuildWasm) -> Result<()> {
             #[cfg(unix)]
             {
                 #[link(name = "c")]
-                extern "C" {
+                unsafe extern "C" {
                     fn getuid() -> u32;
                 }
                 // don't need to set user for podman since PODMAN_USERNS=keep-id is already set
@@ -305,21 +339,21 @@ fn build_wasm(cmd: &mut Command, edit_tsd: bool) -> Result<()> {
         .join("binding_web")
         .join("lib")
         .join("web-tree-sitter.wasm.map");
-    if map_path.exists() {
-        if let Err(e) = embed_sources_in_map(&map_path) {
-            eprintln!("Warning: Failed to embed sources in source map: {e}");
-        }
+    if map_path.exists()
+        && let Err(e) = embed_sources_in_map(&map_path)
+    {
+        eprintln!("Warning: Failed to embed sources in source map: {e}");
     }
 
     Ok(())
 }
 
-/// This ensures that the wasi-sdk is available, downloading and extracting it if necessary,
+/// This ensures that wasi-sdk is available, downloading and extracting it if necessary,
 /// and returns the path to the `clang` executable.
 ///
 /// If `TREE_SITTER_WASI_SDK_PATH` is set, it will use that path to look for the clang executable.
 ///
-/// Note that this is just a minimially modified version of
+/// Note that this is just a minimally modified version of
 /// `tree_sitter_loader::ensure_wasi_sdk_exists`. In the loader, this functionality is implemented
 /// as a private method of `Loader`. Rather than add this to the public API, we just
 /// re-implement it. Any fixes and/or modifications made to the loader's copy should be reflected
@@ -335,19 +369,101 @@ pub fn ensure_wasi_sdk_exists() -> Result<PathBuf> {
         vec!["clang", "wasm32-unknown-wasi-clang", "wasm32-wasi-clang"]
     };
 
-    if let Ok(wasi_sdk_path) = std::env::var("TREE_SITTER_WASI_SDK_PATH") {
-        let wasi_sdk_dir = PathBuf::from(wasi_sdk_path);
+    if let Some(path) = get_existing_tool(
+        "clang",
+        "wasi-sdk",
+        WASI_SDK_VERSION,
+        &possible_executables,
+        "TREE_SITTER_WASI_SDK_PATH",
+    )? {
+        return Ok(path);
+    }
 
-        for exe in &possible_executables {
-            let clang_exe = wasi_sdk_dir.join("bin").join(exe);
-            if clang_exe.exists() {
-                return Ok(clang_exe);
+    let arch_os = ARCH_OS?;
+    let sdk_filename = format!("wasi-sdk-{WASI_SDK_VERSION}-{arch_os}.tar.gz");
+    let wasi_sdk_major_version = WASI_SDK_VERSION
+        .trim_end_matches(char::is_numeric) // trim minor version...
+        .trim_end_matches('.'); // ...and '.' separator
+    let sdk_url = format!(
+        "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-{wasi_sdk_major_version}/{sdk_filename}",
+    );
+    download_tool(
+        "clang",
+        "wasi-sdk",
+        WASI_SDK_VERSION,
+        &sdk_filename,
+        &sdk_url,
+        &possible_executables,
+    )
+}
+
+/// This ensures that binaryen is available, downloading and extracting it if necessary,
+/// and returns the path to the `wasm-opt` executable.
+///
+/// If `TREE_SITTER_BINARYEN_PATH` is set, it will use that path to look for the wasm-opt executable.
+///
+/// Note that this is just a minimally modified version of
+/// `tree_sitter_loader::ensure_binaryen_exists`. In the loader, this functionality is implemented
+/// as a private method of `Loader`. Rather than add this to the public API, we just
+/// re-implement it. Any fixes and/or modifications made to the loader's copy should be reflected
+/// here.
+pub fn ensure_binaryen_exists() -> Result<PathBuf> {
+    let possible_executables = if cfg!(windows) {
+        vec![
+            "wasm-opt.exe",
+            "wasm32-unknown-wasm-opt.exe",
+            "wasm32-wasm-opt.exe",
+        ]
+    } else {
+        vec!["wasm-opt", "wasm32-unknown-wasm-opt", "wasm32-wasm-opt"]
+    };
+    if let Some(path) = get_existing_tool(
+        "wasm-opt",
+        "binaryen",
+        BINARYEN_VERSION,
+        &possible_executables,
+        "TREE_SITTER_BINARYEN_PATH",
+    )? {
+        return Ok(path);
+    }
+
+    let arch_os = ARCH_OS?.replace("arm64-linux", "aarch64-linux");
+    let binaryen_filename = format!("binaryen-version_{BINARYEN_VERSION}-{arch_os}.tar.gz");
+    let binaryen_url = format!(
+        "https://github.com/WebAssembly/binaryen/releases/download/version_{BINARYEN_VERSION}/{binaryen_filename}"
+    );
+    download_tool(
+        "wasm-opt",
+        "binaryen",
+        BINARYEN_VERSION,
+        &binaryen_filename,
+        &binaryen_url,
+        &possible_executables,
+    )
+}
+
+fn get_existing_tool(
+    tool_name: &'static str,
+    toolchain: &'static str,
+    version: &str,
+    possible_exes: &[&'static str],
+    env_var: &str,
+) -> Result<Option<PathBuf>> {
+    if let Ok(tool_path) = std::env::var(env_var) {
+        let tool_dir = PathBuf::from(tool_path);
+
+        for exe in possible_exes {
+            let tool_exe = tool_dir.join("bin").join(exe);
+            if tool_exe.exists() {
+                return Ok(Some(tool_exe));
             }
         }
 
-        Err(LoaderError::WasiSDKClang(WasiSDKClangError {
-            wasi_sdk_dir: wasi_sdk_dir.to_string_lossy().to_string(),
-            possible_executables: possible_executables.clone(),
+        Err(LoaderError::WasmTool(WasmToolError {
+            exe: tool_name,
+            toolchain,
+            tool_dir: tool_dir.to_string_lossy().to_string(),
+            possible_executables: possible_exes.to_vec(),
             download: false,
         }))?;
     }
@@ -362,82 +478,92 @@ pub fn ensure_wasi_sdk_exists() -> Result<PathBuf> {
         })
     })?;
 
-    let wasi_sdk_dir = cache_dir.join("wasi-sdk");
+    let toolchain_dir = cache_dir.join(toolchain);
+    let version_file = toolchain_dir.join(".version");
 
-    for exe in &possible_executables {
-        let clang_exe = wasi_sdk_dir.join("bin").join(exe);
-        if clang_exe.exists() {
-            return Ok(clang_exe);
+    // If a cached toolchain exists but the version doesn't match, remove it
+    if toolchain_dir.exists() {
+        let cached_version =
+            fs::read_to_string(&version_file).unwrap_or_else(|_| "unknown".to_string());
+        if cached_version.trim() != version {
+            eprintln!(
+                "Cached {toolchain} version ({}) doesn't match expected version ({version}), re-downloading",
+                cached_version.trim(),
+            );
+            fs::remove_dir_all(&toolchain_dir).ok();
+            return Ok(None);
         }
     }
 
-    fs::create_dir_all(&wasi_sdk_dir).map_err(|error| {
+    let tool_dir = toolchain_dir.join("bin");
+
+    for exe in possible_exes {
+        let tool_exe = tool_dir.join(exe);
+        if tool_exe.exists() {
+            return Ok(Some(tool_exe));
+        }
+    }
+
+    Ok(None)
+}
+
+fn download_tool(
+    tool_name: &'static str,
+    toolchain: &'static str,
+    version: &str,
+    filename: &str,
+    url: &str,
+    possible_exes: &[&'static str],
+) -> Result<PathBuf> {
+    let cache_dir = etcetera::choose_base_strategy()?
+        .cache_dir()
+        .join("tree-sitter");
+    let tool_dir = cache_dir.join(toolchain);
+
+    fs::create_dir_all(&tool_dir).map_err(|error| {
         LoaderError::IO(IoError {
             error,
-            path: Some(wasi_sdk_dir.to_string_lossy().to_string()),
+            path: Some(tool_dir.to_string_lossy().to_string()),
         })
     })?;
 
-    let arch_os = if cfg!(target_os = "macos") {
-        if cfg!(target_arch = "aarch64") {
-            "arm64-macos"
-        } else {
-            "x86_64-macos"
-        }
-    } else if cfg!(target_os = "windows") {
-        if cfg!(target_arch = "aarch64") {
-            "arm64-windows"
-        } else {
-            "x86_64-windows"
-        }
-    } else if cfg!(target_os = "linux") {
-        if cfg!(target_arch = "aarch64") {
-            "arm64-linux"
-        } else {
-            "x86_64-linux"
-        }
-    } else {
-        Err(LoaderError::WasiSDKPlatform)?
-    };
-
-    let sdk_filename = format!("wasi-sdk-{WASI_SDK_VERSION}-{arch_os}.tar.gz");
-    let wasi_sdk_major_version = WASI_SDK_VERSION
-        .trim_end_matches(char::is_numeric) // trim minor version...
-        .trim_end_matches('.'); // ...and '.' separator
-    let sdk_url = format!(
-        "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-{wasi_sdk_major_version}/{sdk_filename}",
-    );
-
-    eprintln!("Downloading wasi-sdk from {sdk_url}...");
-    let temp_tar_path = cache_dir.join(sdk_filename);
+    eprintln!("Downloading {tool_name} from {url}...");
+    let temp_tar_path = cache_dir.join(filename);
 
     let status = Command::new("curl")
         .arg("-f")
         .arg("-L")
         .arg("-o")
         .arg(&temp_tar_path)
-        .arg(&sdk_url)
+        .arg(url)
         .status()
-        .map_err(|e| LoaderError::Curl(sdk_url.clone(), e))?;
+        .map_err(|e| LoaderError::Curl(url.to_string(), e))?;
 
     if !status.success() {
-        Err(LoaderError::WasiSDKDownload(sdk_url))?;
+        Err(LoaderError::WasmToolDownload {
+            tool: tool_name,
+            url: url.to_string(),
+        })?;
     }
 
-    eprintln!("Extracting wasi-sdk to {}...", wasi_sdk_dir.display());
-    extract_tar_gz_with_strip(&temp_tar_path, &wasi_sdk_dir)?;
+    eprintln!("Extracting {tool_name} to {}...", tool_dir.display());
+    extract_tar_gz_with_strip(&temp_tar_path, &tool_dir)?;
+
+    fs::write(tool_dir.join(".version"), version).ok();
 
     fs::remove_file(temp_tar_path).ok();
-    for exe in &possible_executables {
-        let clang_exe = wasi_sdk_dir.join("bin").join(exe);
-        if clang_exe.exists() {
-            return Ok(clang_exe);
+    for exe in possible_exes {
+        let tool_exe = tool_dir.join("bin").join(exe);
+        if tool_exe.exists() {
+            return Ok(tool_exe);
         }
     }
 
-    Err(LoaderError::WasiSDKClang(WasiSDKClangError {
-        wasi_sdk_dir: wasi_sdk_dir.to_string_lossy().to_string(),
-        possible_executables,
+    Err(LoaderError::WasmTool(WasmToolError {
+        exe: tool_name,
+        toolchain,
+        tool_dir: tool_dir.to_string_lossy().to_string(),
+        possible_executables: possible_exes.to_vec(),
         download: true,
     }))?
 }
@@ -471,7 +597,7 @@ pub fn run_wasm_stdlib() -> Result<()> {
 
     let clang_exe = ensure_wasi_sdk_exists()?;
 
-    let output = Command::new(&clang_exe)
+    let compile_output = Command::new(&clang_exe)
         .args([
             "-o",
             "stdlib.wasm",
@@ -492,9 +618,24 @@ pub fn run_wasm_stdlib() -> Result<()> {
         ])
         .args(&export_flags)
         .arg("crates/language/wasm/src/stdlib.c")
+        .arg("crates/language/wasm/src/wctype.c")
         .output()?;
 
-    bail_on_err(&output, "Failed to compile the Tree-sitter Wasm stdlib")?;
+    bail_on_err(
+        &compile_output,
+        "Failed to compile the Tree-sitter Wasm stdlib",
+    )?;
+
+    let wasm_opt_exe = ensure_binaryen_exists()?;
+
+    let opt_output = Command::new(&wasm_opt_exe)
+        .args(["stdlib.wasm", "-Os", "-o", "stdlib.wasm"])
+        .output()?;
+
+    bail_on_err(
+        &opt_output,
+        "Failed to optimize the Tree-sitter Wasm stdlib",
+    )?;
 
     let xxd = Command::new("xxd")
         .args(["-C", "-i", "stdlib.wasm"])

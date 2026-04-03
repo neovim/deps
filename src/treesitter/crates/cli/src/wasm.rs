@@ -3,7 +3,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use tree_sitter::wasm_stdlib_symbols;
 use tree_sitter_generate::{load_grammar_file, parse_grammar::GrammarJSON};
 use tree_sitter_loader::Loader;
@@ -15,7 +15,7 @@ pub fn load_language_wasm_file(language_dir: &Path) -> Result<(String, Vec<u8>)>
         .unwrap();
     let wasm_filename = format!("tree-sitter-{grammar_name}.wasm");
     let contents = fs::read(language_dir.join(&wasm_filename)).with_context(|| {
-        format!("Failed to read {wasm_filename}. Run `tree-sitter build --wasm` first.",)
+        format!("Failed to read {wasm_filename}. Run `tree-sitter build --wasm` first.")
     })?;
     Ok((grammar_name, contents))
 }
@@ -83,14 +83,17 @@ pub fn compile_language_to_wasm(
     let wasm_bytes = fs::read(&output_filename)?;
     let parser = Parser::new(0);
     for payload in parser.parse_all(&wasm_bytes) {
-        if let wasmparser::Payload::ImportSection(imports) = payload? {
-            for import in imports {
-                let import = import?.name;
-                if !builtin_symbols.contains(&import)
-                    && !stdlib_symbols.contains(&import)
-                    && !dylink_symbols.contains(&import)
-                {
-                    missing_symbols.push(import);
+        if let wasmparser::Payload::ImportSection(reader) = payload? {
+            for imports in reader {
+                for import in imports? {
+                    let (_, import) = import?;
+                    let name = import.name;
+                    if !builtin_symbols.contains(&name)
+                        && !stdlib_symbols.contains(&name)
+                        && !dylink_symbols.contains(&name)
+                    {
+                        missing_symbols.push(name);
+                    }
                 }
             }
         }

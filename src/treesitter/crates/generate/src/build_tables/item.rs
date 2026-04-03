@@ -7,8 +7,8 @@ use std::{
 
 use crate::{
     grammars::{
-        LexicalGrammar, Production, ProductionStep, ReservedWordSetId, SyntaxGrammar,
-        NO_RESERVED_WORDS,
+        LexicalGrammar, NO_RESERVED_WORDS, Production, ProductionStep, ReservedWordSetId,
+        SyntaxGrammar,
     },
     rules::{Associativity, Precedence, Symbol, SymbolType, TokenSet},
 };
@@ -130,7 +130,7 @@ impl<'a> ParseItem<'a> {
     }
 
     #[must_use]
-    pub fn is_done(&self) -> bool {
+    pub const fn is_done(&self) -> bool {
         self.step_index as usize == self.production.steps.len()
     }
 
@@ -160,6 +160,7 @@ impl<'a> ParseItem<'a> {
 }
 
 impl<'a> ParseItemSet<'a> {
+    #[inline]
     pub fn insert(&mut self, item: ParseItem<'a>) -> &mut ParseItemSetEntry<'a> {
         match self.entries.binary_search_by(|e| e.item.cmp(&item)) {
             Err(i) => {
@@ -357,6 +358,7 @@ impl Hash for ParseItem<'_> {
 }
 
 impl PartialEq for ParseItem<'_> {
+    #[inline]
     fn eq(&self, other: &Self) -> bool {
         if self.variable_index != other.variable_index
             || self.step_index != other.step_index
@@ -394,6 +396,7 @@ impl PartialEq for ParseItem<'_> {
 }
 
 impl Ord for ParseItem<'_> {
+    #[inline]
     fn cmp(&self, other: &Self) -> Ordering {
         self.step_index
             .cmp(&other.step_index)

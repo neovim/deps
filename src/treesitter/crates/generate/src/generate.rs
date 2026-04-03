@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, sync::LazyLock};
+use std::collections::BTreeMap;
 #[cfg(feature = "load")]
 use std::{
     env, fs,
@@ -11,7 +11,6 @@ use bitflags::bitflags;
 #[cfg(feature = "load")]
 use log::warn;
 use node_types::VariableInfo;
-use regex::{Regex, RegexBuilder};
 use rules::{Alias, Symbol};
 #[cfg(feature = "load")]
 use semver::Version;
@@ -20,6 +19,7 @@ use serde::Deserialize;
 use serde::Serialize;
 use thiserror::Error;
 
+mod bitvec;
 mod build_tables;
 mod dedup;
 mod grammars;
@@ -33,23 +33,16 @@ mod render;
 mod rules;
 mod tables;
 
-use build_tables::build_tables;
 pub use build_tables::ParseTableBuilderError;
+use build_tables::build_tables;
 use grammars::{InlinedProductionMap, InputGrammar, LexicalGrammar, SyntaxGrammar};
 pub use node_types::{SuperTypeCycleError, VariableInfoError};
-use parse_grammar::parse_grammar;
 pub use parse_grammar::ParseGrammarError;
-use prepare_grammar::prepare_grammar;
+use parse_grammar::parse_grammar;
 pub use prepare_grammar::PrepareGrammarError;
+use prepare_grammar::prepare_grammar;
 use render::render_c_code;
-pub use render::{RenderError, ABI_VERSION_MAX, ABI_VERSION_MIN};
-
-static JSON_COMMENT_REGEX: LazyLock<Regex> = LazyLock::new(|| {
-    RegexBuilder::new("^\\s*//.*")
-        .multi_line(true)
-        .build()
-        .unwrap()
-});
+pub use render::{ABI_VERSION_MAX, ABI_VERSION_MIN, RenderError};
 
 struct JSONOutput {
     #[cfg(feature = "load")]
@@ -185,7 +178,7 @@ pub enum JSError {
     RelativePath,
     #[error("Could not parse this package's version as semver -- {0}")]
     Semver(String),
-    #[error("Failed to serialze grammar JSON -- {0}")]
+    #[error("Failed to serialize grammar JSON -- {0}")]
     Serialzation(String),
     #[cfg(feature = "qjs-rt")]
     #[error("QuickJS error: {0}")]
@@ -227,7 +220,10 @@ impl Default for OptLevel {
 }
 
 #[cfg(feature = "load")]
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "all parameters are required for parser generation"
+)]
 pub fn generate_parser_in_directory<T, U, V>(
     repo_path: T,
     out_path: Option<U>,
@@ -266,7 +262,7 @@ where
     // Read the grammar file.
     let grammar_json = load_grammar_file(&grammar_path, js_runtime)?;
 
-    let src_path = out_path.map_or_else(|| repo_path.join("src"), |p| p.into());
+    let src_path = out_path.map_or_else(|| repo_path.join("src"), std::convert::Into::into);
     let header_path = src_path.join("tree_sitter");
 
     // Ensure that the output directory exists
@@ -330,8 +326,7 @@ pub fn generate_parser_for_grammar(
     grammar_json: &str,
     semantic_version: Option<(u8, u8, u8)>,
 ) -> GenerateResult<(String, String)> {
-    let grammar_json = JSON_COMMENT_REGEX.replace_all(grammar_json, "\n");
-    let input_grammar = parse_grammar(&grammar_json)?;
+    let input_grammar = parse_grammar(grammar_json)?;
     let parser = generate_parser_for_grammar_with_opts(
         &input_grammar,
         LANGUAGE_VERSION,

@@ -5,8 +5,6 @@
 use std::fmt::Write as _;
 #[cfg(any(feature = "tree-sitter-highlight", feature = "tree-sitter-tags"))]
 use std::ops::Range;
-#[cfg(feature = "tree-sitter-highlight")]
-use std::sync::Mutex;
 use std::{
     collections::HashMap,
     env, fs,
@@ -16,12 +14,11 @@ use std::{
     mem,
     path::{Path, PathBuf},
     process::Command,
-    sync::LazyLock,
-    time::{SystemTime, SystemTimeError},
+    sync::Mutex,
+    time::{Duration, Instant, SystemTime},
 };
 
 use etcetera::BaseStrategy as _;
-use fs4::fs_std::FileExt;
 use libloading::{Library, Symbol};
 use log::{error, info, warn};
 use once_cell::unsync::OnceCell;
@@ -41,10 +38,43 @@ use tree_sitter_highlight::HighlightConfiguration;
 #[cfg(feature = "tree-sitter-tags")]
 use tree_sitter_tags::{Error as TagsError, TagsConfiguration};
 
-static GRAMMAR_NAME_REGEX: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r#""name":\s*"(.*?)""#).unwrap());
+static WASM_TOOL_LOCK: Mutex<()> = Mutex::new(());
 
 const WASI_SDK_VERSION: &str = include_str!("../wasi-sdk-version").trim_ascii();
+const BINARYEN_VERSION: &str = include_str!("../binaryen-version").trim_ascii();
+
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+const ARCH_OS: Result<&str, LoaderError> = Ok("arm64-macos");
+#[cfg(all(target_os = "macos", target_arch = "x86_64"))]
+const ARCH_OS: Result<&str, LoaderError> = Ok("x86_64-macos");
+#[cfg(all(
+    target_os = "macos",
+    not(any(target_arch = "aarch64", target_arch = "x86_64"))
+))]
+const ARCH_OS: Result<&str, LoaderError> = Err(LoaderError::WasiSDKPlatform);
+
+#[cfg(all(target_os = "windows", target_arch = "aarch64"))]
+const ARCH_OS: Result<&str, LoaderError> = Ok("arm64-windows");
+#[cfg(all(target_os = "windows", target_arch = "x86_64"))]
+const ARCH_OS: Result<&str, LoaderError> = Ok("x86_64-windows");
+#[cfg(all(
+    target_os = "windows",
+    not(any(target_arch = "aarch64", target_arch = "x86_64"))
+))]
+const ARCH_OS: Result<&str, LoaderError> = Err(LoaderError::WasiSDKPlatform);
+
+#[cfg(all(target_os = "linux", target_arch = "aarch64"))]
+const ARCH_OS: Result<&str, LoaderError> = Ok("arm64-linux");
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+const ARCH_OS: Result<&str, LoaderError> = Ok("x86_64-linux");
+#[cfg(all(
+    target_os = "linux",
+    not(any(target_arch = "aarch64", target_arch = "x86_64"))
+))]
+const ARCH_OS: Result<&str, LoaderError> = Err(LoaderError::WasiSDKPlatform);
+
+#[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+const ARCH_OS: Result<&str, LoaderError> = Err(LoaderError::WasiSDKPlatform);
 
 pub type LoaderResult<T> = Result<T, LoaderError>;
 
@@ -54,6 +84,10 @@ pub enum LoaderError {
     Compiler(CompilerError),
     #[error("Parser compilation failed.\nStdout: {0}\nStderr: {1}")]
     Compilation(String, String),
+    #[error(
+        "Lock file '{0}' appears stale\nIf there isn't another concurrent tree-sitter instance, remove it"
+    )]
+    LockFileTimeout(PathBuf),
     #[error("Failed to execute curl for {0} -- {1}")]
     Curl(String, std::io::Error),
     #[error("Failed to load language in current directory:\n{0}")]
@@ -88,14 +122,12 @@ pub enum LoaderError {
     Tags(#[from] TagsError),
     #[error("Failed to execute tar for {0} -- {1}")]
     Tar(String, std::io::Error),
-    #[error(transparent)]
-    Time(#[from] SystemTimeError),
     #[error("Unknown scope '{0}'")]
     UnknownScope(String),
-    #[error("Failed to download wasi-sdk from {0}")]
-    WasiSDKDownload(String),
+    #[error("Failed to download {tool} from {url}")]
+    WasmToolDownload { tool: &'static str, url: String },
     #[error(transparent)]
-    WasiSDKClang(#[from] WasiSDKClangError),
+    WasmTool(#[from] WasmToolError),
     #[error("Unsupported platform for wasi-sdk")]
     WasiSDKPlatform,
     #[cfg(feature = "wasm")]
@@ -103,8 +135,12 @@ pub enum LoaderError {
     Wasm(#[from] WasmError),
     #[error("Failed to run wasi-sdk clang -- {0}")]
     WasmCompiler(std::io::Error),
+    #[error("Failed to run wasm-opt -- {0}")]
+    WasmOptimizer(std::io::Error),
     #[error("wasi-sdk clang command failed: {0}")]
     WasmCompilation(String),
+    #[error("wasm-opt command failed: {0}")]
+    WasmOptimization(String),
 }
 
 #[derive(Debug, Error)]
@@ -201,22 +237,29 @@ impl std::fmt::Display for SymbolError {
 }
 
 #[derive(Debug, Error)]
-pub struct WasiSDKClangError {
-    pub wasi_sdk_dir: String,
+pub struct WasmToolError {
+    pub exe: &'static str,
+    pub toolchain: &'static str,
+    pub tool_dir: String,
     pub possible_executables: Vec<&'static str>,
     pub download: bool,
 }
 
-impl std::fmt::Display for WasiSDKClangError {
+impl std::fmt::Display for WasmToolError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if self.download {
             write!(
                 f,
-                "Failed to find clang executable in downloaded wasi-sdk at '{}'.",
-                self.wasi_sdk_dir
+                "Failed to find {} executable in downloaded {} at '{}'.",
+                self.exe, self.toolchain, self.tool_dir
             )?;
         } else {
-            write!(f, "TREE_SITTER_WASI_SDK_PATH is set to '{}', but no clang executable found in 'bin/' directory.", self.wasi_sdk_dir)?;
+            let toolchain_upper = self.toolchain.replace('-', "_").to_ascii_uppercase();
+            write!(
+                f,
+                "TREE_SITTER_{toolchain_upper}_PATH is set to '{}', but no clang executable found in 'bin/' directory.",
+                self.tool_dir
+            )?;
         }
 
         let possible_exes = self.possible_executables.join(", ");
@@ -356,7 +399,7 @@ impl TreeSitterJSON {
     }
 
     #[must_use]
-    pub fn has_multiple_language_configs(&self) -> bool {
+    pub const fn has_multiple_language_configs(&self) -> bool {
         self.grammars.len() > 1
     }
 }
@@ -538,6 +581,40 @@ fn standardize_path(path: PathBuf, home: &Path) -> PathBuf {
     path
 }
 
+fn display_build_cmd(cmd: &Command) {
+    let mut env_vars = String::new();
+    for (key, val) in cmd.get_envs() {
+        env_vars.push_str(&key.to_string_lossy());
+        if let Some(v) = val {
+            env_vars.push('=');
+            env_vars.push_str(&v.to_string_lossy());
+        }
+        env_vars.push('\n');
+    }
+    if !env_vars.is_empty() {
+        env_vars.pop(); // remove last '\n'
+    }
+    info!(
+        "[{}] {} {}\n",
+        cmd.get_current_dir()
+            .unwrap_or_else(|| Path::new(""))
+            .display(),
+        cmd.get_program().to_string_lossy(),
+        cmd.get_args()
+            .map(|s| s.to_string_lossy())
+            .collect::<Vec<_>>()
+            .join(" "),
+    );
+    for (key, val) in cmd.get_envs() {
+        let mut env_str = key.to_string_lossy().to_string();
+        if let Some(v) = val {
+            env_str.push('=');
+            env_str.push_str(&v.to_string_lossy());
+        }
+        info!("{env_str}");
+    }
+}
+
 impl Config {
     #[must_use]
     pub fn initial() -> Self {
@@ -595,6 +672,7 @@ pub struct Loader {
     debug_build: bool,
     sanitize_build: bool,
     force_rebuild: bool,
+    verbose: bool,
 
     #[cfg(feature = "wasm")]
     wasm_store: Mutex<Option<tree_sitter::WasmStore>>,
@@ -634,6 +712,74 @@ impl<'a> CompileConfig<'a> {
 }
 
 unsafe impl Sync for Loader {}
+
+/// Generate a temporary file path for atomic writes. The temp file is a hidden
+/// dotfile alongside the target, tagged with the current process and thread id
+/// for debuggability (e.g. `.javascript.so.12345.ThreadId(3)`).
+fn temp_path(path: &Path) -> PathBuf {
+    let filename = path
+        .file_name()
+        .expect("output_path must have a filename")
+        .to_string_lossy();
+    path.with_file_name(format!(
+        ".{filename}.{}.{:?}",
+        std::process::id(),
+        std::thread::current().id()
+    ))
+}
+
+/// RAII lock file guard. The lock file is created atomically via
+/// [`create_new`](`fs::OpenOptions::create_new`) and removed on drop.
+/// and removed on drop.
+struct LockFile {
+    path: PathBuf,
+}
+
+impl LockFile {
+    /// Attempt to atomically create the lock file.
+    ///
+    /// Returns `Ok(Some)` if we won the race, `Ok(None)` if we lost,
+    /// or the underlying IO error otherwise.
+    fn create(path: &Path) -> LoaderResult<Option<Self>> {
+        match fs::OpenOptions::new()
+            .create_new(true)
+            .write(true)
+            .open(path)
+        {
+            Ok(_) => Ok(Some(Self {
+                path: path.to_path_buf(),
+            })),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => Ok(None),
+            Err(e) => Err(LoaderError::IO(IoError::new(e, Some(path)))),
+        }
+    }
+
+    /// Wait for an existing lock file to be removed by whoever created it.
+    /// If the lock file persists beyond `timeout`, return [`LoaderError::LockFileTimeout`]
+    fn wait_for_removal(path: &Path, timeout: Duration) -> LoaderResult<()> {
+        let mut sleep_ms = 100;
+        let deadline = Instant::now() + timeout;
+        while path.exists() {
+            if Instant::now() > deadline {
+                return Err(LoaderError::LockFileTimeout(path.to_path_buf()));
+            }
+            std::thread::sleep(Duration::from_millis(sleep_ms));
+            sleep_ms = (sleep_ms * 2).min(1000);
+        }
+
+        Ok(())
+    }
+}
+
+impl Drop for LockFile {
+    fn drop(&mut self) {
+        match fs::remove_file(&self.path) {
+            Ok(()) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => warn!("Failed to remove lock file '{}': {e}.", self.path.display()),
+        }
+    }
+}
 
 impl Loader {
     pub fn new() -> LoaderResult<Self> {
@@ -675,6 +821,7 @@ impl Loader {
             debug_build: false,
             sanitize_build: false,
             force_rebuild: false,
+            verbose: false,
 
             #[cfg(feature = "wasm")]
             wasm_store: Mutex::default(),
@@ -710,14 +857,14 @@ impl Loader {
             if let Ok(entries) = fs::read_dir(parser_container_dir) {
                 for entry in entries {
                     let entry = entry.map_err(|e| LoaderError::IO(IoError::new(e, None)))?;
-                    if let Some(parser_dir_name) = entry.file_name().to_str() {
-                        if parser_dir_name.starts_with("tree-sitter-") {
-                            self.find_language_configurations_at_path(
-                                &parser_container_dir.join(parser_dir_name),
-                                false,
-                            )
-                            .ok();
-                        }
+                    if let Some(parser_dir_name) = entry.file_name().to_str()
+                        && parser_dir_name.starts_with("tree-sitter-")
+                    {
+                        self.find_language_configurations_at_path(
+                            &parser_container_dir.join(parser_dir_name),
+                            false,
+                        )
+                        .ok();
                     }
                 }
             }
@@ -743,7 +890,7 @@ impl Loader {
     }
 
     #[must_use]
-    pub fn get_all_language_configurations(&self) -> Vec<(&LanguageConfiguration, &Path)> {
+    pub fn get_all_language_configurations(&self) -> Vec<(&LanguageConfiguration<'static>, &Path)> {
         self.language_configurations
             .iter()
             .map(|c| (c, self.languages_by_id[c.language_id].0.as_ref()))
@@ -753,7 +900,7 @@ impl Loader {
     pub fn language_configuration_for_scope(
         &self,
         scope: &str,
-    ) -> LoaderResult<Option<(Language, &LanguageConfiguration)>> {
+    ) -> LoaderResult<Option<(Language, &LanguageConfiguration<'static>)>> {
         for configuration in &self.language_configurations {
             if configuration.scope.as_ref().is_some_and(|s| s == scope) {
                 let language = self.language_for_id(configuration.language_id)?;
@@ -766,7 +913,7 @@ impl Loader {
     pub fn language_configuration_for_first_line_regex(
         &self,
         path: &Path,
-    ) -> LoaderResult<Option<(Language, &LanguageConfiguration)>> {
+    ) -> LoaderResult<Option<(Language, &LanguageConfiguration<'static>)>> {
         self.language_configuration_ids_by_first_line_regex
             .iter()
             .try_fold(None, |_, (regex, ids)| {
@@ -779,12 +926,13 @@ impl Loader {
                         .next()
                         .transpose()
                         .map_err(|e| LoaderError::IO(IoError::new(e, Some(path))))?;
-                    if let Some(first_line) = first_line {
-                        if regex.is_match(&first_line) && !ids.is_empty() {
-                            let configuration = &self.language_configurations[ids[0]];
-                            let language = self.language_for_id(configuration.language_id)?;
-                            return Ok(Some((language, configuration)));
-                        }
+                    if let Some(first_line) = first_line
+                        && regex.is_match(&first_line)
+                        && !ids.is_empty()
+                    {
+                        let configuration = &self.language_configurations[ids[0]];
+                        let language = self.language_for_id(configuration.language_id)?;
+                        return Ok(Some((language, configuration)));
                     }
                 }
 
@@ -795,7 +943,7 @@ impl Loader {
     pub fn language_configuration_for_file_name(
         &self,
         path: &Path,
-    ) -> LoaderResult<Option<(Language, &LanguageConfiguration)>> {
+    ) -> LoaderResult<Option<(Language, &LanguageConfiguration<'static>)>> {
         // Find all the language configurations that match this file name
         // or a suffix of the file name.
         let configuration_ids = path
@@ -814,51 +962,51 @@ impl Loader {
                     .get(&extensions.join("."))
             });
 
-        if let Some(configuration_ids) = configuration_ids {
-            if !configuration_ids.is_empty() {
-                let configuration = if configuration_ids.len() == 1 {
-                    &self.language_configurations[configuration_ids[0]]
-                }
-                // If multiple language configurations match, then determine which
-                // one to use by applying the configurations' content regexes.
-                else {
-                    let file_contents =
-                        fs::read(path).map_err(|e| LoaderError::IO(IoError::new(e, Some(path))))?;
-                    let file_contents = String::from_utf8_lossy(&file_contents);
-                    let mut best_score = -2isize;
-                    let mut best_configuration_id = None;
-                    for configuration_id in configuration_ids {
-                        let config = &self.language_configurations[*configuration_id];
-
-                        // If the language configuration has a content regex, assign
-                        // a score based on the length of the first match.
-                        let score;
-                        if let Some(content_regex) = &config.content_regex {
-                            if let Some(mat) = content_regex.find(&file_contents) {
-                                score = (mat.end() - mat.start()) as isize;
-                            }
-                            // If the content regex does not match, then *penalize* this
-                            // language configuration, so that language configurations
-                            // without content regexes are preferred over those with
-                            // non-matching content regexes.
-                            else {
-                                score = -1;
-                            }
-                        } else {
-                            score = 0;
-                        }
-                        if score > best_score {
-                            best_configuration_id = Some(*configuration_id);
-                            best_score = score;
-                        }
-                    }
-
-                    &self.language_configurations[best_configuration_id.unwrap()]
-                };
-
-                let language = self.language_for_id(configuration.language_id)?;
-                return Ok(Some((language, configuration)));
+        if let Some(configuration_ids) = configuration_ids
+            && !configuration_ids.is_empty()
+        {
+            let configuration = if configuration_ids.len() == 1 {
+                &self.language_configurations[configuration_ids[0]]
             }
+            // If multiple language configurations match, then determine which
+            // one to use by applying the configurations' content regexes.
+            else {
+                let file_contents =
+                    fs::read(path).map_err(|e| LoaderError::IO(IoError::new(e, Some(path))))?;
+                let file_contents = String::from_utf8_lossy(&file_contents);
+                let mut best_score = -2isize;
+                let mut best_configuration_id = None;
+                for configuration_id in configuration_ids {
+                    let config = &self.language_configurations[*configuration_id];
+
+                    // If the language configuration has a content regex, assign
+                    // a score based on the length of the first match.
+                    let score;
+                    if let Some(content_regex) = &config.content_regex {
+                        if let Some(mat) = content_regex.find(&file_contents) {
+                            score = (mat.end() - mat.start()) as isize;
+                        }
+                        // If the content regex does not match, then *penalize* this
+                        // language configuration, so that language configurations
+                        // without content regexes are preferred over those with
+                        // non-matching content regexes.
+                        else {
+                            score = -1;
+                        }
+                    } else {
+                        score = 0;
+                    }
+                    if score > best_score {
+                        best_configuration_id = Some(*configuration_id);
+                        best_score = score;
+                    }
+                }
+
+                &self.language_configurations[best_configuration_id.unwrap()]
+            };
+
+            let language = self.language_for_id(configuration.language_id)?;
+            return Ok(Some((language, configuration)));
         }
 
         Ok(None)
@@ -867,17 +1015,17 @@ impl Loader {
     pub fn language_configuration_for_injection_string(
         &self,
         string: &str,
-    ) -> LoaderResult<Option<(Language, &LanguageConfiguration)>> {
+    ) -> LoaderResult<Option<(Language, &LanguageConfiguration<'static>)>> {
         let mut best_match_length = 0;
         let mut best_match_position = None;
         for (i, configuration) in self.language_configurations.iter().enumerate() {
-            if let Some(injection_regex) = &configuration.injection_regex {
-                if let Some(mat) = injection_regex.find(string) {
-                    let length = mat.end() - mat.start();
-                    if length > best_match_length {
-                        best_match_position = Some(i);
-                        best_match_length = length;
-                    }
+            if let Some(injection_regex) = &configuration.injection_regex
+                && let Some(mat) = injection_regex.find(string)
+            {
+                let length = mat.end() - mat.start();
+                if length > best_match_length {
+                    best_match_position = Some(i);
+                    best_match_length = length;
                 }
             }
         }
@@ -985,25 +1133,6 @@ impl Loader {
             recompile = needs_recompile(&output_path, &paths_to_check)?;
         }
 
-        #[cfg(feature = "wasm")]
-        if let Some(wasm_store) = self.wasm_store.lock().unwrap().as_mut() {
-            if recompile {
-                self.compile_parser_to_wasm(
-                    &config.name,
-                    config.src_path,
-                    config
-                        .scanner_path
-                        .as_ref()
-                        .and_then(|p| p.strip_prefix(config.src_path).ok()),
-                    &output_path,
-                )?;
-            }
-
-            let wasm_bytes = fs::read(&output_path)
-                .map_err(|e| LoaderError::IO(IoError::new(e, Some(output_path.as_path()))))?;
-            return Ok(wasm_store.load_language(&config.name, &wasm_bytes)?);
-        }
-
         // Create a unique lock path based on the output path hash to prevent
         // interference when multiple processes build the same grammar (by name)
         // to different output locations
@@ -1013,85 +1142,72 @@ impl Loader {
             format!("{:x}", hasher.finish())
         };
 
-        let lock_path = if env::var("CROSS_RUNNER").is_ok() {
-            tempfile::tempdir()
-                .expect("create a temp dir")
-                .path()
-                .to_path_buf()
-        } else {
-            etcetera::choose_base_strategy()?.cache_dir()
-        }
-        .join("tree-sitter")
-        .join("lock")
-        .join(format!("{}-{lock_hash}.lock", config.name));
+        let mut lock_path = etcetera::choose_base_strategy()?.cache_dir();
+        lock_path.push(format!(
+            "tree-sitter{slash}lock{slash}{name}-{lock_hash}.lock",
+            slash = std::path::MAIN_SEPARATOR,
+            name = config.name
+        ));
 
-        if let Ok(lock_file) = fs::OpenOptions::new().write(true).open(&lock_path) {
-            recompile = false;
-            if lock_file.try_lock_exclusive().is_err() {
-                // if we can't acquire the lock, another process is compiling the parser, wait for
-                // it and don't recompile
-                lock_file
-                    .lock_exclusive()
-                    .map_err(|e| LoaderError::IO(IoError::new(e, Some(lock_path.as_path()))))?;
-                recompile = false;
-            } else {
-                // if we can acquire the lock, check if the lock file is older than 30 seconds, a
-                // run that was interrupted and left the lock file behind should not block
-                // subsequent runs
-                let time = lock_file
-                    .metadata()
-                    .map_err(|e| LoaderError::IO(IoError::new(e, Some(lock_path.as_path()))))?
-                    .modified()
-                    .map_err(|e| LoaderError::IO(IoError::new(e, Some(lock_path.as_path()))))?
-                    .elapsed()?
-                    .as_secs();
-                if time > 30 {
-                    fs::remove_file(&lock_path)
-                        .map_err(|e| LoaderError::IO(IoError::new(e, Some(lock_path.as_path()))))?;
-                    recompile = true;
-                }
-            }
-        }
-
+        // Synchronize compilation across threads/processes using an atomic lock
+        // file. Exactly one caller wins the race to compile. Losers wait for the
+        // lock file to be removed, then skip compilation and proceed to loading.
+        //
+        // Loading only (`recompile == false`) doesn't need a lock because
+        // `compile_parser_to_dylib` writes to a temp file and atomically renames
+        // into place, so loaders always see a complete shared library (either the
+        // new or previous copy).
+        //
+        // The `LockFile` ensures cleanup on drop, and stale locks from killed
+        // processes are detected via a timeout in `wait_for_removal`.
         if recompile {
             let parent_path = lock_path.parent().unwrap();
             fs::create_dir_all(parent_path)
                 .map_err(|e| LoaderError::IO(IoError::new(e, Some(parent_path))))?;
-            let lock_file = fs::OpenOptions::new()
-                .create(true)
-                .truncate(true)
-                .write(true)
-                .open(&lock_path)
-                .map_err(|e| LoaderError::IO(IoError::new(e, Some(lock_path.as_path()))))?;
-            lock_file
-                .lock_exclusive()
-                .map_err(|e| LoaderError::IO(IoError::new(e, Some(lock_path.as_path()))))?;
 
-            self.compile_parser_to_dylib(&config, &lock_file, &lock_path)?;
-
-            if config.scanner_path.is_some() {
-                self.check_external_scanner(&output_path)?;
+            match LockFile::create(&lock_path)? {
+                Some(_lock) => {
+                    // We won the race, so compile with the lock.
+                    let compile_wasm;
+                    #[cfg(feature = "wasm")]
+                    {
+                        compile_wasm = self.wasm_store.lock().unwrap().is_some();
+                    }
+                    #[cfg(not(feature = "wasm"))]
+                    {
+                        compile_wasm = false;
+                    };
+                    #[cfg(feature = "wasm")]
+                    if compile_wasm {
+                        self.compile_parser_to_wasm(
+                            &config.name,
+                            config.src_path,
+                            config
+                                .scanner_path
+                                .as_ref()
+                                .and_then(|p| p.strip_prefix(config.src_path).ok()),
+                            &output_path,
+                        )?;
+                    }
+                    if !compile_wasm {
+                        self.compile_parser_to_dylib(&config)?;
+                        if config.scanner_path.is_some() {
+                            Self::check_external_scanner(&output_path);
+                        }
+                    }
+                    // _lock dropped here, removing the lock file.
+                }
+                // Another thread/process is compiling (or a previous run
+                // crashed and left a stale lock). Wait for it to finish.
+                None => LockFile::wait_for_removal(&lock_path, Duration::from_secs(30))?,
             }
         }
 
-        // Ensure the dynamic library exists before trying to load it. This can
-        // happen in race conditions where we couldn't acquire the lock because
-        // another process was compiling but it still hasn't finished by the
-        // time we reach this point, so the output file still doesn't exist.
-        //
-        // Instead of allowing the `load_language` call below to fail, return a
-        // clearer error to the user here.
-        if !output_path.exists() {
-            let msg = format!(
-                "Dynamic library `{}` not found after build attempt. \
-                Are you running multiple processes building to the same output location?",
-                output_path.display()
-            );
-
-            Err(LoaderError::IO(IoError::new(
-                std::io::Error::new(std::io::ErrorKind::NotFound, msg),
-                Some(output_path.as_path()),
-            )))?;
+        #[cfg(feature = "wasm")]
+        if let Some(wasm_store) = self.wasm_store.lock().unwrap().as_mut() {
+            let wasm_bytes = fs::read(&output_path)
+                .map_err(|e| LoaderError::IO(IoError::new(e, Some(output_path.as_path()))))?;
+            return Ok(wasm_store.load_language(&config.name, &wasm_bytes)?);
         }
 
         Self::load_language(&output_path, &language_fn_name)
@@ -1120,12 +1236,7 @@ impl Loader {
         Ok(language)
     }
 
-    fn compile_parser_to_dylib(
-        &self,
-        config: &CompileConfig,
-        lock_file: &fs::File,
-        lock_path: &Path,
-    ) -> LoaderResult<()> {
+    fn compile_parser_to_dylib(&self, config: &CompileConfig) -> LoaderResult<()> {
         let mut cc_config = cc::Build::new();
         cc_config
             .cargo_metadata(false)
@@ -1155,16 +1266,16 @@ impl Loader {
         }
 
         let compiler = cc_config.get_compiler();
-        let mut command = Command::new(compiler.path());
-        command.args(compiler.args());
-        for (key, value) in compiler.env() {
-            command.env(key, value);
-        }
+        let mut command = compiler.to_command();
 
         let output_path = config.output_path.as_ref().unwrap();
 
+        // Compile to a temporary path, then atomically rename into place.
+        // This ensures loaders never see a half-written .so file.
+        let temp_output = temp_path(output_path);
+
         let temp_dir = if compiler.is_like_msvc() {
-            let out = format!("-out:{}", output_path.to_str().unwrap());
+            let out = format!("-out:{}", temp_output.to_str().unwrap());
             command.arg(if self.debug_build { "-LDd" } else { "-LD" });
             command.arg("-utf-8");
 
@@ -1197,10 +1308,14 @@ impl Loader {
                 command.arg("-lc");
             }
             command.args(cc_config.get_files());
-            command.arg("-o").arg(output_path);
+            command.arg("-o").arg(&temp_output);
 
             None
         };
+
+        if self.verbose {
+            display_build_cmd(&command);
+        }
 
         let output = command.output().map_err(|e| {
             LoaderError::Compiler(CompilerError {
@@ -1209,18 +1324,27 @@ impl Loader {
             })
         })?;
 
+        if self.verbose {
+            if !output.stdout.is_empty() {
+                info!("stdout:{}", String::from_utf8_lossy(&output.stdout));
+            }
+            if !output.stderr.is_empty() {
+                info!("stderr:{}", String::from_utf8_lossy(&output.stderr));
+            }
+        }
+
         if let Some(temp_dir) = temp_dir {
             let _ = fs::remove_dir_all(temp_dir);
         }
 
-        FileExt::unlock(lock_file)
-            .map_err(|e| LoaderError::IO(IoError::new(e, Some(lock_path))))?;
-        fs::remove_file(lock_path)
-            .map_err(|e| LoaderError::IO(IoError::new(e, Some(lock_path))))?;
-
         if output.status.success() {
+            fs::rename(&temp_output, output_path).map_err(|e| {
+                let _ = fs::remove_file(&temp_output);
+                LoaderError::IO(IoError::new(e, Some(output_path)))
+            })?;
             Ok(())
         } else {
+            let _ = fs::remove_file(&temp_output);
             Err(LoaderError::Compilation(
                 String::from_utf8_lossy(&output.stdout).to_string(),
                 String::from_utf8_lossy(&output.stderr).to_string(),
@@ -1229,7 +1353,7 @@ impl Loader {
     }
 
     #[cfg(unix)]
-    fn check_external_scanner(&self, library_path: &Path) -> LoaderResult<()> {
+    fn check_external_scanner(library_path: &Path) {
         let section = " T ";
         // Older ppc toolchains incorrectly report functions in the Data section. This bug has been
         // fixed, but we still need to account for older systems.
@@ -1243,29 +1367,26 @@ impl Loader {
             .arg("--defined-only")
             .arg(library_path)
             .output();
-        if let Ok(output) = command {
-            if output.status.success() {
-                let mut non_static_symbols = String::new();
-                for line in String::from_utf8_lossy(&output.stdout).lines() {
-                    if line.contains(section) || old_ppc_section.is_some_and(|s| line.contains(s)) {
-                        if let Some(function_name) =
-                            line.split_whitespace().collect::<Vec<_>>().get(2)
-                        {
-                            if !line.contains("tree_sitter_") {
-                                writeln!(&mut non_static_symbols, "  `{function_name}`").unwrap();
-                            }
-                        }
-                    }
+        if let Ok(output) = command
+            && output.status.success()
+        {
+            let mut non_static_symbols = String::new();
+            for line in String::from_utf8_lossy(&output.stdout).lines() {
+                if (line.contains(section) || old_ppc_section.is_some_and(|s| line.contains(s)))
+                    && let Some(function_name) = line.split_whitespace().collect::<Vec<_>>().get(2)
+                    && !line.contains("tree_sitter_")
+                {
+                    writeln!(&mut non_static_symbols, "  `{function_name}`").unwrap();
                 }
-                if !non_static_symbols.is_empty() {
-                    warn!(
-                        "Found non-static non-tree-sitter functions in the external scanner\n{non_static_symbols}\n{}",
-                        concat!(
-                            "Consider making these functions static, they can cause conflicts ",
-                            "when another tree-sitter project uses the same function name."
-                        )
-                    );
-                }
+            }
+            if !non_static_symbols.is_empty() {
+                warn!(
+                    "Found non-static non-tree-sitter functions in the external scanner\n{non_static_symbols}\n{}",
+                    concat!(
+                        "Consider making these functions static, they can cause conflicts ",
+                        "when another tree-sitter project uses the same function name."
+                    )
+                );
             }
         } else {
             warn!(
@@ -1273,14 +1394,11 @@ impl Loader {
                 library_path.display()
             );
         }
-
-        Ok(())
     }
 
     #[cfg(windows)]
-    fn check_external_scanner(&self, _library_path: &Path) -> LoaderResult<()> {
+    fn check_external_scanner(_library_path: &Path) {
         // TODO: there's no nm command on windows, whoever wants to implement this can and should :)
-        Ok(())
     }
 
     pub fn compile_parser_to_wasm(
@@ -1290,15 +1408,24 @@ impl Loader {
         scanner_filename: Option<&Path>,
         output_path: &Path,
     ) -> LoaderResult<()> {
-        let clang_executable = self.ensure_wasi_sdk_exists()?;
+        let tool_lock = WASM_TOOL_LOCK.lock().expect("Wasm tool mutex poisoned");
+        let clang_exe = Self::ensure_wasi_sdk_exists()?;
+        let wasm_opt_exe = Self::ensure_binaryen_exists()?;
+        drop(tool_lock);
 
-        let mut command = Command::new(&clang_executable);
-        command.current_dir(src_path).args([
+        // Compile to a temporary path, then atomically rename into place.
+        // This ensures loaders never see a half-written .wasm file.
+        let temp_output = temp_path(output_path);
+        let temp_output_str = temp_output.to_str().unwrap();
+
+        let mut compile_command = Command::new(&clang_exe);
+        compile_command.current_dir(src_path).args([
             "--target=wasm32-unknown-wasi",
             "-o",
-            output_path.to_str().unwrap(),
+            temp_output_str,
             "-fPIC",
             "-shared",
+            "--no-wasm-opt",
             if self.debug_build { "-g" } else { "-Os" },
             format!("-Wl,--export=tree_sitter_{language_name}").as_str(),
             "-Wl,--allow-undefined",
@@ -1312,26 +1439,68 @@ impl Loader {
         ]);
 
         if let Some(scanner_filename) = scanner_filename {
-            command.arg(scanner_filename);
+            compile_command.arg(scanner_filename);
         }
 
-        let output = command.output().map_err(LoaderError::WasmCompiler)?;
+        if self.verbose {
+            display_build_cmd(&compile_command);
+        }
 
-        if !output.status.success() {
+        let compile_output = compile_command
+            .output()
+            .map_err(LoaderError::WasmCompiler)?;
+        if self.verbose {
+            if !compile_output.stdout.is_empty() {
+                info!("stdout:{}", String::from_utf8_lossy(&compile_output.stdout));
+            }
+            if !compile_output.stderr.is_empty() {
+                info!("stderr:{}", String::from_utf8_lossy(&compile_output.stderr));
+            }
+        }
+
+        if !compile_output.status.success() {
+            let _ = fs::remove_file(&temp_output);
             return Err(LoaderError::WasmCompilation(
-                String::from_utf8_lossy(&output.stderr).to_string(),
+                String::from_utf8_lossy(&compile_output.stderr).to_string(),
             ));
         }
+
+        let mut opt_command = Command::new(&wasm_opt_exe);
+        opt_command
+            .current_dir(src_path)
+            .args([temp_output_str, "-Os", "-o", temp_output_str]);
+
+        if self.verbose {
+            display_build_cmd(&opt_command);
+        }
+
+        let opt_output = opt_command.output().map_err(LoaderError::WasmOptimizer)?;
+        if self.verbose {
+            if !opt_output.stdout.is_empty() {
+                info!("stdout:{}", String::from_utf8_lossy(&opt_output.stdout));
+            }
+            if !opt_output.stderr.is_empty() {
+                info!("stderr:{}", String::from_utf8_lossy(&opt_output.stderr));
+            }
+        }
+
+        if !opt_output.status.success() {
+            let _ = fs::remove_file(&temp_output);
+            return Err(LoaderError::WasmOptimization(
+                String::from_utf8_lossy(&opt_output.stderr).to_string(),
+            ));
+        }
+
+        fs::rename(&temp_output, output_path).map_err(|e| {
+            let _ = fs::remove_file(&temp_output);
+            LoaderError::IO(IoError::new(e, Some(output_path)))
+        })?;
 
         Ok(())
     }
 
     /// Extracts a tar.gz archive with `tar`, stripping the first path component.
-    fn extract_tar_gz_with_strip(
-        &self,
-        archive_path: &Path,
-        destination: &Path,
-    ) -> LoaderResult<()> {
+    fn extract_tar_gz_with_strip(archive_path: &Path, destination: &Path) -> LoaderResult<()> {
         let status = Command::new("tar")
             .arg("-xzf")
             .arg(archive_path)
@@ -1351,11 +1520,11 @@ impl Loader {
         Ok(())
     }
 
-    /// This ensures that the wasi-sdk is available, downloading and extracting it if necessary,
+    /// This ensures that wasi-sdk is available, downloading and extracting it if necessary,
     /// and returns the path to the `clang` executable.
     ///
     /// If `TREE_SITTER_WASI_SDK_PATH` is set, it will use that path to look for the clang executable.
-    fn ensure_wasi_sdk_exists(&self) -> LoaderResult<PathBuf> {
+    fn ensure_wasi_sdk_exists() -> LoaderResult<PathBuf> {
         let possible_executables = if cfg!(windows) {
             vec![
                 "clang.exe",
@@ -1366,63 +1535,17 @@ impl Loader {
             vec!["clang", "wasm32-unknown-wasi-clang", "wasm32-wasi-clang"]
         };
 
-        if let Ok(wasi_sdk_path) = std::env::var("TREE_SITTER_WASI_SDK_PATH") {
-            let wasi_sdk_dir = PathBuf::from(wasi_sdk_path);
-
-            for exe in &possible_executables {
-                let clang_exe = wasi_sdk_dir.join("bin").join(exe);
-                if clang_exe.exists() {
-                    return Ok(clang_exe);
-                }
-            }
-
-            return Err(LoaderError::WasiSDKClang(WasiSDKClangError {
-                wasi_sdk_dir: wasi_sdk_dir.to_string_lossy().to_string(),
-                possible_executables,
-                download: false,
-            }));
+        if let Some(path) = Self::get_existing_tool(
+            "clang",
+            "wasi-sdk",
+            WASI_SDK_VERSION,
+            &possible_executables,
+            "TREE_SITTER_WASI_SDK_PATH",
+        )? {
+            return Ok(path);
         }
 
-        let cache_dir = etcetera::choose_base_strategy()?
-            .cache_dir()
-            .join("tree-sitter");
-        fs::create_dir_all(&cache_dir)
-            .map_err(|e| LoaderError::IO(IoError::new(e, Some(cache_dir.as_path()))))?;
-
-        let wasi_sdk_dir = cache_dir.join("wasi-sdk");
-
-        for exe in &possible_executables {
-            let clang_exe = wasi_sdk_dir.join("bin").join(exe);
-            if clang_exe.exists() {
-                return Ok(clang_exe);
-            }
-        }
-
-        fs::create_dir_all(&wasi_sdk_dir)
-            .map_err(|e| LoaderError::IO(IoError::new(e, Some(wasi_sdk_dir.as_path()))))?;
-
-        let arch_os = if cfg!(target_os = "macos") {
-            if cfg!(target_arch = "aarch64") {
-                "arm64-macos"
-            } else {
-                "x86_64-macos"
-            }
-        } else if cfg!(target_os = "windows") {
-            if cfg!(target_arch = "aarch64") {
-                "arm64-windows"
-            } else {
-                "x86_64-windows"
-            }
-        } else if cfg!(target_os = "linux") {
-            if cfg!(target_arch = "aarch64") {
-                "arm64-linux"
-            } else {
-                "x86_64-linux"
-            }
-        } else {
-            return Err(LoaderError::WasiSDKPlatform);
-        };
-
+        let arch_os = ARCH_OS?;
         let sdk_filename = format!("wasi-sdk-{WASI_SDK_VERSION}-{arch_os}.tar.gz");
         let wasi_sdk_major_version = WASI_SDK_VERSION
             .trim_end_matches(char::is_numeric) // trim minor version...
@@ -1430,39 +1553,184 @@ impl Loader {
         let sdk_url = format!(
             "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-{wasi_sdk_major_version}/{sdk_filename}",
         );
+        Self::download_tool(
+            "clang",
+            "wasi-sdk",
+            WASI_SDK_VERSION,
+            &sdk_filename,
+            &sdk_url,
+            &possible_executables,
+        )
+    }
 
-        info!("Downloading wasi-sdk from {sdk_url}...");
-        let temp_tar_path = cache_dir.join(sdk_filename);
+    /// This ensures that binaryen is available, downloading and extracting it if necessary,
+    /// and returns the path to the `wasm-opt` executable.
+    ///
+    /// If `TREE_SITTER_BINARYEN_PATH` is set, it will use that path to look for the wasm-opt executable.
+    fn ensure_binaryen_exists() -> LoaderResult<PathBuf> {
+        let possible_executables = if cfg!(windows) {
+            vec![
+                "wasm-opt.exe",
+                "wasm32-unknown-wasm-opt.exe",
+                "wasm32-wasm-opt.exe",
+            ]
+        } else {
+            vec!["wasm-opt", "wasm32-unknown-wasm-opt", "wasm32-wasm-opt"]
+        };
+        if let Some(path) = Self::get_existing_tool(
+            "wasm-opt",
+            "binaryen",
+            BINARYEN_VERSION,
+            &possible_executables,
+            "TREE_SITTER_BINARYEN_PATH",
+        )? {
+            return Ok(path);
+        }
+
+        let arch_os = ARCH_OS?.replace("arm64-linux", "aarch64-linux");
+        let binaryen_filename = format!("binaryen-version_{BINARYEN_VERSION}-{arch_os}.tar.gz");
+        let binaryen_url = format!(
+            "https://github.com/WebAssembly/binaryen/releases/download/version_{BINARYEN_VERSION}/{binaryen_filename}"
+        );
+        Self::download_tool(
+            "wasm-opt",
+            "binaryen",
+            BINARYEN_VERSION,
+            &binaryen_filename,
+            &binaryen_url,
+            &possible_executables,
+        )
+    }
+
+    fn get_existing_tool(
+        tool_name: &'static str,
+        toolchain: &'static str,
+        version: &str,
+        possible_exes: &[&'static str],
+        env_var: &str,
+    ) -> LoaderResult<Option<PathBuf>> {
+        if let Ok(tool_path) = std::env::var(env_var) {
+            let tool_dir = PathBuf::from(tool_path).join("bin");
+
+            for exe in possible_exes {
+                let tool_exe = tool_dir.join(exe);
+                if tool_exe.exists() {
+                    return Ok(Some(tool_exe));
+                }
+            }
+
+            Err(LoaderError::WasmTool(WasmToolError {
+                exe: tool_name,
+                toolchain,
+                tool_dir: tool_dir.to_string_lossy().to_string(),
+                possible_executables: possible_exes.to_vec(),
+                download: false,
+            }))?;
+        }
+
+        let cache_dir = etcetera::choose_base_strategy()?
+            .cache_dir()
+            .join("tree-sitter");
+        fs::create_dir_all(&cache_dir).map_err(|error| {
+            LoaderError::IO(IoError {
+                error,
+                path: Some(cache_dir.to_string_lossy().to_string()),
+            })
+        })?;
+
+        let toolchain_dir = cache_dir.join(toolchain);
+        let version_file = toolchain_dir.join(".version");
+
+        // If a cached toolchain exists but the version doesn't match, remove it
+        if toolchain_dir.exists() {
+            let cached_version =
+                fs::read_to_string(&version_file).unwrap_or_else(|_| "unknown".to_string());
+            if cached_version.trim() != version {
+                info!(
+                    "Cached {toolchain} version ({}) doesn't match expected version ({version}), re-downloading",
+                    cached_version.trim(),
+                );
+                fs::remove_dir_all(&toolchain_dir).ok();
+                return Ok(None);
+            }
+        }
+
+        let tool_dir = toolchain_dir.join("bin");
+
+        for exe in possible_exes {
+            let tool_exe = tool_dir.join(exe);
+            if tool_exe.exists() {
+                return Ok(Some(tool_exe));
+            }
+        }
+
+        Ok(None)
+    }
+
+    fn download_tool(
+        tool_name: &'static str,
+        toolchain: &'static str,
+        version: &str,
+        filename: &str,
+        url: &str,
+        possible_exes: &[&'static str],
+    ) -> LoaderResult<PathBuf> {
+        let cache_dir = etcetera::choose_base_strategy()?
+            .cache_dir()
+            .join("tree-sitter");
+        let tool_dir = cache_dir.join(toolchain);
+
+        fs::create_dir_all(&tool_dir).map_err(|error| {
+            LoaderError::IO(IoError {
+                error,
+                path: Some(tool_dir.to_string_lossy().to_string()),
+            })
+        })?;
+
+        info!("Downloading {tool_name} from {url}...");
+        let temp_tar_dir = tempfile::tempdir_in(&cache_dir).map_err(|e| {
+            LoaderError::IO(IoError {
+                error: e,
+                path: Some(cache_dir.to_string_lossy().to_string()),
+            })
+        })?;
+        let temp_tar_path = temp_tar_dir.path().join(filename);
 
         let status = Command::new("curl")
             .arg("-f")
             .arg("-L")
             .arg("-o")
             .arg(&temp_tar_path)
-            .arg(&sdk_url)
+            .arg(url)
             .status()
-            .map_err(|e| LoaderError::Curl(sdk_url.clone(), e))?;
+            .map_err(|e| LoaderError::Curl(url.to_string(), e))?;
 
         if !status.success() {
-            return Err(LoaderError::WasiSDKDownload(sdk_url));
+            Err(LoaderError::WasmToolDownload {
+                tool: tool_name,
+                url: url.to_string(),
+            })?;
         }
 
-        info!("Extracting wasi-sdk to {}...", wasi_sdk_dir.display());
-        self.extract_tar_gz_with_strip(&temp_tar_path, &wasi_sdk_dir)?;
+        info!("Extracting {tool_name} to {}...", tool_dir.display());
+        Self::extract_tar_gz_with_strip(&temp_tar_path, &tool_dir)?;
 
-        fs::remove_file(temp_tar_path).ok();
-        for exe in &possible_executables {
-            let clang_exe = wasi_sdk_dir.join("bin").join(exe);
-            if clang_exe.exists() {
-                return Ok(clang_exe);
+        fs::write(tool_dir.join(".version"), version).ok();
+
+        for exe in possible_exes {
+            let tool_exe = tool_dir.join("bin").join(exe);
+            if tool_exe.exists() {
+                return Ok(tool_exe);
             }
         }
 
-        Err(LoaderError::WasiSDKClang(WasiSDKClangError {
-            wasi_sdk_dir: wasi_sdk_dir.to_string_lossy().to_string(),
-            possible_executables,
+        Err(LoaderError::WasmTool(WasmToolError {
+            exe: tool_name,
+            toolchain,
+            tool_dir: tool_dir.to_string_lossy().to_string(),
+            possible_executables: possible_exes.to_vec(),
             download: true,
-        }))
+        }))?
     }
 
     #[must_use]
@@ -1473,7 +1741,7 @@ impl Loader {
     ) -> Option<&'a HighlightConfiguration> {
         match self.language_configuration_for_injection_string(string) {
             Err(e) => {
-                error!("Failed to load language for injection string '{string}': {e}",);
+                error!("Failed to load language for injection string '{string}': {e}");
                 None
             }
             Ok(None) => None,
@@ -1481,7 +1749,7 @@ impl Loader {
                 match configuration.highlight_config(language, None) {
                     Err(e) => {
                         error!(
-                            "Failed to load higlight config for injection string '{string}': {e}"
+                            "Failed to load highlight config for injection string '{string}': {e}"
                         );
                         None
                     }
@@ -1493,7 +1761,9 @@ impl Loader {
     }
 
     #[must_use]
-    pub fn get_language_configuration_in_current_path(&self) -> Option<&LanguageConfiguration> {
+    pub fn get_language_configuration_in_current_path(
+        &self,
+    ) -> Option<&LanguageConfiguration<'static>> {
         self.language_configuration_in_current_path
             .map(|i| &self.language_configurations[i])
     }
@@ -1502,7 +1772,7 @@ impl Loader {
         &mut self,
         parser_path: &Path,
         set_current_path_config: bool,
-    ) -> LoaderResult<&[LanguageConfiguration]> {
+    ) -> LoaderResult<&[LanguageConfiguration<'static>]> {
         let initial_language_configuration_count = self.language_configurations.len();
 
         match TreeSitterJSON::from_file(parser_path) {
@@ -1513,9 +1783,9 @@ impl Loader {
                     // the tree-sitter.json, but defaults to the directory containing the
                     // tree-sitter.json.
                     let language_path =
-                        parser_path.join(grammar.path.unwrap_or(PathBuf::from(".")));
+                        parser_path.join(grammar.path.unwrap_or_else(|| PathBuf::from(".")));
 
-                    // Determine if a previous language configuration in this package.json file
+                    // Determine if a previous language configuration in this tree-sitter.json file
                     // already uses the same language.
                     let mut language_id = None;
                     for (id, (path, _, _)) in
@@ -1666,6 +1936,16 @@ impl Loader {
         pattern.and_then(|r| RegexBuilder::new(r).multi_line(true).build().ok())
     }
 
+    // Matches "name":\s*"(.*?)", returning the capture
+    fn grammar_name(json_text: &str) -> Option<String> {
+        let i = json_text.find("\"name\":")? + "\"name\":".len();
+        let rest = json_text[i..].trim_start();
+        let rest = rest.strip_prefix('\"')?;
+        let end = rest.find('\"')?;
+
+        Some(rest[..end].to_string())
+    }
+
     fn grammar_json_name(grammar_path: &Path) -> LoaderResult<String> {
         let file = fs::File::open(grammar_path)
             .map_err(|e| LoaderError::IO(IoError::new(e, Some(grammar_path))))?;
@@ -1677,12 +1957,10 @@ impl Loader {
             .map_err(|_| LoaderError::GrammarJSON(grammar_path.to_string_lossy().to_string()))?
             .join("\n");
 
-        let name = GRAMMAR_NAME_REGEX
-            .captures(&first_three_lines)
-            .and_then(|c| c.get(1))
+        let name = Self::grammar_name(&first_three_lines)
             .ok_or_else(|| LoaderError::GrammarJSON(grammar_path.to_string_lossy().to_string()))?;
 
-        Ok(name.as_str().to_string())
+        Ok(name)
     }
 
     pub fn select_language(
@@ -1693,7 +1971,7 @@ impl Loader {
         // path to dynamic library, name of language
         lib_info: Option<&(PathBuf, &str)>,
     ) -> LoaderResult<Language> {
-        if let Some((ref lib_path, language_name)) = lib_info {
+        if let Some((lib_path, language_name)) = lib_info {
             let language_fn_name = format!("tree_sitter_{}", language_name.replace('-', "_"));
             Self::load_language(lib_path, &language_fn_name)
         } else if let Some(scope) = scope {
@@ -1747,6 +2025,10 @@ impl Loader {
 
     pub const fn force_rebuild(&mut self, rebuild: bool) {
         self.force_rebuild = rebuild;
+    }
+
+    pub const fn verbose_build(&mut self, verbose: bool) {
+        self.verbose = verbose;
     }
 
     #[cfg(feature = "wasm")]
@@ -1940,7 +2222,10 @@ impl LanguageConfiguration<'_> {
         })
     }
 
-    #[allow(clippy::type_complexity)]
+    #[expect(
+        clippy::type_complexity,
+        reason = "return type pairs query text with source file ranges"
+    )]
     #[cfg(any(feature = "tree-sitter-highlight", feature = "tree-sitter-tags"))]
     fn read_queries(
         &self,

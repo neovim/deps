@@ -6,62 +6,80 @@ use std::{
     io::{self, Write},
     path::{Path, PathBuf},
     str,
-    sync::LazyLock,
     time::Duration,
 };
 
 use anstyle::AnsiColor;
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use clap::ValueEnum;
 use indoc::indoc;
-use regex::{
-    bytes::{Regex as ByteRegex, RegexBuilder as ByteRegexBuilder},
-    Regex,
-};
+use log::warn;
+use regex::Regex;
 use schemars::{JsonSchema, Schema, SchemaGenerator};
 use serde::Serialize;
 use similar::{ChangeTag, TextDiff};
-use tree_sitter::{format_sexp, Language, LogType, Parser, Query, Tree};
+use tree_sitter::{Language, LogType, Parser, Query, Tree, format_sexp};
 use walkdir::WalkDir;
 
 use super::util;
 use crate::{
     logger::paint,
     parse::{
-        render_cst, ParseDebugType, ParseFileOptions, ParseOutput, ParseStats, ParseTheme, Stats,
+        ParseDebugType, ParseFileOptions, ParseOutput, ParseStats, ParseTheme, Stats, render_cst,
     },
 };
 
-static HEADER_REGEX: LazyLock<ByteRegex> = LazyLock::new(|| {
-    ByteRegexBuilder::new(
-        r"^(?x)
-           (?P<equals>(?:=+){3,})
-           (?P<suffix1>[^=\r\n][^\r\n]*)?
-           \r?\n
-           (?P<test_name_and_markers>(?:([^=\r\n]|\s+:)[^\r\n]*\r?\n)+)
-           ===+
-           (?P<suffix2>[^=\r\n][^\r\n]*)?\r?\n",
-    )
-    .multi_line(true)
-    .build()
-    .unwrap()
-});
+/// Check if a line consists of 3+ repetitions of `ch` followed by an optional suffix.
+///
+/// Returns `Some((delim_len, suffix))` if so, where `suffix` is the part after the
+/// repeated characters (empty string if no suffix). Returns `None` otherwise.
+fn parse_delimiter_line(line: &str, c: char) -> Option<(usize, &str)> {
+    let delim_len = line.len() - line.trim_start_matches(c).len();
+    if delim_len < 3 {
+        return None;
+    }
+    let suffix = line[delim_len..].trim_end_matches(['\r', '\n']);
+    Some((delim_len, suffix))
+}
 
-static DIVIDER_REGEX: LazyLock<ByteRegex> = LazyLock::new(|| {
-    ByteRegexBuilder::new(r"^(?P<hyphens>(?:-+){3,})(?P<suffix>[^-\r\n][^\r\n]*)?\r?\n")
-        .multi_line(true)
-        .build()
-        .unwrap()
-});
+/// Normalize expected sexp output: remove comment lines (lines starting with `;`),
+/// collapse whitespace, and remove spaces before closing parens.
+fn normalize_sexp_output(raw: &str) -> (String, bool) {
+    let mut result = String::with_capacity(raw.len());
+    let mut prev_was_space = false;
 
-static COMMENT_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?m)^\s*;.*$").unwrap());
+    for line in raw.lines() {
+        // Skip comment lines: lines whose first non-whitespace character is `;`
+        if line.trim_start().starts_with(';') {
+            continue;
+        }
+        for ch in line.chars() {
+            if ch.is_whitespace() {
+                if !prev_was_space && !result.is_empty() {
+                    result.push(' ');
+                    prev_was_space = true;
+                }
+            } else {
+                if ch == ')' && prev_was_space {
+                    result.pop(); // remove trailing space before `)`
+                }
+                result.push(ch);
+                prev_was_space = false;
+            }
+        }
+        // Line boundary counts as whitespace
+        if !result.is_empty() && !prev_was_space {
+            result.push(' ');
+            prev_was_space = true;
+        }
+    }
 
-static WHITESPACE_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"\s+").unwrap());
+    // No leading whitespace
+    let result = result.trim_end().to_string();
+    let has_fields = result.contains(": (");
 
-static SEXP_FIELD_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r" \w+: \(").unwrap());
-
-static POINT_REGEX: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"\s*\[\s*\d+\s*,\s*\d+\s*\]\s*").unwrap());
+    (result, has_fields)
+}
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum TestEntry {
@@ -85,12 +103,30 @@ pub enum TestEntry {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TestAttributes {
-    pub skip: bool,
     pub platform: bool,
     pub fail_fast: bool,
-    pub error: bool,
+    pub expectation: TestExpectation,
     pub cst: bool,
     pub languages: Vec<Box<str>>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TestExpectation {
+    Pass,
+    Error,
+    Skip,
+}
+
+impl TestAttributes {
+    #[must_use]
+    fn skip(&self) -> bool {
+        self.expectation == TestExpectation::Skip
+    }
+
+    #[must_use]
+    fn error(&self) -> bool {
+        self.expectation == TestExpectation::Error
+    }
 }
 
 impl Default for TestEntry {
@@ -106,10 +142,9 @@ impl Default for TestEntry {
 impl Default for TestAttributes {
     fn default() -> Self {
         Self {
-            skip: false,
             platform: true,
             fail_fast: false,
-            error: false,
+            expectation: TestExpectation::Pass,
             cst: false,
             languages: vec!["".into()],
         }
@@ -187,6 +222,10 @@ pub struct TestSummary {
 
 impl TestSummary {
     #[must_use]
+    #[expect(
+        clippy::fn_params_excessive_bools,
+        reason = "these map directly to CLI flags"
+    )]
     pub fn new(
         color: bool,
         stat_display: TestStats,
@@ -219,8 +258,8 @@ where
     results.root_group.serialize(serializer)
 }
 
-fn schema_as_array(gen: &mut SchemaGenerator) -> Schema {
-    gen.subschema_for::<Vec<TestResult>>()
+fn schema_as_array(schema_gen: &mut SchemaGenerator) -> Schema {
+    schema_gen.subschema_for::<Vec<TestResult>>()
 }
 
 /// Stores arbitrarily nested parent test groups and child cases. Supports creation
@@ -266,7 +305,10 @@ impl TestResultHierarchy {
             return;
         }
 
-        #[allow(clippy::manual_let_else)]
+        #[expect(
+            clippy::manual_let_else,
+            reason = "mutable borrow in match arm prevents let-else"
+        )]
         let mut curr_group = match self.root_group[self.traversal_idxs[0]].info {
             TestInfo::Group { ref mut children } => children,
             _ => unreachable!(),
@@ -286,7 +328,10 @@ impl TestResultHierarchy {
             return self.root_group.len();
         }
 
-        #[allow(clippy::manual_let_else)]
+        #[expect(
+            clippy::manual_let_else,
+            reason = "destructuring borrow in match arm prevents let-else"
+        )]
         let mut curr_group = match self.root_group[self.traversal_idxs[0]].info {
             TestInfo::Group { ref children } => children,
             _ => unreachable!(),
@@ -300,7 +345,10 @@ impl TestResultHierarchy {
         curr_group.len()
     }
 
-    #[allow(clippy::iter_without_into_iter)]
+    #[expect(
+        clippy::iter_without_into_iter,
+        reason = "IntoIterator not needed for this internal type"
+    )]
     #[must_use]
     pub fn iter(&self) -> TestResultIterWithDepth<'_> {
         let mut stack = Vec::with_capacity(self.root_group.len());
@@ -358,6 +406,10 @@ pub enum TestInfo {
     },
 }
 
+#[expect(
+    clippy::ref_option,
+    reason = "signature required by serde serialize_with"
+)]
 fn serialize_parse_rates<S>(
     parse_rate: &Option<(f64, f64)>,
     serializer: S,
@@ -371,8 +423,8 @@ where
     }
 }
 
-fn parse_rate_schema(gen: &mut SchemaGenerator) -> Schema {
-    gen.subschema_for::<Option<f64>>()
+fn parse_rate_schema(schema_gen: &mut SchemaGenerator) -> Schema {
+    schema_gen.subschema_for::<Option<f64>>()
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, JsonSchema)]
@@ -397,7 +449,7 @@ impl TestSummary {
             .filter_map(|(_, result)| match result.info {
                 TestInfo::Group { .. } => None,
                 TestInfo::ParseTest { parse_rate, .. } => parse_rate,
-                _ => unreachable!(),
+                TestInfo::AssertionTest { .. } => unreachable!(),
             })
             .fold((0usize, 0.0f64), |(count, rate_accum), (_, adj_rate)| {
                 (count + 1, rate_accum + adj_rate)
@@ -411,7 +463,7 @@ impl TestSummary {
                 .filter_map(|(_, result)| match result.info {
                     TestInfo::Group { .. } => None,
                     TestInfo::ParseTest { parse_rate, .. } => parse_rate,
-                    _ => unreachable!(),
+                    TestInfo::AssertionTest { .. } => unreachable!(),
                 })
                 .map(|(_, rate_i)| (rate_i - avg).powi(2))
                 .sum::<f64>()
@@ -833,9 +885,9 @@ fn run_tests(
             attributes,
             ..
         } => {
-            if attributes.skip {
+            if attributes.skip() {
                 test_summary.parse_results.add_case(TestResult {
-                    name: name.clone(),
+                    name,
                     info: TestInfo::ParseTest {
                         outcome: TestOutcome::Skipped,
                         parse_rate: None,
@@ -848,7 +900,7 @@ fn run_tests(
 
             if !attributes.platform {
                 test_summary.parse_results.add_case(TestResult {
-                    name: name.clone(),
+                    name,
                     info: TestInfo::ParseTest {
                         outcome: TestOutcome::Platform,
                         parse_rate: None,
@@ -883,7 +935,7 @@ fn run_tests(
                     Some((true_parse_rate, adj_parse_rate))
                 };
 
-                if attributes.error {
+                if attributes.error() {
                     if tree.root_node().has_error() {
                         test_summary.parse_results.add_case(TestResult {
                             name: name.clone(),
@@ -997,10 +1049,9 @@ fn run_tests(
                                 (format_sexp(&output, 0), format_sexp(&actual, 0))
                             };
 
-                            // Only bail early before updating if the actual is not the output,
-                            // sometimes users want to test cases that
-                            // are intended to have errors, hence why this
-                            // check isn't shown above
+                            // Only bail early before updating if `actual` does not match `output`.
+                            // Sometimes users want to test cases that are intended to have
+                            // errors, hence why this check isn't shown above.
                             if actual.contains("ERROR") || actual.contains("MISSING") {
                                 test_summary.has_parse_errors = true;
 
@@ -1071,15 +1122,13 @@ fn run_tests(
                 return Ok(true);
             }
 
-            let failure_count = test_summary.parse_failures.len();
             let mut ran_test_in_group = false;
 
             let matches_filter = |name: &str, file_name: &Option<String>, opts: &TestOptions| {
                 if let (Some(test_file_path), Some(filter_file_name)) = (file_name, &opts.file_name)
+                    && !filter_file_name.eq(test_file_path)
                 {
-                    if !filter_file_name.eq(test_file_path) {
-                        return false;
-                    }
+                    return false;
                 }
                 if let Some(include) = &opts.include {
                     include.is_match(name)
@@ -1101,24 +1150,23 @@ fn run_tests(
                     divider_delim_len,
                     ..
                 } = child
+                    && !matches_filter(name, file_name, opts)
                 {
-                    if !matches_filter(name, file_name, opts) {
-                        if opts.update {
-                            let input = String::from_utf8(input.clone()).unwrap();
-                            let output = format_sexp(output, 0);
-                            corrected_entries.push(TestCorrection::new(
-                                name,
-                                input,
-                                output,
-                                attributes_str,
-                                header_delim_len,
-                                divider_delim_len,
-                            ));
-                        }
-
-                        test_summary.test_num += 1;
-                        continue;
+                    if opts.update {
+                        let input = String::from_utf8(input.clone()).unwrap();
+                        let output = format_sexp(output, 0);
+                        corrected_entries.push(TestCorrection::new(
+                            name,
+                            input,
+                            output,
+                            attributes_str,
+                            header_delim_len,
+                            divider_delim_len,
+                        ));
                     }
+
+                    test_summary.test_num += 1;
+                    continue;
                 }
 
                 if !ran_test_in_group && !is_root {
@@ -1135,7 +1183,7 @@ fn run_tests(
             test_summary.parse_results.pop_traversal();
 
             if let Some(file_path) = file_path {
-                if opts.update && test_summary.parse_failures.len() - failure_count > 0 {
+                if opts.update {
                     write_tests(&file_path, corrected_entries)?;
                 }
                 corrected_entries.clear();
@@ -1255,228 +1303,335 @@ pub fn parse_tests(path: &Path) -> io::Result<TestEntry> {
     }
 }
 
+/// Replace ` word: (` with ` (` throughout the string.
+/// Intended to operate on `to_sexp()` output where elements are separated by single spaces.
 #[must_use]
 pub fn strip_sexp_fields(sexp: &str) -> String {
-    SEXP_FIELD_REGEX.replace_all(sexp, " (").to_string()
+    let mut result = String::with_capacity(sexp.len());
+    let mut remaining = sexp;
+    while let Some(pos) = remaining.find(": (") {
+        // Walk backwards from the `:` to find the field name and preceding space.
+        if let Some(space_pos) = remaining[..pos].rfind(' ') {
+            let word = &remaining[space_pos + 1..pos];
+            if !word.is_empty() && word.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_') {
+                // Emit everything up to and including the space, then `(`
+                result.push_str(&remaining[..=space_pos]);
+                result.push('(');
+                remaining = &remaining[pos + 3..];
+                continue;
+            }
+        }
+        // Not a field pattern — emit through `: (` and keep going
+        result.push_str(&remaining[..pos + 3]);
+        remaining = &remaining[pos + 3..];
+    }
+    result.push_str(remaining);
+    result
 }
 
+/// Remove `[row, col]` point annotations from sexp strings, including surrounding whitespace.
+/// Matches the pattern: `\s* [ \s* digits \s* , \s* digits \s* ] \s*`
 #[must_use]
 pub fn strip_points(sexp: &str) -> String {
-    POINT_REGEX.replace_all(sexp, "").to_string()
+    let mut result = String::with_capacity(sexp.len());
+    let mut skip_until = 0;
+    for (i, c) in sexp.char_indices() {
+        if i < skip_until {
+            continue;
+        }
+        if let Some(point_len) = try_match_point(&sexp[i..]) {
+            skip_until = i + point_len;
+        } else {
+            result.push(c);
+        }
+    }
+    result
+}
+
+/// Try to match `\s*[\s*\d+\s*,\s*\d+\s*]\s*` from the start of `text`.
+/// Returns the length of the match, or `None` if no match.
+fn try_match_point(text: &str) -> Option<usize> {
+    let mut j = count_whitespace(text);
+    j += expect_char(&text[j..], '[')?;
+    j += count_whitespace(&text[j..]);
+    j += expect_digits(&text[j..])?;
+    j += count_whitespace(&text[j..]);
+    j += expect_char(&text[j..], ',')?;
+    j += count_whitespace(&text[j..]);
+    j += expect_digits(&text[j..])?;
+    j += count_whitespace(&text[j..]);
+    j += expect_char(&text[j..], ']')?;
+    Some(j + count_whitespace(&text[j..]))
+}
+
+fn count_whitespace(text: &str) -> usize {
+    text.char_indices()
+        .take_while(|(_, c)| c.is_whitespace())
+        .last()
+        .map_or(0, |(i, c)| i + c.len_utf8())
+}
+
+fn expect_char(text: &str, expected: char) -> Option<usize> {
+    text.starts_with(expected).then_some(expected.len_utf8())
+}
+
+fn expect_digits(text: &str) -> Option<usize> {
+    let end = text
+        .char_indices()
+        .take_while(|(_, c)| c.is_ascii_digit())
+        .last()
+        .map(|(i, c)| i + c.len_utf8())?;
+    Some(end)
+}
+
+/// Check if a delimiter line's suffix matches the file's first suffix.
+fn suffix_matches(first_suffix: Option<&str>, suffix: &str) -> bool {
+    match (first_suffix, suffix.is_empty()) {
+        (None, true) => true,
+        (Some(fs), false) => fs == suffix,
+        _ => false,
+    }
+}
+
+/// Parsed header info stored between iterations while we wait to discover the body boundaries.
+struct PendingTest {
+    name: String,
+    attributes_str: String,
+    header_delim_len: usize,
+    attributes: TestAttributes,
+    body_start_line: usize,
+}
+
+/// Try to parse a header block (opening `===`, name/markers, closing `===`) starting at
+/// `lines[start_line]`. Returns the parsed header and the line index after the closing `===`,
+/// or `None` if `lines[start_line]` isn't a matching `===` delimiter.
+fn parse_header(
+    lines: &[&str],
+    first_suffix: Option<&str>,
+    start_line: usize,
+) -> Option<(PendingTest, usize)> {
+    let (header_delim_len, suffix) = parse_delimiter_line(lines[start_line], '=')?;
+    if !suffix_matches(first_suffix, suffix) {
+        return None;
+    }
+
+    // Collect name and attribute lines until the closing `===` line.
+    let mut test_name = String::new();
+    let mut seen_marker = false;
+    let mut seen_skip = false;
+    let mut seen_error = false;
+    let (mut platform, mut fail_fast, mut cst, mut languages) = (None, false, false, vec![]);
+
+    let mut line_num = start_line + 1; // start past opening === line
+    while line_num < lines.len() {
+        if let Some((_, closing_suffix)) = parse_delimiter_line(lines[line_num], '=')
+            && suffix_matches(first_suffix, closing_suffix)
+        {
+            break;
+        }
+        let trimmed = lines[line_num].trim();
+        match trimmed.split('(').next().unwrap() {
+            ":skip" => (seen_marker, seen_skip) = (true, true),
+            ":platform" => {
+                if let Some(platforms) = trimmed.strip_prefix(':').and_then(|s| {
+                    s.strip_prefix("platform(")
+                        .and_then(|s| s.strip_suffix(')'))
+                }) {
+                    seen_marker = true;
+                    platform =
+                        Some(platform.unwrap_or(false) || platforms.trim() == std::env::consts::OS);
+                }
+            }
+            ":fail-fast" => (seen_marker, fail_fast) = (true, true),
+            ":error" => (seen_marker, seen_error) = (true, true),
+            ":language" => {
+                if let Some(lang) = trimmed.strip_prefix(':').and_then(|s| {
+                    s.strip_prefix("language(")
+                        .and_then(|s| s.strip_suffix(')'))
+                }) {
+                    seen_marker = true;
+                    languages.push(lang.into());
+                }
+            }
+            ":cst" => (seen_marker, cst) = (true, true),
+            _ if !seen_marker => test_name.push_str(lines[line_num]),
+            _ => {}
+        }
+        line_num += 1;
+    }
+
+    if line_num >= lines.len() {
+        return None; // No closing `===` line found.
+    }
+
+    let expectation = match (seen_skip, seen_error) {
+        (true, true) => {
+            warn!(
+                "Test '{test_name}' specifies both `:skip` and `:error`. The `:error` attribute will be dropped."
+            );
+            TestExpectation::Skip
+        }
+        (false, false) => TestExpectation::Pass,
+        (true, false) => TestExpectation::Skip,
+        (false, true) => TestExpectation::Error,
+    };
+
+    // Build attributes string from the content between test name and closing delimiter.
+    let name_and_markers: String = lines[start_line + 1..line_num].iter().copied().collect();
+    let attributes_str = name_and_markers
+        .strip_prefix(&test_name)
+        .unwrap_or("")
+        .trim_end()
+        .to_string();
+
+    if languages.is_empty() {
+        languages.push("".into());
+    }
+
+    let pending = PendingTest {
+        name: test_name.trim_end().to_string(),
+        attributes_str,
+        header_delim_len,
+        attributes: TestAttributes {
+            platform: platform.unwrap_or(true),
+            fail_fast,
+            expectation,
+            cst,
+            languages,
+        },
+        body_start_line: line_num + 1,
+    };
+
+    Some((pending, line_num + 1)) // +1 to consume the closing `===` line
 }
 
 fn parse_test_content(name: String, content: &str, file_path: Option<PathBuf>) -> TestEntry {
     let mut children = Vec::new();
-    let bytes = content.as_bytes();
-    let mut prev_name = String::new();
-    let mut prev_attributes_str = String::new();
-    let mut prev_header_end = 0;
+    let lines = content.split_inclusive('\n').collect::<Vec<_>>();
 
-    // Find the first test header in the file, and determine if it has a
-    // custom suffix. If so, then this suffix will be used to identify
-    // all subsequent headers and divider lines in the file.
-    let first_suffix = HEADER_REGEX
-        .captures(bytes)
-        .and_then(|c| c.name("suffix1"))
-        .map(|m| String::from_utf8_lossy(m.as_bytes()));
+    // Determine the suffix from the first `===` line in the file.
+    let first_suffix = lines
+        .iter()
+        .find_map(|line| match parse_delimiter_line(line, '=')? {
+            (_, suffix) if !suffix.is_empty() => Some(suffix.to_string()),
+            _ => None,
+        });
 
-    // Find all of the `===` test headers, which contain the test names.
-    // Ignore any matches whose suffix does not match the first header
-    // suffix in the file.
-    let header_matches = HEADER_REGEX.captures_iter(bytes).filter_map(|c| {
-        let header_delim_len = c.name("equals").map_or(80, |m| m.as_bytes().len());
-        let suffix1 = c
-            .name("suffix1")
-            .map(|m| String::from_utf8_lossy(m.as_bytes()));
-        let suffix2 = c
-            .name("suffix2")
-            .map(|m| String::from_utf8_lossy(m.as_bytes()));
+    // Scan for header blocks and build test entries from the bodies between them.
+    let mut line_num = 0;
+    let mut prev_test: Option<PendingTest> = None;
 
-        let (mut skip, mut platform, mut fail_fast, mut error, mut cst, mut languages) =
-            (false, None, false, false, false, vec![]);
+    while line_num < lines.len() {
+        let Some((pending, body_start_line)) =
+            parse_header(&lines, first_suffix.as_deref(), line_num)
+        else {
+            line_num += 1;
+            continue;
+        };
 
-        let test_name_and_markers = c
-            .name("test_name_and_markers")
-            .map_or("".as_bytes(), |m| m.as_bytes());
+        let opening_line = line_num;
+        line_num = body_start_line;
 
-        let mut test_name = String::new();
-        let mut attributes_str = String::new();
-
-        let mut seen_marker = false;
-
-        let test_name_and_markers = str::from_utf8(test_name_and_markers).unwrap();
-        for line in test_name_and_markers
-            .split_inclusive('\n')
-            .filter(|s| !s.is_empty())
+        // Process the PREVIOUS test's body now that we know where it ends.
+        if let Some(prev) = prev_test
+            && let Some(entry) = build_test_entry(
+                &lines[prev.body_start_line..opening_line],
+                first_suffix.as_deref(),
+                prev,
+                file_path.as_deref(),
+            )
         {
-            let trimmed_line = line.trim();
-            match trimmed_line.split('(').next().unwrap() {
-                ":skip" => (seen_marker, skip) = (true, true),
-                ":platform" => {
-                    if let Some(platforms) = trimmed_line.strip_prefix(':').and_then(|s| {
-                        s.strip_prefix("platform(")
-                            .and_then(|s| s.strip_suffix(')'))
-                    }) {
-                        seen_marker = true;
-                        platform = Some(
-                            platform.unwrap_or(false) || platforms.trim() == std::env::consts::OS,
-                        );
-                    }
-                }
-                ":fail-fast" => (seen_marker, fail_fast) = (true, true),
-                ":error" => (seen_marker, error) = (true, true),
-                ":language" => {
-                    if let Some(lang) = trimmed_line.strip_prefix(':').and_then(|s| {
-                        s.strip_prefix("language(")
-                            .and_then(|s| s.strip_suffix(')'))
-                    }) {
-                        seen_marker = true;
-                        languages.push(lang.into());
-                    }
-                }
-                ":cst" => (seen_marker, cst) = (true, true),
-                _ if !seen_marker => {
-                    test_name.push_str(line);
-                }
-                _ => {}
-            }
-        }
-        attributes_str.push_str(test_name_and_markers.strip_prefix(&test_name).unwrap());
-
-        // prefer skip over error, both shouldn't be set
-        if skip {
-            error = false;
+            children.push(entry);
         }
 
-        // add a default language if none are specified, will defer to the first language
-        if languages.is_empty() {
-            languages.push("".into());
-        }
-
-        if suffix1 == first_suffix && suffix2 == first_suffix {
-            let header_range = c.get(0).unwrap().range();
-            let test_name = if test_name.is_empty() {
-                None
-            } else {
-                Some(test_name.trim_end().to_string())
-            };
-            let attributes_str = if attributes_str.is_empty() {
-                None
-            } else {
-                Some(attributes_str.trim_end().to_string())
-            };
-            Some((
-                header_delim_len,
-                header_range,
-                test_name,
-                attributes_str,
-                TestAttributes {
-                    skip,
-                    platform: platform.unwrap_or(true),
-                    fail_fast,
-                    error,
-                    cst,
-                    languages,
-                },
-            ))
-        } else {
-            None
-        }
-    });
-
-    let (mut prev_header_len, mut prev_attributes) = (80, TestAttributes::default());
-    for (header_delim_len, header_range, test_name, attributes_str, attributes) in header_matches
-        .chain(Some((
-            80,
-            bytes.len()..bytes.len(),
-            None,
-            None,
-            TestAttributes::default(),
-        )))
-    {
-        // Find the longest line of dashes following each test description. That line
-        // separates the input from the expected output. Ignore any matches whose suffix
-        // does not match the first suffix in the file.
-        if prev_header_end > 0 {
-            let divider_range = DIVIDER_REGEX
-                .captures_iter(&bytes[prev_header_end..header_range.start])
-                .filter_map(|m| {
-                    let divider_delim_len = m.name("hyphens").map_or(80, |m| m.as_bytes().len());
-                    let suffix = m
-                        .name("suffix")
-                        .map(|m| String::from_utf8_lossy(m.as_bytes()));
-                    if suffix == first_suffix {
-                        let range = m.get(0).unwrap().range();
-                        Some((
-                            divider_delim_len,
-                            (prev_header_end + range.start)..(prev_header_end + range.end),
-                        ))
-                    } else {
-                        None
-                    }
-                })
-                .max_by_key(|(_, range)| range.len());
-
-            if let Some((divider_delim_len, divider_range)) = divider_range {
-                if let Ok(output) = str::from_utf8(&bytes[divider_range.end..header_range.start]) {
-                    let mut input = bytes[prev_header_end..divider_range.start].to_vec();
-
-                    // Remove trailing newline from the input.
-                    input.pop();
-                    if input.last() == Some(&b'\r') {
-                        input.pop();
-                    }
-
-                    let (output, has_fields) = if prev_attributes.cst {
-                        (output.trim().to_string(), false)
-                    } else {
-                        // Remove all comments
-                        let output = COMMENT_REGEX.replace_all(output, "").to_string();
-
-                        // Normalize the whitespace in the expected output.
-                        let output = WHITESPACE_REGEX.replace_all(output.trim(), " ");
-                        let output = output.replace(" )", ")");
-
-                        // Identify if the expected output has fields indicated. If not, then
-                        // fields will not be checked.
-                        let has_fields = SEXP_FIELD_REGEX.is_match(&output);
-
-                        (output, has_fields)
-                    };
-
-                    let file_name = if let Some(ref path) = file_path {
-                        path.file_name().map(|n| n.to_string_lossy().to_string())
-                    } else {
-                        None
-                    };
-
-                    let t = TestEntry::Example {
-                        name: prev_name,
-                        input,
-                        output,
-                        header_delim_len: prev_header_len,
-                        divider_delim_len,
-                        has_fields,
-                        attributes_str: prev_attributes_str,
-                        attributes: prev_attributes,
-                        file_name,
-                    };
-
-                    children.push(t);
-                }
-            }
-        }
-        prev_attributes = attributes;
-        prev_name = test_name.unwrap_or_default();
-        prev_attributes_str = attributes_str.unwrap_or_default();
-        prev_header_len = header_delim_len;
-        prev_header_end = header_range.end;
+        prev_test = Some(pending);
     }
+
+    // Process the last test's body (terminated by end of content).
+    if let Some(prev) = prev_test
+        && let Some(entry) = build_test_entry(
+            &lines[prev.body_start_line..],
+            first_suffix.as_deref(),
+            prev,
+            file_path.as_deref(),
+        )
+    {
+        children.push(entry);
+    }
+
     TestEntry::Group {
         name,
         children,
         file_path,
     }
+}
+
+/// Build a single test entry from the body lines between a header and the next header.
+/// Finds the longest matching `---` divider to separate input from expected output.
+fn build_test_entry(
+    body_lines: &[&str],
+    first_suffix: Option<&str>,
+    pending: PendingTest,
+    file_path: Option<&Path>,
+) -> Option<TestEntry> {
+    // Find the longest `---` divider line in the body whose suffix matches.
+    let mut best_divider: Option<(usize, usize)> = None; // (delim_len, line_index)
+    let mut best_total_len = 0;
+    for (j, line) in body_lines.iter().enumerate() {
+        if let Some((delim_len, suffix)) = parse_delimiter_line(line, '-')
+            && suffix_matches(first_suffix, suffix)
+        {
+            let total_len = delim_len + suffix.len();
+            if total_len > best_total_len {
+                best_divider = Some((delim_len, j));
+                best_total_len = total_len;
+            }
+        }
+    }
+
+    let (divider_delim_len, divider_line) = best_divider?;
+
+    // Input: lines before the divider (as bytes), with trailing newline stripped.
+    let mut input = body_lines[..divider_line]
+        .iter()
+        .flat_map(|l| l.as_bytes())
+        .copied()
+        .collect::<Vec<_>>();
+    // Remove trailing newline.
+    if input.last() == Some(&b'\n') {
+        input.pop();
+    }
+    if input.last() == Some(&b'\r') {
+        input.pop();
+    }
+
+    // Output: lines after the divider.
+    let output_str = body_lines[divider_line + 1..]
+        .iter()
+        .copied()
+        .collect::<String>();
+
+    let (output, has_fields) = if pending.attributes.cst {
+        (output_str.trim().to_string(), false)
+    } else {
+        normalize_sexp_output(&output_str)
+    };
+
+    let file_name = file_path
+        .and_then(|p| p.file_name())
+        .map(|n| n.to_string_lossy().to_string());
+
+    Some(TestEntry::Example {
+        name: pending.name,
+        input,
+        output,
+        header_delim_len: pending.header_delim_len,
+        divider_delim_len,
+        has_fields,
+        attributes_str: pending.attributes_str,
+        attributes: pending.attributes,
+        file_name,
+    })
 }
 
 #[cfg(test)]
@@ -2016,10 +2171,9 @@ a
                     has_fields: false,
                     attributes_str: ":skip".to_string(),
                     attributes: TestAttributes {
-                        skip: true,
                         platform: true,
                         fail_fast: false,
-                        error: false,
+                        expectation: TestExpectation::Skip,
                         cst: false,
                         languages: vec!["".into()]
                     },
@@ -2086,10 +2240,9 @@ Test with cst marker
                         has_fields: false,
                         attributes_str: format!(":platform({})\n:fail-fast", std::env::consts::OS),
                         attributes: TestAttributes {
-                            skip: false,
                             platform: true,
                             fail_fast: true,
-                            error: false,
+                            expectation: TestExpectation::Pass,
                             cst: false,
                             languages: vec!["".into()]
                         },
@@ -2108,10 +2261,9 @@ Test with cst marker
                             ":platform(linux)\n\n:language(foo)".to_string()
                         },
                         attributes: TestAttributes {
-                            skip: false,
                             platform: false,
                             fail_fast: false,
-                            error: false,
+                            expectation: TestExpectation::Pass,
                             cst: false,
                             languages: vec!["foo".into()]
                         },
@@ -2129,10 +2281,9 @@ Test with cst marker
                         has_fields: false,
                         attributes_str: ":cst".to_string(),
                         attributes: TestAttributes {
-                            skip: false,
                             platform: true,
                             fail_fast: false,
-                            error: false,
+                            expectation: TestExpectation::Pass,
                             cst: true,
                             languages: vec!["".into()]
                         },
@@ -2146,9 +2297,7 @@ Test with cst marker
     fn clear_parse_rate(result: &mut TestResult) {
         let test_case_info = &mut result.info;
         match test_case_info {
-            TestInfo::ParseTest {
-                ref mut parse_rate, ..
-            } => {
+            TestInfo::ParseTest { parse_rate, .. } => {
                 assert!(parse_rate.is_some());
                 *parse_rate = None;
             }
@@ -2158,16 +2307,19 @@ Test with cst marker
         }
     }
 
-    #[test]
-    fn run_tests_simple() {
+    fn c_parser_and_language() -> (Parser, Language) {
         let mut parser = Parser::new();
         let language = get_language("c");
         parser
             .set_language(&language)
             .expect("Failed to set language");
+        (parser, language)
+    }
+
+    fn c_test_options(language: &Language) -> TestOptions<'_> {
         let mut languages = BTreeMap::new();
-        languages.insert("c", &language);
-        let opts = TestOptions {
+        languages.insert("c", language);
+        TestOptions {
             path: PathBuf::from("foo"),
             debug: true,
             debug_graph: false,
@@ -2180,252 +2332,252 @@ Test with cst marker
             color: true,
             show_fields: false,
             overview_only: false,
+        }
+    }
+
+    #[test]
+    fn run_tests_single_passing() {
+        let (mut parser, language) = c_parser_and_language();
+        let opts = c_test_options(&language);
+
+        let test_entry = TestEntry::Group {
+            name: "foo".to_string(),
+            file_path: None,
+            children: vec![TestEntry::Example {
+                name: "C Test 1".to_string(),
+                input: b"1;\n".to_vec(),
+                output: "(translation_unit (expression_statement (number_literal)))".to_string(),
+                header_delim_len: 25,
+                divider_delim_len: 3,
+                has_fields: false,
+                attributes_str: String::new(),
+                attributes: TestAttributes::default(),
+                file_name: None,
+            }],
         };
 
-        // NOTE: The following test cases are combined to work around a race condition
-        // in the loader
+        let mut test_summary = TestSummary::new(true, TestStats::All, false, false, false);
+        let mut corrected_entries = Vec::new();
+        run_tests(
+            &mut parser,
+            test_entry,
+            &opts,
+            &mut test_summary,
+            &mut corrected_entries,
+            true,
+        )
+        .expect("Failed to run tests");
+
+        // parse rates will always be different, so we need to clear out these
+        // fields to reliably assert equality below
+        clear_parse_rate(&mut test_summary.parse_results.root_group[0]);
+        test_summary.parse_stats.total_duration = Duration::from_secs(0);
+
+        let json_results = serde_json::to_string(&test_summary).unwrap();
+
+        assert_eq!(
+            json_results,
+            json!({
+              "parse_results": [
+                {
+                  "name": "C Test 1",
+                  "outcome": "Passed",
+                  "parse_rate": null,
+                  "test_num": 1
+                }
+              ],
+              "parse_failures": [],
+              "parse_stats": {
+                "successful_parses": 1,
+                "total_parses": 1,
+                "total_bytes": 3,
+                "total_duration": {
+                  "secs": 0,
+                  "nanos": 0,
+                }
+              },
+              "highlight_results": [],
+              "tag_results": [],
+              "query_results": []
+            })
+            .to_string()
+        );
+    }
+
+    #[test]
+    fn run_tests_fail_fast() {
+        let (mut parser, language) = c_parser_and_language();
+        let opts = c_test_options(&language);
+
+        let test_entry = TestEntry::Group {
+            name: "corpus".to_string(),
+            file_path: None,
+            children: vec![
+                TestEntry::Group {
+                    name: "group1".to_string(),
+                    // This test passes
+                    children: vec![TestEntry::Example {
+                        name: "C Test 1".to_string(),
+                        input: b"1;\n".to_vec(),
+                        output: "(translation_unit (expression_statement (number_literal)))"
+                            .to_string(),
+                        header_delim_len: 25,
+                        divider_delim_len: 3,
+                        has_fields: false,
+                        attributes_str: String::new(),
+                        attributes: TestAttributes::default(),
+                        file_name: None,
+                    }],
+                    file_path: None,
+                },
+                TestEntry::Group {
+                    name: "group2".to_string(),
+                    children: vec![
+                        // This test passes
+                        TestEntry::Example {
+                            name: "C Test 2".to_string(),
+                            input: b"1;\n".to_vec(),
+                            output: "(translation_unit (expression_statement (number_literal)))"
+                                .to_string(),
+                            header_delim_len: 25,
+                            divider_delim_len: 3,
+                            has_fields: false,
+                            attributes_str: String::new(),
+                            attributes: TestAttributes::default(),
+                            file_name: None,
+                        },
+                        // This test fails, and is marked with fail-fast
+                        TestEntry::Example {
+                            name: "C Test 3".to_string(),
+                            input: b"1;\n".to_vec(),
+                            output: "(translation_unit (expression_statement (string_literal)))"
+                                .to_string(),
+                            header_delim_len: 25,
+                            divider_delim_len: 3,
+                            has_fields: false,
+                            attributes_str: String::new(),
+                            attributes: TestAttributes {
+                                fail_fast: true,
+                                ..Default::default()
+                            },
+                            file_name: None,
+                        },
+                    ],
+                    file_path: None,
+                },
+                // This group never runs because of the previous failure
+                TestEntry::Group {
+                    name: "group3".to_string(),
+                    // This test fails, and is marked with fail-fast
+                    children: vec![TestEntry::Example {
+                        name: "C Test 4".to_string(),
+                        input: b"1;\n".to_vec(),
+                        output: "(translation_unit (expression_statement (number_literal)))"
+                            .to_string(),
+                        header_delim_len: 25,
+                        divider_delim_len: 3,
+                        has_fields: false,
+                        attributes_str: String::new(),
+                        attributes: TestAttributes::default(),
+                        file_name: None,
+                    }],
+                    file_path: None,
+                },
+            ],
+        };
+
+        let mut test_summary = TestSummary::new(true, TestStats::All, false, false, false);
+        let mut corrected_entries = Vec::new();
+        run_tests(
+            &mut parser,
+            test_entry,
+            &opts,
+            &mut test_summary,
+            &mut corrected_entries,
+            true,
+        )
+        .expect("Failed to run tests");
+
+        // parse rates will always be different, so we need to clear out these
+        // fields to reliably assert equality below
         {
-            let test_entry = TestEntry::Group {
-                name: "foo".to_string(),
-                file_path: None,
-                children: vec![TestEntry::Example {
-                    name: "C Test 1".to_string(),
-                    input: b"1;\n".to_vec(),
-                    output: "(translation_unit (expression_statement (number_literal)))"
-                        .to_string(),
-                    header_delim_len: 25,
-                    divider_delim_len: 3,
-                    has_fields: false,
-                    attributes_str: String::new(),
-                    attributes: TestAttributes::default(),
-                    file_name: None,
-                }],
-            };
-
-            let mut test_summary = TestSummary::new(true, TestStats::All, false, false, false);
-            let mut corrected_entries = Vec::new();
-            run_tests(
-                &mut parser,
-                test_entry,
-                &opts,
-                &mut test_summary,
-                &mut corrected_entries,
-                true,
-            )
-            .expect("Failed to run tests");
-
-            // parse rates will always be different, so we need to clear out these
-            // fields to reliably assert equality below
-            clear_parse_rate(&mut test_summary.parse_results.root_group[0]);
+            let test_group_1_info = &mut test_summary.parse_results.root_group[0].info;
+            match test_group_1_info {
+                TestInfo::Group { children, .. } => clear_parse_rate(&mut children[0]),
+                TestInfo::ParseTest { .. } | TestInfo::AssertionTest { .. } => {
+                    panic!("Unexpected test result");
+                }
+            }
+            let test_group_2_info = &mut test_summary.parse_results.root_group[1].info;
+            match test_group_2_info {
+                TestInfo::Group { children, .. } => {
+                    clear_parse_rate(&mut children[0]);
+                    clear_parse_rate(&mut children[1]);
+                }
+                TestInfo::ParseTest { .. } | TestInfo::AssertionTest { .. } => {
+                    panic!("Unexpected test result");
+                }
+            }
             test_summary.parse_stats.total_duration = Duration::from_secs(0);
+        }
 
-            let json_results = serde_json::to_string(&test_summary).unwrap();
+        let json_results = serde_json::to_string(&test_summary).unwrap();
 
-            assert_eq!(
-                json_results,
-                json!({
-                  "parse_results": [
+        assert_eq!(
+            json_results,
+            json!({
+              "parse_results": [
+                {
+                  "name": "group1",
+                  "children": [
                     {
                       "name": "C Test 1",
                       "outcome": "Passed",
                       "parse_rate": null,
                       "test_num": 1
                     }
-                  ],
-                  "parse_failures": [],
-                  "parse_stats": {
-                    "successful_parses": 1,
-                    "total_parses": 1,
-                    "total_bytes": 3,
-                    "total_duration": {
-                      "secs": 0,
-                      "nanos": 0,
-                    }
-                  },
-                  "highlight_results": [],
-                  "tag_results": [],
-                  "query_results": []
-                })
-                .to_string()
-            );
-        }
-        {
-            let test_entry = TestEntry::Group {
-                name: "corpus".to_string(),
-                file_path: None,
-                children: vec![
-                    TestEntry::Group {
-                        name: "group1".to_string(),
-                        // This test passes
-                        children: vec![TestEntry::Example {
-                            name: "C Test 1".to_string(),
-                            input: b"1;\n".to_vec(),
-                            output: "(translation_unit (expression_statement (number_literal)))"
-                                .to_string(),
-                            header_delim_len: 25,
-                            divider_delim_len: 3,
-                            has_fields: false,
-                            attributes_str: String::new(),
-                            attributes: TestAttributes::default(),
-                            file_name: None,
-                        }],
-                        file_path: None,
-                    },
-                    TestEntry::Group {
-                        name: "group2".to_string(),
-                        children: vec![
-                            // This test passes
-                            TestEntry::Example {
-                                name: "C Test 2".to_string(),
-                                input: b"1;\n".to_vec(),
-                                output:
-                                    "(translation_unit (expression_statement (number_literal)))"
-                                        .to_string(),
-                                header_delim_len: 25,
-                                divider_delim_len: 3,
-                                has_fields: false,
-                                attributes_str: String::new(),
-                                attributes: TestAttributes::default(),
-                                file_name: None,
-                            },
-                            // This test fails, and is marked with fail-fast
-                            TestEntry::Example {
-                                name: "C Test 3".to_string(),
-                                input: b"1;\n".to_vec(),
-                                output:
-                                    "(translation_unit (expression_statement (string_literal)))"
-                                        .to_string(),
-                                header_delim_len: 25,
-                                divider_delim_len: 3,
-                                has_fields: false,
-                                attributes_str: String::new(),
-                                attributes: TestAttributes {
-                                    fail_fast: true,
-                                    ..Default::default()
-                                },
-                                file_name: None,
-                            },
-                        ],
-                        file_path: None,
-                    },
-                    // This group never runs because of the previous failure
-                    TestEntry::Group {
-                        name: "group3".to_string(),
-                        // This test fails, and is marked with fail-fast
-                        children: vec![TestEntry::Example {
-                            name: "C Test 4".to_string(),
-                            input: b"1;\n".to_vec(),
-                            output: "(translation_unit (expression_statement (number_literal)))"
-                                .to_string(),
-                            header_delim_len: 25,
-                            divider_delim_len: 3,
-                            has_fields: false,
-                            attributes_str: String::new(),
-                            attributes: TestAttributes::default(),
-                            file_name: None,
-                        }],
-                        file_path: None,
-                    },
-                ],
-            };
-
-            let mut test_summary = TestSummary::new(true, TestStats::All, false, false, false);
-            let mut corrected_entries = Vec::new();
-            run_tests(
-                &mut parser,
-                test_entry,
-                &opts,
-                &mut test_summary,
-                &mut corrected_entries,
-                true,
-            )
-            .expect("Failed to run tests");
-
-            // parse rates will always be different, so we need to clear out these
-            // fields to reliably assert equality below
-            {
-                let test_group_1_info = &mut test_summary.parse_results.root_group[0].info;
-                match test_group_1_info {
-                    TestInfo::Group {
-                        ref mut children, ..
-                    } => clear_parse_rate(&mut children[0]),
-                    TestInfo::ParseTest { .. } | TestInfo::AssertionTest { .. } => {
-                        panic!("Unexpected test result");
-                    }
-                }
-                let test_group_2_info = &mut test_summary.parse_results.root_group[1].info;
-                match test_group_2_info {
-                    TestInfo::Group {
-                        ref mut children, ..
-                    } => {
-                        clear_parse_rate(&mut children[0]);
-                        clear_parse_rate(&mut children[1]);
-                    }
-                    TestInfo::ParseTest { .. } | TestInfo::AssertionTest { .. } => {
-                        panic!("Unexpected test result");
-                    }
-                }
-                test_summary.parse_stats.total_duration = Duration::from_secs(0);
-            }
-
-            let json_results = serde_json::to_string(&test_summary).unwrap();
-
-            assert_eq!(
-                json_results,
-                json!({
-                  "parse_results": [
+                  ]
+                },
+                {
+                  "name": "group2",
+                  "children": [
                     {
-                      "name": "group1",
-                      "children": [
-                        {
-                          "name": "C Test 1",
-                          "outcome": "Passed",
-                          "parse_rate": null,
-                          "test_num": 1
-                        }
-                      ]
+                      "name": "C Test 2",
+                      "outcome": "Passed",
+                      "parse_rate": null,
+                      "test_num": 2
                     },
-                    {
-                      "name": "group2",
-                      "children": [
-                        {
-                          "name": "C Test 2",
-                          "outcome": "Passed",
-                          "parse_rate": null,
-                          "test_num": 2
-                        },
-                        {
-                          "name": "C Test 3",
-                          "outcome": "Failed",
-                          "parse_rate": null,
-                          "test_num": 3
-                        }
-                      ]
-                    }
-                  ],
-                  "parse_failures": [
                     {
                       "name": "C Test 3",
-                      "actual": "(translation_unit (expression_statement (number_literal)))",
-                      "expected": "(translation_unit (expression_statement (string_literal)))",
-                      "is_cst": false,
+                      "outcome": "Failed",
+                      "parse_rate": null,
+                      "test_num": 3
                     }
-                  ],
-                  "parse_stats": {
-                    "successful_parses": 2,
-                    "total_parses": 3,
-                    "total_bytes": 9,
-                    "total_duration": {
-                      "secs": 0,
-                      "nanos": 0,
-                    }
-                  },
-                  "highlight_results": [],
-                  "tag_results": [],
-                  "query_results": []
-                })
-                .to_string()
-            );
-        }
+                  ]
+                }
+              ],
+              "parse_failures": [
+                {
+                  "name": "C Test 3",
+                  "actual": "(translation_unit (expression_statement (number_literal)))",
+                  "expected": "(translation_unit (expression_statement (string_literal)))",
+                  "is_cst": false,
+                }
+              ],
+              "parse_stats": {
+                "successful_parses": 2,
+                "total_parses": 3,
+                "total_bytes": 9,
+                "total_duration": {
+                  "secs": 0,
+                  "nanos": 0,
+                }
+              },
+              "highlight_results": [],
+              "tag_results": [],
+              "query_results": []
+            })
+            .to_string()
+        );
     }
 }

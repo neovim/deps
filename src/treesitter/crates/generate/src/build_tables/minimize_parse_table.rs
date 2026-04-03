@@ -7,11 +7,11 @@ use log::debug;
 
 use super::token_conflicts::TokenConflictMap;
 use crate::{
+    OptLevel,
     dedup::split_state_id_groups,
     grammars::{LexicalGrammar, SyntaxGrammar, VariableType},
     rules::{AliasMap, Symbol, TokenSet},
     tables::{GotoAction, ParseAction, ParseState, ParseStateId, ParseTable, ParseTableEntry},
-    OptLevel,
 };
 
 pub fn minimize_parse_table(
@@ -97,10 +97,10 @@ impl Minimizer<'_> {
                 }
             }
 
-            if let Some(symbol) = unit_reduction_symbol {
-                if only_unit_reductions {
-                    unit_reduction_symbols_by_state.insert(i, *symbol);
-                }
+            if let Some(symbol) = unit_reduction_symbol
+                && only_unit_reductions
+            {
+                unit_reduction_symbols_by_state.insert(i, *symbol);
             }
         }
 
@@ -242,21 +242,20 @@ impl Minimizer<'_> {
         group_ids_by_state_id: &[ParseStateId],
     ) -> bool {
         for (token, entry1) in &state1.terminal_entries {
-            if let ParseAction::Shift { state: s1, .. } = entry1.actions.last().unwrap() {
-                if let Some(entry2) = state2.terminal_entries.get(token) {
-                    if let ParseAction::Shift { state: s2, .. } = entry2.actions.last().unwrap() {
-                        let group1 = group_ids_by_state_id[*s1];
-                        let group2 = group_ids_by_state_id[*s2];
-                        if group1 != group2 {
-                            debug!(
-                                "split states {} {} - successors for {} are split: {s1} {s2}",
-                                state1.id,
-                                state2.id,
-                                self.symbol_name(token),
-                            );
-                            return true;
-                        }
-                    }
+            if let ParseAction::Shift { state: s1, .. } = entry1.actions.last().unwrap()
+                && let Some(entry2) = state2.terminal_entries.get(token)
+                && let ParseAction::Shift { state: s2, .. } = entry2.actions.last().unwrap()
+            {
+                let group1 = group_ids_by_state_id[*s1];
+                let group2 = group_ids_by_state_id[*s2];
+                if group1 != group2 {
+                    debug!(
+                        "split states {} {} - successors for {} are split: {s1} {s2}",
+                        state1.id,
+                        state2.id,
+                        self.symbol_name(token),
+                    );
+                    return true;
                 }
             }
         }
@@ -341,6 +340,7 @@ impl Minimizer<'_> {
         false
     }
 
+    #[inline]
     fn token_conflicts(
         &self,
         left_id: ParseStateId,
@@ -349,7 +349,7 @@ impl Minimizer<'_> {
         new_token: Symbol,
     ) -> bool {
         if new_token == Symbol::end_of_nonterminal_extra() {
-            debug!("split states {left_id} {right_id} - end of non-terminal extra",);
+            debug!("split states {left_id} {right_id} - end of non-terminal extra");
             return true;
         }
 
@@ -397,9 +397,6 @@ impl Minimizer<'_> {
             if self
                 .token_conflict_map
                 .does_conflict(new_token.index, token.index)
-                || self
-                    .token_conflict_map
-                    .does_match_same_string(new_token.index, token.index)
             {
                 debug!(
                     "split states {} {} - token {} conflicts with {}",
@@ -463,7 +460,7 @@ impl Minimizer<'_> {
         // Get a mapping of old state index -> new_state_index
         let mut old_ids_by_new_id = (0..self.parse_table.states.len()).collect::<Vec<_>>();
         old_ids_by_new_id.sort_unstable_by_key(|i| {
-            // Don't changes states 0 (the error state) or 1 (the start state).
+            // Don't change states 0 (the error state) or 1 (the start state).
             if *i <= 1 {
                 return *i as i64 - 1_000_000;
             }

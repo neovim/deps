@@ -1,7 +1,7 @@
 # Writing the Grammar
 
-Writing a grammar requires creativity. There are an infinite number of CFGs (context-free grammars) that can be used to describe
-any given language. To produce a good Tree-sitter parser, you need to create a grammar with two important properties:
+Writing a grammar requires creativity. There are an infinite number of CFGs (context-free grammars) that can be used to
+describe any given language. To produce a good Tree-sitter parser, you need to create a grammar with two important properties:
 
 1. **An intuitive structure** — Tree-sitter's output is a [concrete syntax tree][cst]; each node in the tree corresponds
 directly to a [terminal or non-terminal symbol][non-terminal] in the grammar. So to produce an easy-to-analyze tree, there
@@ -25,7 +25,7 @@ It's usually a good idea to find a formal specification for the language you're 
 most likely contain a context-free grammar. As you read through the rules of this CFG, you will probably discover a complex
 and cyclic graph of relationships. It might be unclear how you should navigate this graph as you define your grammar.
 
-Although languages have very different constructs, their constructs can often be categorized in to similar groups like
+Although languages have very different constructs, their constructs can often be categorized into similar groups like
 _Declarations_, _Definitions_, _Statements_, _Expressions_, _Types_ and _Patterns_. In writing your grammar, a good first
 step is to create just enough structure to include all of these basic _groups_ of symbols. For a language like Go,
 you might start with something like this:
@@ -139,8 +139,8 @@ instead. It's often useful to check your progress by trying to parse some real c
 ## Structuring Rules Well
 
 Imagine that you were just starting work on the [Tree-sitter JavaScript parser][tree-sitter-javascript]. Naively, you might
-try to directly mirror the structure of the [ECMAScript Language Spec][ecmascript-spec]. To illustrate the problem with this
-approach, consider the following line of code:
+try to directly mirror the structure of the [ECMAScript Language Spec][ecmascript-spec]. To illustrate the problem with
+this approach, consider the following line of code:
 
 ```js
 return x + y;
@@ -181,16 +181,17 @@ which are unrelated to the actual code.
 
 ## Standard Rule Names
 
-Tree-sitter places no restrictions on how to name the rules of your grammar. It can be helpful, however, to follow certain conventions
-used by many other established grammars in the ecosystem. Some of these well-established patterns are listed below:
+Tree-sitter places no restrictions on how to name the rules of your grammar. It can be helpful, however, to follow certain
+conventions used by many other established grammars in the ecosystem. Some of these well-established patterns are listed
+below:
 
 - `source_file`: Represents an entire source file, this rule is commonly used as the root node for a grammar,
-- `expression`/`statement`: Used to represent statements and expressions for a given language. Commonly defined as a choice between several
-more specific sub-expression/sub-statement rules.
+- `expression`/`statement`: Used to represent statements and expressions for a given language. Commonly defined as a choice
+between several more specific sub-expression/sub-statement rules.
 - `block`: Used as the parent node for block scopes, with its children representing the block's contents.
 - `type`: Represents the types of a language such as `int`, `char`, and `void`.
-- `identifier`: Used for constructs like variable names, function arguments, and object fields; this rule is commonly used as the `word`
-token in grammars.
+- `identifier`: Used for constructs like variable names, function arguments, and object fields; this rule is commonly used
+as the `word` token in grammars.
 - `string`: Used to represent `"string literals"`.
 - `comment`: Used to represent comments, this rule is commonly used as an `extra`.
 
@@ -308,9 +309,9 @@ This is where `prec.left` and `prec.right` come into use. We want to select the 
 
 ## Using Conflicts
 
-Sometimes, conflicts are actually desirable. In our JavaScript grammar, expressions and patterns can create intentional ambiguity.
-A construct like `[x, y]` could be legitimately parsed as both an array literal (like in `let a = [x, y]`) or as a destructuring
-pattern (like in `let [x, y] = arr`).
+Sometimes, conflicts are actually desirable. In our JavaScript grammar, expressions and patterns can create intentional
+ambiguity. A construct like `[x, y]` could be legitimately parsed as both an array literal (like in `let a = [x, y]`) or
+as a destructuring pattern (like in `let [x, y] = arr`).
 
 ```js
 export default grammar({
@@ -371,7 +372,7 @@ structured like that, but this conflict is actually present in the
 
 ## Hiding Rules
 
-You may have noticed in the above examples that some grammar rule name like `_expression` and `_type` began with an underscore.
+You may have noticed in the above examples that some grammar rule names like `_expression` and `_type` began with an underscore.
 Starting a rule's name with an underscore causes the rule to be _hidden_ in the syntax tree. This is useful for rules like
 `_expression` in the grammars above, which always just wrap a single child node. If these nodes were not hidden, they would
 add substantial depth and noise to the syntax tree without making it any easier to understand.
@@ -514,7 +515,6 @@ module.exports = grammar({
     // ...
   },
 });
-_
 ```
 
 Although supertype rules are hidden from the syntax tree, they can still be used in queries. See the chapter on
@@ -564,8 +564,8 @@ as mentioned in the previous page, is `token(prec(N, ...))`.
 ## Keywords
 
 Many languages have a set of _keyword_ tokens (e.g. `if`, `for`, `return`), as well as a more general token (e.g. `identifier`)
-that matches any word, including many of the keyword strings. For example, JavaScript has a keyword `instanceof`, which is
-used as a binary operator, like this:
+that matches any word, including many of the keyword strings. For example, JavaScript has a keyword `instanceof`, which
+is used as a binary operator, like this:
 
 ```js
 if (a instanceof Something) b();

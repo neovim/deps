@@ -8,19 +8,34 @@ tree-sitter build [OPTIONS] [PATH] # Aliases: b
 ```
 
 You can change the compiler executable via the `CC` environment variable and add extra flags via `CFLAGS`.
+The `CC` variable can include a compiler wrapper (for example, `sccache cc`). Common wrappers such as `ccache`,
+`distcc`, `sccache`, `icecc`, `cachepot`, and `buildcache` are recognized automatically. If you use a custom wrapper,
+set `CC_KNOWN_WRAPPER_CUSTOM` to the wrapper executable name used in `CC` (for example, `CC="my-wrapper clang"` with
+`CC_KNOWN_WRAPPER_CUSTOM=my-wrapper`).
 For macOS or iOS, you can set `MACOSX_DEPLOYMENT_TARGET` or `IPHONEOS_DEPLOYMENT_TARGET` respectively to define the
 minimum supported version.
 
 The path argument allows you to specify the directory of the parser to build. If you don't supply this argument, the CLI
 will attempt to build the parser in the current working directory.
 
+On Unix platforms, the CLI will attempt to use `nm` to validate the symbols included in your parser library. Note that this
+safety check is _not_ performed on Windows. If performed, this check ensures that:
+
+- All non tree-sitter functions are marked static, to avoid conflicts when building with another tree-sitter project
+- If an external scanner is used by your parser, all of the following symbols are present:
+  - `tree_sitter_<name>_external_scanner_create`
+  - `tree_sitter_<name>_external_scanner_destroy`
+  - `tree_sitter_<name>_external_scanner_serialize`
+  - `tree_sitter_<name>_external_scanner_deserialize`
+  - `tree_sitter_<name>_external_scanner_scan`
+
 ## Options
 
 ### `-w/--wasm`
 
 Compile the parser as a Wasm module. This command looks for the [Wasi SDK][wasi_sdk] indicated by the `TREE_SITTER_WASI_SDK_PATH`
-environment variable. If you don't have the binary, the CLI will attempt to download it for you to `<CACHE_DIR>/tree-sitter/wasi-sdk/`, where
-`<CACHE_DIR>` is resolved according to the [XDG base directory][XDG] or Window's [Known_Folder_Locations][Known_Folder].
+environment variable. If you don't have the binary, the CLI will attempt to download it for you to `<CACHE_DIR>/tree-sitter/wasi-sdk/`,
+where `<CACHE_DIR>` is resolved according to the [XDG base directory][XDG] or Window's [Known_Folder_Locations][Known_Folder].
 
 ### `-o/--output`
 
@@ -37,7 +52,12 @@ in the external scanner does so using their allocator.
 
 ### `-0/--debug`
 
-Compile the parser with debug flags enabled. This is useful when debugging issues that require a debugger like `gdb` or `lldb`.
+Compile the parser with debug flags enabled. This is useful when debugging issues that require a debugger like `gdb` or
+`lldb`.
+
+### `-v/--verbose`
+
+Display verbose build information including working directory (if present), compiler, arguments, and environment variables.
 
 [Known_Folder]: https://learn.microsoft.com/en-us/windows/win32/shell/knownfolderid
 [wasi_sdk]: https://github.com/WebAssembly/wasi-sdk

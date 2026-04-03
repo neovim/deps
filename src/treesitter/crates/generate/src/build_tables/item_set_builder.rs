@@ -59,9 +59,12 @@ impl<'a> ParseItemSetBuilder<'a> {
         // respectively.
         // For a terminal symbol, the FIRST and LAST sets just consist of the
         // terminal itself.
-        for i in 0..lexical_grammar.variables.len() {
+        let n_terminals = lexical_grammar.variables.len();
+        let n_externals = syntax_grammar.external_tokens.len();
+
+        for i in 0..n_terminals {
             let symbol = Symbol::terminal(i);
-            let mut set = TokenSet::new();
+            let mut set = TokenSet::with_capacity(n_terminals, n_externals);
             set.insert(symbol);
             result.first_sets.insert(symbol, set.clone());
             result.last_sets.insert(symbol, set);
@@ -70,9 +73,9 @@ impl<'a> ParseItemSetBuilder<'a> {
                 .insert(symbol, ReservedWordSetId::default());
         }
 
-        for i in 0..syntax_grammar.external_tokens.len() {
+        for i in 0..n_externals {
             let symbol = Symbol::external(i);
-            let mut set = TokenSet::new();
+            let mut set = TokenSet::with_capacity(n_terminals, n_externals);
             set.insert(symbol);
             result.first_sets.insert(symbol, set.clone());
             result.last_sets.insert(symbol, set);
@@ -149,8 +152,8 @@ impl<'a> ParseItemSetBuilder<'a> {
         //   * `lookaheads` - the set of possible lookahead tokens that can always come after `item`
         //     in an expansion of symbol `i`.
         //
-        //   * `reserved_lookaheads` - the set of reserved lookahead lookahead tokens that can
-        //     always come after `item` in the expansion of symbol `i`.
+        //   * `reserved_lookaheads` - the set of reserved lookahead tokens that can always come
+        //     after `item` in the expansion of symbol `i`.
         //
         //   * `propagates_lookaheads` - a boolean indicating whether or not `item` can occur at the
         //     *end* of the expansion of symbol `i`, so that i's own current lookahead tokens can
@@ -184,23 +187,23 @@ impl<'a> ParseItemSetBuilder<'a> {
                 }
 
                 for production in &syntax_grammar.variables[sym_ix].productions {
-                    if let Some(symbol) = production.first_symbol() {
-                        if symbol.is_non_terminal() {
-                            if let Some(next_step) = production.steps.get(1) {
-                                stack.push((
-                                    symbol.index,
-                                    &result.first_sets[&next_step.symbol],
-                                    result.reserved_first_sets[&next_step.symbol],
-                                    false,
-                                ));
-                            } else {
-                                stack.push((
-                                    symbol.index,
-                                    lookaheads,
-                                    reserved_word_set_id,
-                                    propagates_lookaheads,
-                                ));
-                            }
+                    if let Some(symbol) = production.first_symbol()
+                        && symbol.is_non_terminal()
+                    {
+                        if let Some(next_step) = production.steps.get(1) {
+                            stack.push((
+                                symbol.index,
+                                &result.first_sets[&next_step.symbol],
+                                result.reserved_first_sets[&next_step.symbol],
+                                false,
+                            ));
+                        } else {
+                            stack.push((
+                                symbol.index,
+                                lookaheads,
+                                reserved_word_set_id,
+                                propagates_lookaheads,
+                            ));
                         }
                     }
                 }
@@ -290,44 +293,43 @@ impl<'a> ParseItemSetBuilder<'a> {
     }
 
     fn add_item(&self, set: &mut ParseItemSet<'a>, entry: &ParseItemSetEntry<'a>) {
-        if let Some(step) = entry.item.step() {
-            if step.symbol.is_non_terminal() {
-                let next_step = entry.item.successor().step();
+        if let Some(step) = entry.item.step()
+            && step.symbol.is_non_terminal()
+        {
+            let next_step = entry.item.successor().step();
 
-                // Determine which tokens can follow this non-terminal.
-                let (following_tokens, following_reserved_tokens) =
-                    if let Some(next_step) = next_step {
-                        (
-                            self.first_sets.get(&next_step.symbol).unwrap(),
-                            *self.reserved_first_sets.get(&next_step.symbol).unwrap(),
-                        )
-                    } else {
-                        (&entry.lookaheads, entry.following_reserved_word_set)
-                    };
+            // Determine which tokens can follow this non-terminal.
+            let (following_tokens, following_reserved_tokens) = if let Some(next_step) = next_step {
+                (
+                    self.first_sets.get(&next_step.symbol).unwrap(),
+                    *self.reserved_first_sets.get(&next_step.symbol).unwrap(),
+                )
+            } else {
+                (&entry.lookaheads, entry.following_reserved_word_set)
+            };
 
-                // Use the pre-computed *additions* to expand the non-terminal.
-                for addition in &self.transitive_closure_additions[step.symbol.index] {
-                    let entry = set.insert(addition.item);
-                    entry.lookaheads.insert_all(&addition.info.lookaheads);
+            // Use the pre-computed *additions* to expand the non-terminal.
+            for addition in &self.transitive_closure_additions[step.symbol.index] {
+                let entry = set.insert(addition.item);
+                entry.lookaheads.insert_all(&addition.info.lookaheads);
 
-                    if let Some(word_token) = self.syntax_grammar.word_token {
-                        if addition.info.lookaheads.contains(&word_token) {
-                            entry.following_reserved_word_set = entry
-                                .following_reserved_word_set
-                                .max(addition.info.reserved_lookaheads);
-                        }
-                    }
+                if let Some(word_token) = self.syntax_grammar.word_token
+                    && addition.info.lookaheads.contains(&word_token)
+                {
+                    entry.following_reserved_word_set = entry
+                        .following_reserved_word_set
+                        .max(addition.info.reserved_lookaheads);
+                }
 
-                    if addition.info.propagates_lookaheads {
-                        entry.lookaheads.insert_all(following_tokens);
+                if addition.info.propagates_lookaheads {
+                    entry.lookaheads.insert_all(following_tokens);
 
-                        if let Some(word_token) = self.syntax_grammar.word_token {
-                            if following_tokens.contains(&word_token) {
-                                entry.following_reserved_word_set = entry
-                                    .following_reserved_word_set
-                                    .max(following_reserved_tokens);
-                            }
-                        }
+                    if let Some(word_token) = self.syntax_grammar.word_token
+                        && following_tokens.contains(&word_token)
+                    {
+                        entry.following_reserved_word_set = entry
+                            .following_reserved_word_set
+                            .max(following_reserved_tokens);
                     }
                 }
             }

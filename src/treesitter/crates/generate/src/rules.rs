@@ -1,8 +1,8 @@
-use std::{collections::BTreeMap, fmt};
+use std::{collections::BTreeMap, fmt, hash::Hash};
 
 use serde::Serialize;
-use smallbitvec::SmallBitVec;
 
+use super::bitvec::{BitVec, SetBitsIter};
 use super::grammars::VariableType;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize)]
@@ -79,8 +79,8 @@ pub enum Rule {
 // the token is present in the set.
 #[derive(Default, Clone, PartialEq, Eq, Hash)]
 pub struct TokenSet {
-    terminal_bits: SmallBitVec,
-    external_bits: SmallBitVec,
+    terminal_bits: BitVec,
+    external_bits: BitVec,
     eof: bool,
     end_of_nonterminal_extra: bool,
 }
@@ -100,9 +100,8 @@ impl PartialOrd for TokenSet {
 impl Ord for TokenSet {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         self.terminal_bits
-            .iter()
-            .cmp(other.terminal_bits.iter())
-            .then_with(|| self.external_bits.iter().cmp(other.external_bits.iter()))
+            .cmp(&other.terminal_bits)
+            .then_with(|| self.external_bits.cmp(&other.external_bits))
             .then_with(|| self.eof.cmp(&other.eof))
             .then_with(|| {
                 self.end_of_nonterminal_extra
@@ -315,36 +314,26 @@ impl TokenSet {
     #[must_use]
     pub const fn new() -> Self {
         Self {
-            terminal_bits: SmallBitVec::new(),
-            external_bits: SmallBitVec::new(),
+            terminal_bits: BitVec::new(),
+            external_bits: BitVec::new(),
+            eof: false,
+            end_of_nonterminal_extra: false,
+        }
+    }
+
+    pub fn with_capacity(n_terminals: usize, n_externals: usize) -> Self {
+        Self {
+            terminal_bits: BitVec::with_capacity(n_terminals),
+            external_bits: BitVec::with_capacity(n_externals),
             eof: false,
             end_of_nonterminal_extra: false,
         }
     }
 
     pub fn iter(&self) -> impl Iterator<Item = Symbol> + '_ {
-        self.terminal_bits
-            .iter()
-            .enumerate()
-            .filter_map(|(i, value)| {
-                if value {
-                    Some(Symbol::terminal(i))
-                } else {
-                    None
-                }
-            })
-            .chain(
-                self.external_bits
-                    .iter()
-                    .enumerate()
-                    .filter_map(|(i, value)| {
-                        if value {
-                            Some(Symbol::external(i))
-                        } else {
-                            None
-                        }
-                    }),
-            )
+        SetBitsIter::new(self.terminal_bits.as_slice())
+            .map(Symbol::terminal)
+            .chain(SetBitsIter::new(self.external_bits.as_slice()).map(Symbol::external))
             .chain(if self.eof { Some(Symbol::end()) } else { None })
             .chain(if self.end_of_nonterminal_extra {
                 Some(Symbol::end_of_nonterminal_extra())
@@ -354,18 +343,10 @@ impl TokenSet {
     }
 
     pub fn terminals(&self) -> impl Iterator<Item = Symbol> + '_ {
-        self.terminal_bits
-            .iter()
-            .enumerate()
-            .filter_map(|(i, value)| {
-                if value {
-                    Some(Symbol::terminal(i))
-                } else {
-                    None
-                }
-            })
+        SetBitsIter::new(self.terminal_bits.as_slice()).map(Symbol::terminal)
     }
 
+    #[inline]
     pub fn contains(&self, symbol: &Symbol) -> bool {
         match symbol.kind {
             SymbolType::NonTerminal => panic!("Cannot store non-terminals in a TokenSet"),
@@ -376,6 +357,7 @@ impl TokenSet {
         }
     }
 
+    #[inline]
     pub fn contains_terminal(&self, index: usize) -> bool {
         self.terminal_bits.get(index).unwrap_or(false)
     }
@@ -411,7 +393,7 @@ impl TokenSet {
                     true
                 } else {
                     false
-                }
+                };
             }
             SymbolType::EndOfNonTerminalExtra => {
                 return if self.end_of_nonterminal_extra {
@@ -435,43 +417,33 @@ impl TokenSet {
     pub fn is_empty(&self) -> bool {
         !self.eof
             && !self.end_of_nonterminal_extra
-            && !self.terminal_bits.iter().any(|a| a)
-            && !self.external_bits.iter().any(|a| a)
+            && self.terminal_bits.as_slice().iter().all(|&w| w == 0)
+            && self.external_bits.as_slice().iter().all(|&w| w == 0)
     }
 
     pub fn len(&self) -> usize {
-        self.eof as usize
-            + self.end_of_nonterminal_extra as usize
-            + self.terminal_bits.iter().filter(|b| *b).count()
-            + self.external_bits.iter().filter(|b| *b).count()
+        usize::from(self.eof)
+            + usize::from(self.end_of_nonterminal_extra)
+            + self
+                .terminal_bits
+                .as_slice()
+                .iter()
+                .map(|w| w.count_ones() as usize)
+                .sum::<usize>()
+            + self
+                .external_bits
+                .as_slice()
+                .iter()
+                .map(|w| w.count_ones() as usize)
+                .sum::<usize>()
     }
 
     pub fn insert_all_terminals(&mut self, other: &Self) -> bool {
-        let mut result = false;
-        if other.terminal_bits.len() > self.terminal_bits.len() {
-            self.terminal_bits.resize(other.terminal_bits.len(), false);
-        }
-        for (i, element) in other.terminal_bits.iter().enumerate() {
-            if element {
-                result |= !self.terminal_bits[i];
-                self.terminal_bits.set(i, element);
-            }
-        }
-        result
+        self.terminal_bits.insert_all(&other.terminal_bits)
     }
 
     fn insert_all_externals(&mut self, other: &Self) -> bool {
-        let mut result = false;
-        if other.external_bits.len() > self.external_bits.len() {
-            self.external_bits.resize(other.external_bits.len(), false);
-        }
-        for (i, element) in other.external_bits.iter().enumerate() {
-            if element {
-                result |= !self.external_bits[i];
-                self.external_bits.set(i, element);
-            }
-        }
-        result
+        self.external_bits.insert_all(&other.external_bits)
     }
 
     pub fn insert_all(&mut self, other: &Self) -> bool {

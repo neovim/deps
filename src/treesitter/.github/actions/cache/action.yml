@@ -10,7 +10,7 @@ outputs:
 runs:
   using: composite
   steps:
-    - uses: actions/cache@v4
+    - uses: actions/cache@v5
       id: cache
       with:
         path: |
@@ -21,5 +21,6 @@ runs:
           'lib/src/parser.h',
           'lib/src/array.h',
           'lib/src/alloc.h',
+          'lib/src/wasm/wasm-stdlib.h',
           'test/fixtures/grammars/*/**/src/*.c',
           '.github/actions/cache/action.yml') }}
