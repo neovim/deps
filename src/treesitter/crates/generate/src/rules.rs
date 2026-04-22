@@ -7,11 +7,11 @@ use super::grammars::VariableType;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize)]
 pub enum SymbolType {
-    External,
-    End,
-    EndOfNonTerminalExtra,
-    Terminal,
-    NonTerminal,
+    External = 0,
+    End = 1,
+    EndOfNonTerminalExtra = 2,
+    Terminal = 3,
+    NonTerminal = 4,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize)]
@@ -360,6 +360,12 @@ impl TokenSet {
     #[inline]
     pub fn contains_terminal(&self, index: usize) -> bool {
         self.terminal_bits.get(index).unwrap_or(false)
+    }
+
+    /// Raw u64 word slice backing the terminal bitset.
+    #[inline]
+    pub const fn terminal_bits_words(&self) -> &[u64] {
+        self.terminal_bits.as_slice()
     }
 
     pub fn insert(&mut self, other: Symbol) {
