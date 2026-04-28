@@ -181,6 +181,8 @@ typedef struct {
  *    have already been returned.
  * - `capture_list_id` - A numeric id that can be used to retrieve the state's
  *    list of captures from the `CaptureListPool`.
+ * - `heap_insert_order` - A sequence number used to preserve discovery order
+ *    among finished states with the same capture position and pattern.
  * - `seeking_immediate_match` - A flag that indicates that the state's next
  *    step must be matched by the very next sibling. This is used when
  *    processing repetitions, or when processing a wildcard node followed by
@@ -194,6 +196,7 @@ typedef struct {
 typedef struct {
   uint32_t id;
   uint32_t capture_list_id;
+  uint32_t heap_insert_order;
   uint16_t start_depth;
   uint16_t step_index;
   uint16_t pattern_index;
@@ -204,6 +207,7 @@ typedef struct {
   bool needs_parent: 1;
 } QueryState;
 
+typedef Array(QueryState) QueryStateList;
 typedef Array(TSQueryCapture) CaptureList;
 
 /*
@@ -314,14 +318,19 @@ struct TSQuery {
 struct TSQueryCursor {
   const TSQuery *query;
   TSTreeCursor cursor;
-  Array(QueryState) states;
-  Array(QueryState) finished_states;
+  QueryStateList states;
+  QueryStateList finished_states;
+  // Tracks how much of finished_states is in heap order. Elements at indices
+  // < this value satisfy the min-heap property; elements >= this value are
+  // newly pushed and need to be sifted into place. Only used by `next_capture`.
+  uint32_t finished_states_heap_size;
   CaptureListPool capture_list_pool;
   uint32_t depth;
   uint32_t max_start_depth;
   TSRange included_range;
   TSRange containing_range;
   uint32_t next_state_id;
+  uint32_t next_finished_state_id;
   const TSQueryCursorOptions *query_options;
   TSQueryCursorState query_state;
   unsigned operation_count;
@@ -334,6 +343,7 @@ struct TSQueryCursor {
 static const TSQueryError PARENT_DONE = -1;
 static const uint16_t PATTERN_DONE_MARKER = UINT16_MAX;
 static const uint16_t NONE = UINT16_MAX;
+static const uint32_t CAPTURE_LIST_NONE = UINT32_MAX;
 static const TSSymbol WILDCARD_SYMBOL = 0;
 static const unsigned OP_COUNT_PER_QUERY_CALLBACK_CHECK = 100;
 
@@ -429,7 +439,7 @@ static CaptureListPool capture_list_pool_new(void) {
 }
 
 static void capture_list_pool_reset(CaptureListPool *self) {
-  for (uint16_t i = 0; i < (uint16_t)self->list.size; i++) {
+  for (uint32_t i = 0; i < self->list.size; i++) {
     // This invalid size means that the list is not in use.
     array_get(&self->list, i)->size = UINT32_MAX;
   }
@@ -437,18 +447,18 @@ static void capture_list_pool_reset(CaptureListPool *self) {
 }
 
 static void capture_list_pool_delete(CaptureListPool *self) {
-  for (uint16_t i = 0; i < (uint16_t)self->list.size; i++) {
+  for (uint32_t i = 0; i < self->list.size; i++) {
     array_delete(array_get(&self->list, i));
   }
   array_delete(&self->list);
 }
 
-static const CaptureList *capture_list_pool_get(const CaptureListPool *self, uint16_t id) {
+static const CaptureList *capture_list_pool_get(const CaptureListPool *self, uint32_t id) {
   if (id >= self->list.size) return &self->empty_list;
   return array_get(&self->list, id);
 }
 
-static CaptureList *capture_list_pool_get_mut(CaptureListPool *self, uint16_t id) {
+static CaptureList *capture_list_pool_get_mut(CaptureListPool *self, uint32_t id) {
   ts_assert(id < self->list.size);
   return array_get(&self->list, id);
 }
@@ -459,10 +469,10 @@ static bool capture_list_pool_is_empty(const CaptureListPool *self) {
   return self->free_capture_list_count == 0 && self->list.size >= self->max_capture_list_count;
 }
 
-static uint16_t capture_list_pool_acquire(CaptureListPool *self) {
+static uint32_t capture_list_pool_acquire(CaptureListPool *self) {
   // First see if any already allocated capture list is currently unused.
   if (self->free_capture_list_count > 0) {
-    for (uint16_t i = 0; i < (uint16_t)self->list.size; i++) {
+    for (uint32_t i = 0; i < self->list.size; i++) {
       if (array_get(&self->list, i)->size == UINT32_MAX) {
         array_clear(array_get(&self->list, i));
         self->free_capture_list_count--;
@@ -475,7 +485,7 @@ static uint16_t capture_list_pool_acquire(CaptureListPool *self) {
   // doesn't put us over the requested maximum.
   uint32_t i = self->list.size;
   if (i >= self->max_capture_list_count) {
-    return NONE;
+    return CAPTURE_LIST_NONE;
   }
   CaptureList list;
   array_init(&list);
@@ -483,10 +493,144 @@ static uint16_t capture_list_pool_acquire(CaptureListPool *self) {
   return i;
 }
 
-static void capture_list_pool_release(CaptureListPool *self, uint16_t id) {
+static void capture_list_pool_release(CaptureListPool *self, uint32_t id) {
   if (id >= self->list.size) return;
   array_get(&self->list, id)->size = UINT32_MAX;
   self->free_capture_list_count++;
+}
+
+/********************
+ * FinishedStateHeap
+ *
+ * A min-heap of finished query states, ordered by (byte offset of next
+ * unconsumed capture, pattern_index, insertion order). This allows
+ * ts_query_cursor_next_capture to find the earliest capture in O(1) instead
+ * of scanning all finished states. The heap is maintained lazily -
+ * ts_query_cursor__advance uses plain array_push, and next_capture sifts
+ * new elements into place via a tracked heap_size boundary.
+ ********************/
+
+static void finished_state_swap(QueryStateList *states, uint32_t a, uint32_t b) {
+  QueryState tmp = *array_get(states, a);
+  *array_get(states, a) = *array_get(states, b);
+  *array_get(states, b) = tmp;
+}
+
+// Compare two finished states by (byte offset of next unconsumed capture,
+// pattern_index, insertion order).
+static inline bool finished_state_precedes(
+  const QueryState *a,
+  const QueryState *b,
+  const CaptureListPool *pool
+) {
+  const CaptureList *a_caps = capture_list_pool_get(pool, a->capture_list_id);
+  const CaptureList *b_caps = capture_list_pool_get(pool, b->capture_list_id);
+  if (a->consumed_capture_count >= a_caps->size) return false;
+  if (b->consumed_capture_count >= b_caps->size) return true;
+  uint32_t a_byte = ts_node_start_byte(a_caps->contents[a->consumed_capture_count].node);
+  uint32_t b_byte = ts_node_start_byte(b_caps->contents[b->consumed_capture_count].node);
+  if (a_byte != b_byte) return a_byte < b_byte;
+  if (a->pattern_index != b->pattern_index) return a->pattern_index < b->pattern_index;
+  return a->heap_insert_order < b->heap_insert_order;
+}
+
+static void finished_state_sift_down(
+  QueryStateList *states,
+  uint32_t index,
+  const CaptureListPool *pool
+) {
+  uint32_t size = states->size;
+  while (true) {
+    uint32_t smallest = index;
+    uint32_t left = 2 * index + 1;
+    uint32_t right = 2 * index + 2;
+    if (left < size && finished_state_precedes(
+      array_get(states, left),
+      array_get(states, smallest),
+      pool
+    )) {
+      smallest = left;
+    }
+    if (right < size && finished_state_precedes(
+      array_get(states, right),
+      array_get(states, smallest),
+      pool
+    )) {
+      smallest = right;
+    }
+    if (smallest == index) break;
+    finished_state_swap(states, index, smallest);
+    index = smallest;
+  }
+}
+
+static void finished_state_sift_up(
+  QueryStateList *states,
+  uint32_t index,
+  const CaptureListPool *pool
+) {
+  while (index > 0) {
+    uint32_t parent = (index - 1) / 2;
+    if (finished_state_precedes(
+      array_get(states, index),
+      array_get(states, parent),
+      pool
+    )) {
+      finished_state_swap(states, index, parent);
+      index = parent;
+    } else {
+      break;
+    }
+  }
+}
+
+static inline void finished_state_pop(QueryStateList *states, const CaptureListPool *pool) {
+  if (states->size > 1) *array_front(states) = *array_back(states);
+  states->size--;
+  if (states->size > 0) finished_state_sift_down(states, 0, pool);
+}
+
+// Remove an element at an arbitrary index and restore heap order.
+static void finished_state_erase(
+  QueryStateList *states,
+  uint32_t index,
+  const CaptureListPool *pool
+) {
+  if (index == states->size - 1) {
+    states->size--;
+    return;
+  }
+  *array_get(states, index) = *array_back(states);
+  states->size--;
+  // The replacement element may need to go up or down.
+  if (index > 0 && finished_state_precedes(
+    array_get(states, index),
+    array_get(states, (index - 1) / 2),
+    pool
+  )) {
+    finished_state_sift_up(states, index, pool);
+  } else {
+    finished_state_sift_down(states, index, pool);
+  }
+}
+
+static void ts_query_cursor__push_finished_state(
+  TSQueryCursor *self,
+  QueryState *state
+) {
+  state->heap_insert_order = self->next_finished_state_id++;
+  array_push(&self->finished_states, *state);
+}
+
+static void ts_query_cursor__heapify_finished_states(TSQueryCursor *self) {
+  while (self->finished_states_heap_size < self->finished_states.size) {
+    finished_state_sift_up(
+      &self->finished_states,
+      self->finished_states_heap_size,
+      &self->capture_list_pool
+    );
+    self->finished_states_heap_size++;
+  }
 }
 
 /**************
@@ -3276,10 +3420,12 @@ void ts_query_cursor_exec(
 
   array_clear(&self->states);
   array_clear(&self->finished_states);
+  self->finished_states_heap_size = 0;
   ts_tree_cursor_reset(&self->cursor, node);
   capture_list_pool_reset(&self->capture_list_pool);
   self->on_visible_node = true;
   self->next_state_id = 0;
+  self->next_finished_state_id = 0;
   self->depth = 0;
   self->ascending = false;
   self->halted = false;
@@ -3551,7 +3697,8 @@ static void ts_query_cursor__add_state(
   );
   array_insert(&self->states, index, ((QueryState) {
     .id = UINT32_MAX,
-    .capture_list_id = NONE,
+    .capture_list_id = CAPTURE_LIST_NONE,
+    .heap_insert_order = UINT32_MAX,
     .step_index = pattern->step_index,
     .pattern_index = pattern->pattern_index,
     .start_depth = start_depth,
@@ -3571,13 +3718,13 @@ static CaptureList *ts_query_cursor__prepare_to_capture(
   QueryState *state,
   unsigned state_index_to_preserve
 ) {
-  if (state->capture_list_id == NONE) {
+  if (state->capture_list_id == CAPTURE_LIST_NONE) {
     state->capture_list_id = capture_list_pool_acquire(&self->capture_list_pool);
 
     // If there are no capture lists left in the pool, then terminate whichever
     // state has captured the earliest node in the document, and steal its
     // capture list.
-    if (state->capture_list_id == NONE) {
+    if (state->capture_list_id == CAPTURE_LIST_NONE) {
       self->did_exceed_match_limit = true;
       uint32_t state_index, byte_offset, pattern_index;
       if (
@@ -3596,7 +3743,7 @@ static CaptureList *ts_query_cursor__prepare_to_capture(
         );
         QueryState *other_state = array_get(&self->states, state_index);
         state->capture_list_id = other_state->capture_list_id;
-        other_state->capture_list_id = NONE;
+        other_state->capture_list_id = CAPTURE_LIST_NONE;
         other_state->dead = true;
         CaptureList *list = capture_list_pool_get_mut(
           &self->capture_list_pool,
@@ -3650,10 +3797,10 @@ static QueryState *ts_query_cursor__copy_state(
   const QueryState *state = *state_ref;
   uint32_t state_index = (uint32_t)(state - self->states.contents);
   QueryState copy = *state;
-  copy.capture_list_id = NONE;
+  copy.capture_list_id = CAPTURE_LIST_NONE;
 
   // If the state has captures, copy its capture list.
-  if (state->capture_list_id != NONE) {
+  if (state->capture_list_id != CAPTURE_LIST_NONE) {
     CaptureList *new_captures = ts_query_cursor__prepare_to_capture(self, &copy, state_index);
     if (!new_captures) return NULL;
     const CaptureList *old_captures = capture_list_pool_get(
@@ -3809,7 +3956,7 @@ static inline bool ts_query_cursor__advance(
             (state->start_depth > self->depth || self->depth == 0)
           ) {
             LOG("  finish pattern %u\n", state->pattern_index);
-            array_push(&self->finished_states, *state);
+            ts_query_cursor__push_finished_state(self, state);
             did_match = true;
             deleted_count++;
           }
@@ -4271,7 +4418,7 @@ static inline bool ts_query_cursor__advance(
                 LOG("  defer finishing pattern %u\n", state->pattern_index);
               } else {
                 LOG("  finish pattern %u\n", state->pattern_index);
-                array_push(&self->finished_states, *state);
+                ts_query_cursor__push_finished_state(self, state);
                 array_erase(&self->states, (uint32_t)(state - self->states.contents));
                 did_match = true;
                 j--;
@@ -4309,8 +4456,22 @@ bool ts_query_cursor_next_match(
       return false;
     }
   }
+  if (self->finished_states_heap_size > 0) {
+    ts_query_cursor__heapify_finished_states(self);
+  }
 
-  QueryState *state = array_get(&self->finished_states, 0);
+  uint32_t state_index = 0;
+  if (self->finished_states_heap_size > 0) {
+    for (uint32_t i = 1; i < self->finished_states.size; i++) {
+      QueryState *state = array_get(&self->finished_states, i);
+      QueryState *earliest_state = array_get(&self->finished_states, state_index);
+      if (state->heap_insert_order < earliest_state->heap_insert_order) {
+        state_index = i;
+      }
+    }
+  }
+
+  QueryState *state = array_get(&self->finished_states, state_index);
   if (state->id == UINT32_MAX) state->id = self->next_state_id++;
   match->id = state->id;
   match->pattern_index = state->pattern_index;
@@ -4321,7 +4482,12 @@ bool ts_query_cursor_next_match(
   match->captures = captures->contents;
   match->capture_count = captures->size;
   capture_list_pool_release(&self->capture_list_pool, state->capture_list_id);
-  array_erase(&self->finished_states, 0);
+  if (self->finished_states_heap_size > 0) {
+    finished_state_erase(&self->finished_states, state_index, &self->capture_list_pool);
+    self->finished_states_heap_size = self->finished_states.size;
+  } else {
+    array_erase(&self->finished_states, state_index);
+  }
   return true;
 }
 
@@ -4329,6 +4495,10 @@ void ts_query_cursor_remove_match(
   TSQueryCursor *self,
   uint32_t match_id
 ) {
+  if (self->finished_states_heap_size > 0) {
+    ts_query_cursor__heapify_finished_states(self);
+  }
+
   for (unsigned i = 0; i < self->finished_states.size; i++) {
     const QueryState *state = array_get(&self->finished_states, i);
     if (state->id == match_id) {
@@ -4336,7 +4506,12 @@ void ts_query_cursor_remove_match(
         &self->capture_list_pool,
         state->capture_list_id
       );
-      array_erase(&self->finished_states, i);
+      if (self->finished_states_heap_size > 0) {
+        finished_state_erase(&self->finished_states, i, &self->capture_list_pool);
+        self->finished_states_heap_size = self->finished_states.size;
+      } else {
+        array_erase(&self->finished_states, i);
+      }
       return;
     }
   }
@@ -4365,6 +4540,9 @@ bool ts_query_cursor_next_capture(
   // be discovered in order, because patterns can overlap. Search for matches
   // until there is a finished capture that is before any unfinished capture.
   for (;;) {
+    // Sift any newly pushed finished states into the heap.
+    ts_query_cursor__heapify_finished_states(self);
+
     // First, find the earliest capture in an unfinished match.
     uint32_t first_unfinished_capture_byte;
     uint32_t first_unfinished_pattern_index;
@@ -4378,13 +4556,14 @@ bool ts_query_cursor_next_capture(
       &first_unfinished_state_is_definite
     );
 
-    // Then find the earliest capture in a finished match. It must occur
-    // before the first capture in an *unfinished* match.
+    // Then find the earliest capture in a finished match. The finished_states
+    // array is maintained as a min-heap, so the earliest is always at index 0.
+    // Clean up fully-consumed and out-of-range states from the heap root first.
     QueryState *first_finished_state = NULL;
     uint32_t first_finished_capture_byte = first_unfinished_capture_byte;
     uint32_t first_finished_pattern_index = first_unfinished_pattern_index;
-    for (unsigned i = 0; i < self->finished_states.size;) {
-      QueryState *state = array_get(&self->finished_states, i);
+    while (self->finished_states.size > 0) {
+      QueryState *state = array_get(&self->finished_states, 0);
       const CaptureList *captures = capture_list_pool_get(
         &self->capture_list_pool,
         state->capture_list_id
@@ -4396,7 +4575,8 @@ bool ts_query_cursor_next_capture(
           &self->capture_list_pool,
           state->capture_list_id
         );
-        array_erase(&self->finished_states, i);
+        finished_state_pop(&self->finished_states, &self->capture_list_pool);
+        self->finished_states_heap_size = self->finished_states.size;
         continue;
       }
 
@@ -4415,6 +4595,7 @@ bool ts_query_cursor_next_capture(
       // Skip captures that are outside of the cursor's range.
       if (node_outside_of_range) {
         state->consumed_capture_count++;
+        finished_state_sift_down(&self->finished_states, 0, &self->capture_list_pool);
         continue;
       }
 
@@ -4430,7 +4611,7 @@ bool ts_query_cursor_next_capture(
         first_finished_capture_byte = node_start_byte;
         first_finished_pattern_index = state->pattern_index;
       }
-      i++;
+      break;
     }
 
     // If there is finished capture that is clearly before any unfinished
@@ -4457,6 +4638,11 @@ bool ts_query_cursor_next_capture(
       match->capture_count = captures->size;
       *capture_index = state->consumed_capture_count;
       state->consumed_capture_count++;
+      // If this state is in the finished_states heap, its sort key has changed
+      // (next capture is now later in the document). Restore heap order.
+      if (state == first_finished_state) {
+        finished_state_sift_down(&self->finished_states, 0, &self->capture_list_pool);
+      }
       return true;
     }
 
