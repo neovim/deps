@@ -1,7 +1,7 @@
 use std::{
     collections::BTreeMap,
     ffi::OsStr,
-    fmt::Display as _,
+    fmt::{Display as _, Write as _},
     fs,
     io::{self, Write},
     path::{Path, PathBuf},
@@ -23,7 +23,7 @@ use walkdir::WalkDir;
 
 use super::util;
 use crate::{
-    logger::paint,
+    paint::{color_enabled, paint},
     parse::{
         ParseDebugType, ParseFileOptions, ParseOutput, ParseStats, ParseTheme, Stats, render_cst,
     },
@@ -169,7 +169,6 @@ pub struct TestOptions<'a> {
     pub update: bool,
     pub open_log: bool,
     pub languages: BTreeMap<&'a str, &'a Language>,
-    pub color: bool,
     pub show_fields: bool,
     pub overview_only: bool,
 }
@@ -208,9 +207,6 @@ pub struct TestSummary {
     // Options passed in from the CLI which control how the summary is displayed
     #[schemars(skip)]
     #[serde(skip)]
-    pub color: bool,
-    #[schemars(skip)]
-    #[serde(skip)]
     pub overview_only: bool,
     #[schemars(skip)]
     #[serde(skip)]
@@ -222,19 +218,13 @@ pub struct TestSummary {
 
 impl TestSummary {
     #[must_use]
-    #[expect(
-        clippy::fn_params_excessive_bools,
-        reason = "these map directly to CLI flags"
-    )]
     pub fn new(
-        color: bool,
         stat_display: TestStats,
         parse_update: bool,
         overview_only: bool,
         json_summary: bool,
     ) -> Self {
         Self {
-            color,
             parse_stat_display: stat_display,
             update: parse_update,
             overview_only,
@@ -498,11 +488,15 @@ impl TestSummary {
                             };
                             // 3 standard deviations below the mean, aka the "Empirical Rule"
                             if *adj_rate < 3.0f64.mul_add(-std_dev, avg) {
-                                stats += &paint(
-                                    self.color.then_some(AnsiColor::Yellow),
-                                    &format!(
-                                        " -- Warning: Slow parse rate ({true_rate:.3} bytes/ms)"
-                                    ),
+                                let _ = write!(
+                                    stats,
+                                    "{}",
+                                    paint(
+                                        Some(AnsiColor::Yellow),
+                                        format_args!(
+                                            " -- Warning: Slow parse rate ({true_rate:.3} bytes/ms)"
+                                        ),
+                                    )
                                 );
                             }
                             stats
@@ -511,7 +505,7 @@ impl TestSummary {
                     writeln!(
                         f,
                         "{test_num:>3}. {result_char} {}{stat_display}",
-                        paint(self.color.then_some(color), &entry.name),
+                        paint(Some(color), &entry.name),
                     )?;
                 }
                 TestInfo::AssertionTest { .. } => unreachable!(),
@@ -548,7 +542,7 @@ impl TestSummary {
                 )?;
             }
 
-            if self.color {
+            if color_enabled() {
                 DiffKey.fmt(f)?;
             }
             for (
@@ -569,25 +563,16 @@ impl TestSummary {
                     } else {
                         &format_sexp(actual, 2)
                     };
-                    writeln!(
-                        f,
-                        "  {}",
-                        paint(self.color.then_some(AnsiColor::Red), actual)
-                    )?;
+                    writeln!(f, "  {}", paint(Some(AnsiColor::Red), actual))?;
                 } else {
                     writeln!(f, "\n  {}. {name}:", i + 1)?;
                     if *is_cst {
-                        writeln!(
-                            f,
-                            "{}",
-                            TestDiff::new(actual, expected).with_color(self.color)
-                        )?;
+                        writeln!(f, "{}", TestDiff::new(actual, expected))?;
                     } else {
                         writeln!(
                             f,
                             "{}",
                             TestDiff::new(&format_sexp(actual, 2), &format_sexp(expected, 2))
-                                .with_color(self.color,)
                         )?;
                     }
                 }
@@ -616,14 +601,14 @@ impl std::fmt::Display for TestSummary {
                                 f,
                                 "{:>3}. ✓ {} ({assertion_count} assertions)",
                                 test_num,
-                                paint(self.color.then_some(AnsiColor::Green), &entry.name)
+                                paint(Some(AnsiColor::Green), &entry.name)
                             )?,
                             TestOutcome::AssertionFailed { error } => {
                                 writeln!(
                                     f,
                                     "{:>3}. ✗ {}",
                                     test_num,
-                                    paint(self.color.then_some(AnsiColor::Red), &entry.name)
+                                    paint(Some(AnsiColor::Red), &entry.name)
                                 )?;
                                 writeln!(f, "{}  {error}", "  ".repeat(depth + 1))?;
                             }
@@ -698,22 +683,20 @@ pub fn run_tests_at_path(
 }
 
 pub fn check_queries_at_path(language: &Language, path: &Path) -> Result<()> {
-    if path.exists() {
-        for entry in WalkDir::new(path)
-            .into_iter()
-            .filter_map(std::result::Result::ok)
-            .filter(|e| {
-                e.file_type().is_file()
-                    && e.path().extension().and_then(OsStr::to_str) == Some("scm")
-                    && !e.path().starts_with(".")
-            })
-        {
-            let filepath = entry.file_name().to_str().unwrap_or("");
-            let content = fs::read_to_string(entry.path())
-                .with_context(|| format!("Error reading query file {filepath:?}"))?;
-            Query::new(language, &content)
-                .with_context(|| format!("Error in query file {filepath:?}"))?;
-        }
+    for entry in WalkDir::new(path)
+        .into_iter()
+        .filter_map(std::result::Result::ok)
+        .filter(|e| {
+            e.file_type().is_file()
+                && e.path().extension().and_then(OsStr::to_str) == Some("scm")
+                && !e.path().starts_with(".")
+        })
+    {
+        let filepath = entry.file_name().to_str().unwrap_or("");
+        let content = fs::read_to_string(entry.path())
+            .with_context(|| format!("Error reading query file {filepath:?}"))?;
+        Query::new(language, &content)
+            .with_context(|| format!("Error in query file {filepath:?}"))?;
     }
     Ok(())
 }
@@ -742,23 +725,12 @@ impl DiffKey {
 pub struct TestDiff<'a> {
     pub actual: &'a str,
     pub expected: &'a str,
-    pub color: bool,
 }
 
 impl<'a> TestDiff<'a> {
     #[must_use]
     pub const fn new(actual: &'a str, expected: &'a str) -> Self {
-        Self {
-            actual,
-            expected,
-            color: true,
-        }
-    }
-
-    #[must_use]
-    pub const fn with_color(mut self, color: bool) -> Self {
-        self.color = color;
-        self
+        Self { actual, expected }
     }
 }
 
@@ -768,14 +740,14 @@ impl std::fmt::Display for TestDiff<'_> {
         for diff in diff.iter_all_changes() {
             match diff.tag() {
                 ChangeTag::Equal => {
-                    if self.color {
+                    if color_enabled() {
                         write!(f, "{diff}")?;
                     } else {
                         write!(f, " {diff}")?;
                     }
                 }
                 ChangeTag::Insert => {
-                    if self.color {
+                    if color_enabled() {
                         write!(
                             f,
                             "{}",
@@ -789,7 +761,7 @@ impl std::fmt::Display for TestDiff<'_> {
                     }
                 }
                 ChangeTag::Delete => {
-                    if self.color {
+                    if color_enabled() {
                         write!(f, "{}", paint(Some(AnsiColor::Red), diff.as_str().unwrap()))?;
                     } else {
                         write!(f, "-{diff}")?;
@@ -1402,6 +1374,17 @@ struct PendingTest {
     body_start_line: usize,
 }
 
+/// If `token` matches the shape of one of the known test attributes,
+/// then return the prefix
+fn known_attribute(token: &str) -> Option<&str> {
+    let head = token.split('(').next().unwrap_or(token);
+    matches!(
+        head,
+        ":skip" | ":error" | ":fail-fast" | ":cst" | ":platform" | ":language"
+    )
+    .then_some(head)
+}
+
 /// Try to parse a header block (opening `===`, name/markers, closing `===`) starting at
 /// `lines[start_line]`. Returns the parsed header and the line index after the closing `===`,
 /// or `None` if `lines[start_line]` isn't a matching `===` delimiter.
@@ -1430,6 +1413,12 @@ fn parse_header(
             break;
         }
         let trimmed = lines[line_num].trim();
+        // Reject a blank line in the name region so a literal `===` inside a
+        // test body can't be mistaken for an opening delimiter. Blank lines
+        // between markers are allowed as visual separators.
+        if trimmed.is_empty() && !seen_marker {
+            return None;
+        }
         match trimmed.split('(').next().unwrap() {
             ":skip" => (seen_marker, seen_skip) = (true, true),
             ":platform" => {
@@ -1454,20 +1443,49 @@ fn parse_header(
                 }
             }
             ":cst" => (seen_marker, cst) = (true, true),
-            _ if !seen_marker => test_name.push_str(lines[line_num]),
-            _ => {}
+            _ if !seen_marker => {
+                // This line is part of the test name. If it contains a token that
+                // looks like an attribute marker, warn the user.
+                let mut warned = false;
+                for token in trimmed.split_whitespace() {
+                    if let Some(attr) = known_attribute(token) {
+                        warn!(
+                            "Test header line `{trimmed}` contains `{attr}`, \
+                             which looks like a test attribute but won't be \
+                             recognized as one. Attributes must appear on \
+                             their own line(s) below the test name."
+                        );
+                        warned = true;
+                    }
+                }
+                // A line that is itself a single `:` prefixed token and didn't
+                // match any known marker is most likely a typo'd attribute.
+                if !warned && trimmed.starts_with(':') && !trimmed.contains(char::is_whitespace) {
+                    warn!("Test header line `{trimmed}` looks like a test attribute but isn't.");
+                }
+                test_name.push_str(lines[line_num]);
+            }
+            _ => {
+                // In the marker region, lines that start with `:` but don't
+                // match any known marker are most likely a typo.
+                if trimmed.starts_with(':') {
+                    warn!("Test header line `{trimmed}` looks like a test attribute but isn't.");
+                }
+            }
         }
         line_num += 1;
     }
 
     if line_num >= lines.len() {
+        warn!("No closing `===` line found for {}", test_name.trim_end());
         return None; // No closing `===` line found.
     }
 
     let expectation = match (seen_skip, seen_error) {
         (true, true) => {
             warn!(
-                "Test '{test_name}' specifies both `:skip` and `:error`. The `:error` attribute will be dropped."
+                "Test '{}' specifies both `:skip` and `:error`. The `:error` attribute will be dropped.",
+                test_name.trim_end()
             );
             TestExpectation::Skip
         }
@@ -1582,7 +1600,9 @@ fn build_test_entry(
             && suffix_matches(first_suffix, suffix)
         {
             let total_len = delim_len + suffix.len();
-            if total_len > best_total_len {
+            // For ties prefer the later candidate, as an earlier same-length
+            // `---` is a literal in the input.
+            if total_len >= best_total_len {
                 best_divider = Some((delim_len, j));
                 best_total_len = total_len;
             }
@@ -1760,6 +1780,106 @@ abc
                         file_name: None,
                     },
                 ],
+                file_path: None,
+            }
+        );
+    }
+
+    #[test]
+    fn test_parse_test_content_with_equals_in_source_code() {
+        // A literal `===` inside a test body must not be mistaken for an
+        // opening header
+        let entry = parse_test_content(
+            "the-filename".to_string(),
+            r"
+==========
+First
+==========
+a
+===
+b
+---
+(a)
+
+==========
+Second
+==========
+c
+---
+(c)
+        "
+            .trim(),
+            None,
+        );
+
+        assert_eq!(
+            entry,
+            TestEntry::Group {
+                name: "the-filename".to_string(),
+                children: vec![
+                    TestEntry::Example {
+                        name: "First".to_string(),
+                        input: b"a\n===\nb".to_vec(),
+                        output: "(a)".to_string(),
+                        header_delim_len: 10,
+                        divider_delim_len: 3,
+                        has_fields: false,
+                        attributes_str: String::new(),
+                        attributes: TestAttributes::default(),
+                        file_name: None,
+                    },
+                    TestEntry::Example {
+                        name: "Second".to_string(),
+                        input: b"c".to_vec(),
+                        output: "(c)".to_string(),
+                        header_delim_len: 10,
+                        divider_delim_len: 3,
+                        has_fields: false,
+                        attributes_str: String::new(),
+                        attributes: TestAttributes::default(),
+                        file_name: None,
+                    },
+                ],
+                file_path: None,
+            }
+        );
+    }
+
+    #[test]
+    fn test_parse_test_content_with_tied_divider_length() {
+        // When two `---` lines in a body have the same length, the real
+        // divider is the last one.
+        let entry = parse_test_content(
+            "the-filename".to_string(),
+            r"
+==========
+Tied dashes
+==========
+a
+---
+b
+---
+(c)
+        "
+            .trim(),
+            None,
+        );
+
+        assert_eq!(
+            entry,
+            TestEntry::Group {
+                name: "the-filename".to_string(),
+                children: vec![TestEntry::Example {
+                    name: "Tied dashes".to_string(),
+                    input: b"a\n---\nb".to_vec(),
+                    output: "(c)".to_string(),
+                    header_delim_len: 10,
+                    divider_delim_len: 3,
+                    has_fields: false,
+                    attributes_str: String::new(),
+                    attributes: TestAttributes::default(),
+                    file_name: None,
+                }],
                 file_path: None,
             }
         );
@@ -2329,7 +2449,6 @@ Test with cst marker
             update: false,
             open_log: false,
             languages,
-            color: true,
             show_fields: false,
             overview_only: false,
         }
@@ -2356,7 +2475,7 @@ Test with cst marker
             }],
         };
 
-        let mut test_summary = TestSummary::new(true, TestStats::All, false, false, false);
+        let mut test_summary = TestSummary::new(TestStats::All, false, false, false);
         let mut corrected_entries = Vec::new();
         run_tests(
             &mut parser,
@@ -2486,7 +2605,7 @@ Test with cst marker
             ],
         };
 
-        let mut test_summary = TestSummary::new(true, TestStats::All, false, false, false);
+        let mut test_summary = TestSummary::new(TestStats::All, false, false, false);
         let mut corrected_entries = Vec::new();
         run_tests(
             &mut parser,

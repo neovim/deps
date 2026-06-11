@@ -300,7 +300,11 @@ const TSRange *ts_parser_included_ranges(
  * 2. [`payload`]: An arbitrary pointer that will be passed to each invocation
  *    of the [`read`] function.
  * 3. [`encoding`]: An indication of how the text is encoded. Either
- *    `TSInputEncodingUTF8` or `TSInputEncodingUTF16`.
+ *    `TSInputEncodingUTF8`, `TSInputEncodingUTF16LE`, `TSInputEncoding16BE`,
+ *    or `TSInputEncodingCustom`.
+ * 4. [`decode`]: A function to read one code point from the given input. This
+ *    function should return the number of bytes consumed and write the code point
+ *    to the [`code_point`] pointer, or write -1 if the input is invalid.
  *
  * This function returns a syntax tree on success, and `NULL` on failure. There
  * are two possible reasons for failure:
@@ -313,6 +317,8 @@ const TSRange *ts_parser_included_ranges(
  * [`payload`]: TSInput::payload
  * [`encoding`]: TSInput::encoding
  * [`bytes_read`]: TSInput::read
+ * [`decode`]: TSInput::decode
+ * [`code_point`]: TSDecodeFunction::code_point
  */
 TSTree *ts_parser_parse(
   TSParser *self,
@@ -1089,7 +1095,7 @@ void ts_query_cursor_set_match_limit(TSQueryCursor *self, uint32_t limit);
 /**
  * Set the range of bytes in which the query will be executed.
  *
- * The query cursor will return matches that intersect with the given point range.
+ * The query cursor will return matches that intersect with the given byte range.
  * This means that a match may be returned even if some of its captures fall
  * outside the specified range, as long as at least part of the match
  * overlaps with the range.
@@ -1097,6 +1103,9 @@ void ts_query_cursor_set_match_limit(TSQueryCursor *self, uint32_t limit);
  * For example, if a query pattern matches a node that spans a larger area
  * than the specified range, but part of that node intersects with the range,
  * the entire match will be returned.
+ *
+ * NOTE: An `end_byte` of zero is interpreted as `UINT32_MAX`, making the range
+ * unbounded.
  *
  * This will return `false` if the start byte is greater than the end byte, otherwise
  * it will return `true`.
@@ -1115,6 +1124,9 @@ bool ts_query_cursor_set_byte_range(TSQueryCursor *self, uint32_t start_byte, ui
  * than the specified range, but part of that node intersects with the range,
  * the entire match will be returned.
  *
+ * NOTE: An `end_point` of `(0, 0)` is interpreted as `POINT_MAX`, making the
+ * range unbounded.
+ *
  * This will return `false` if the start point is greater than the end point, otherwise
  * it will return `true`.
  */
@@ -1128,6 +1140,9 @@ bool ts_query_cursor_set_point_range(TSQueryCursor *self, TSPoint start_point, T
  * matches where _all_ nodes are _fully_ contained within the given range. Both functions
  * can be used together, e.g. to search for any matches that intersect line 5000, as
  * long as they are fully contained within lines 4500-5500
+ *
+ * NOTE: An `end_byte` of zero is interpreted as `UINT32_MAX`, making the range
+ * unbounded.
  */
 bool ts_query_cursor_set_containing_byte_range(TSQueryCursor *self, uint32_t start_byte, uint32_t end_byte);
 
@@ -1139,6 +1154,9 @@ bool ts_query_cursor_set_containing_byte_range(TSQueryCursor *self, uint32_t sta
  * matches where _all_ nodes are _fully_ contained within the given range. Both functions
  * can be used together, e.g. to search for any matches that intersect line 5000, as
  * long as they are fully contained within lines 4500-5500
+ *
+ * NOTE: An `end_point` of `(0, 0)` is interpreted as `POINT_MAX`, making the
+ * range unbounded.
  */
 bool ts_query_cursor_set_containing_point_range(TSQueryCursor *self, TSPoint start_point, TSPoint end_point);
 
