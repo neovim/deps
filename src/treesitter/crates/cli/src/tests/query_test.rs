@@ -1594,6 +1594,148 @@ fn test_query_matches_with_leading_zero_or_more_repeated_leaf_nodes() {
 }
 
 #[test]
+fn test_matches_with_anchor_sibling_inside_parent() {
+    allocations::record(|| {
+        let language = get_language("rust");
+
+        let query = Query::new(
+            &language,
+            "
+            (source_file
+                (line_comment)
+                .
+                (function_item
+                    name: (identifier) @name)
+            )",
+        )
+        .unwrap();
+
+        assert_query_matches(
+            &language,
+            &query,
+            "
+            // A
+            fn a() {}
+
+            // B
+            fn b() {}
+            ",
+            &[(0, vec![("name", "a")]), (0, vec![("name", "b")])],
+        );
+    });
+}
+
+#[test]
+fn test_matches_with_anchor_sibling_with_quantifier_inside_parent() {
+    allocations::record(|| {
+        let language = get_language("rust");
+
+        let query = Query::new(
+            &language,
+            "
+            (source_file
+                (line_comment)+
+                .
+                (function_item
+                    name: (identifier) @name)
+            )",
+        )
+        .unwrap();
+
+        assert_query_matches(
+            &language,
+            &query,
+            "
+            // A
+            fn a() {}
+
+            // B
+            fn b() {}
+            ",
+            &[(0, vec![("name", "a")]), (0, vec![("name", "b")])],
+        );
+    });
+}
+
+#[test]
+fn test_matches_with_anchor_sibling_with_quantifier_captured_inside_parent() {
+    allocations::record(|| {
+        let language = get_language("rust");
+
+        let query = Query::new(
+            &language,
+            "
+            (source_file
+                (line_comment)+ @doc
+                .
+                (function_item
+                    name: (identifier) @name)
+            )",
+        )
+        .unwrap();
+
+        assert_query_matches(
+            &language,
+            &query,
+            "
+            // A
+            fn a() {}
+
+            // B
+            fn b() {}
+            ",
+            &[
+                (0, vec![("doc", "// A"), ("name", "a")]),
+                (0, vec![("doc", "// B"), ("name", "b")]),
+            ],
+        );
+    });
+}
+
+#[test]
+fn test_matches_anchored_quantified_sibling_inside_parent() {
+    allocations::record(|| {
+        let language = get_language("c");
+        let query = Query::new(
+            &language,
+            "(translation_unit (comment)* @comment . (declaration) @decl)",
+        )
+        .unwrap();
+        assert_query_matches(
+            &language,
+            &query,
+            "
+void foo() {}
+
+// this one has
+// two comments
+extern int baz;
+
+// this one has a comment
+extern int bar;
+",
+            &[
+                (
+                    0,
+                    vec![
+                        ("comment", "// this one has"),
+                        ("comment", "// two comments"),
+                        ("decl", "extern int baz;"),
+                    ],
+                ),
+                (
+                    0,
+                    vec![
+                        ("comment", "// this one has a comment"),
+                        ("decl", "extern int bar;"),
+                    ],
+                ),
+            ],
+        );
+    });
+}
+
+#[test]
 fn test_query_matches_with_trailing_optional_nodes() {
     allocations::record(|| {
         let language = get_language("javascript");
@@ -4263,6 +4405,54 @@ fn test_query_disable_pattern() {
                 (3, vec![("body", "{ constructor() {} }")]),
                 (1, vec![("body", "{ return 1; }")]),
             ],
+        );
+    });
+}
+
+#[test]
+fn test_query_deep_clone() {
+    allocations::record(|| {
+        let language = get_language("javascript");
+        let query = Query::new(
+            &language,
+            "
+                (function_declaration
+                    name: (identifier) @name)
+                (function_declaration
+                    body: (statement_block) @body)
+            ",
+        )
+        .unwrap();
+
+        let mut clone = query.deep_clone();
+        clone.disable_pattern(1);
+
+        let source = "function foo() { return 1; }";
+        let mut parser = Parser::new();
+        parser.set_language(&language).unwrap();
+        let tree = parser.parse(source, None).unwrap();
+        let mut cursor = QueryCursor::new();
+
+        // The clone with pattern 1 disabled only produces the @name match.
+        let clone_matches = collect_matches(
+            cursor.matches(&clone, tree.root_node(), source.as_bytes()),
+            &clone,
+            source,
+        );
+        assert_eq!(clone_matches, &[(0, vec![("name", "foo")])]);
+
+        // The original is unaffected and still produces both @name and @body.
+        let original_matches = collect_matches(
+            cursor.matches(&query, tree.root_node(), source.as_bytes()),
+            &query,
+            source,
+        );
+        assert_eq!(
+            original_matches,
+            &[
+                (0, vec![("name", "foo")]),
+                (1, vec![("body", "{ return 1; }")]),
+            ]
         );
     });
 }

@@ -3180,6 +3180,39 @@ void ts_query_delete(TSQuery *self) {
   }
 }
 
+TSQuery *ts_query_copy(const TSQuery *self) {
+  TSQuery *copy = ts_malloc(sizeof(TSQuery));
+  *copy = (TSQuery) {
+    .captures = symbol_table_new(),
+    .predicate_values = symbol_table_new(),
+    .language = ts_language_copy(self->language),
+    .wildcard_root_pattern_count = self->wildcard_root_pattern_count,
+  };
+
+  array_assign(&copy->steps, &self->steps);
+  array_assign(&copy->pattern_map, &self->pattern_map);
+  array_assign(&copy->predicate_steps, &self->predicate_steps);
+  array_assign(&copy->patterns, &self->patterns);
+  array_assign(&copy->step_offsets, &self->step_offsets);
+  array_assign(&copy->negated_fields, &self->negated_fields);
+  array_assign(&copy->string_buffer, &self->string_buffer);
+  array_assign(&copy->repeat_symbols_with_rootless_patterns, &self->repeat_symbols_with_rootless_patterns);
+  array_assign(&copy->captures.characters, &self->captures.characters);
+  array_assign(&copy->captures.slices, &self->captures.slices);
+  array_assign(&copy->predicate_values.characters, &self->predicate_values.characters);
+  array_assign(&copy->predicate_values.slices, &self->predicate_values.slices);
+
+  array_assign(&copy->capture_quantifiers, &self->capture_quantifiers);
+  for (uint32_t i = 0; i < copy->capture_quantifiers.size; i++) {
+    CaptureQuantifiers *dst = array_get(&copy->capture_quantifiers, i);
+    const CaptureQuantifiers *src = array_get(&self->capture_quantifiers, i);
+    *dst = capture_quantifiers_new();
+    array_assign(dst, src);
+  }
+
+  return copy;
+}
+
 uint32_t ts_query_pattern_count(const TSQuery *self) {
   return self->patterns.size;
 }
@@ -3287,12 +3320,18 @@ bool ts_query__step_is_fallible(
   const TSQuery *self,
   uint16_t step_index
 ) {
-  ts_assert((uint32_t)step_index + 1 < self->steps.size);
+  unsigned i = 1;
   QueryStep *step = array_get(&self->steps, step_index);
-  QueryStep *next_step = array_get(&self->steps, step_index + 1);
+  QueryStep *next_step;
+  do {
+    ts_assert((uint32_t)step_index + i < self->steps.size);
+    next_step = array_get(&self->steps, step_index + i);
+    i++;
+  } while (next_step->is_pass_through);
   return (
     next_step->depth != PATTERN_DONE_MARKER &&
-    next_step->depth > step->depth &&
+    (next_step->depth > step->depth ||
+        (next_step->depth == step->depth && next_step->is_immediate)) &&
     (!next_step->parent_pattern_guaranteed || step->symbol == WILDCARD_SYMBOL)
   );
 }
@@ -4372,7 +4411,10 @@ static inline bool ts_query_cursor__advance(
               &right_contains_left
             );
             if (left_contains_right) {
-              if (state->step_index == other_state->step_index) {
+              if (
+                state->step_index == other_state->step_index &&
+                (other_state->seeking_immediate_match || !state->seeking_immediate_match)
+              ) {
                 LOG(
                   "  drop shorter state. pattern: %u, step_index: %u\n",
                   state->pattern_index,
@@ -4386,7 +4428,10 @@ static inline bool ts_query_cursor__advance(
               other_state->has_in_progress_alternatives = true;
             }
             if (right_contains_left) {
-              if (state->step_index == other_state->step_index) {
+              if (
+                state->step_index == other_state->step_index &&
+                (state->seeking_immediate_match || !other_state->seeking_immediate_match)
+              ) {
                 LOG(
                   "  drop shorter state. pattern: %u, step_index: %u\n",
                   state->pattern_index,

@@ -14,7 +14,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6.0.3
+        uses: actions/checkout@v7.0.0
+        with:
+          persist-credentials: true
+          ref: ${{ github.event.pull_request.base.ref }}
 
       - name: Create app token
         uses: actions/create-github-app-token@v3

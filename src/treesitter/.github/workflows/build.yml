@@ -73,7 +73,7 @@ jobs:
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v6.0.3
+      uses: actions/checkout@v7.0.0
 
     - name: Set up cross-compilation
       if: matrix.cross
@@ -211,7 +211,7 @@ jobs:
         make -j CFLAGS="$CFLAGS" CC=$CC AR=$AR
       env:
         PLATFORM: ${{ matrix.platform }}
-        CFLAGS: -g -Werror -Wall -Wextra -Wshadow -Wpedantic -Werror=incompatible-pointer-types
+        CFLAGS: -g -Werror -Wall -Wextra -Wshadow -Wpedantic -Werror=incompatible-pointer-types -Werror=strict-aliasing -Wstrict-aliasing=2
 
     - name: Build C library (CMake)
       if: "!matrix.cross && !matrix.vm"
@@ -235,7 +235,7 @@ jobs:
 
     - name: Build C library and Rust crate (illumos gmake)
       if: matrix.platform == 'illumos-x64'
-      uses: vmactions/omnios-vm@v1
+      uses: vmactions/omnios-vm@v1.3.3
       with:
         release: r151056-build
         copyback: false

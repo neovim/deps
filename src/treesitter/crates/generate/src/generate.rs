@@ -1,9 +1,10 @@
 use std::collections::BTreeMap;
+use std::path::PathBuf;
 #[cfg(feature = "load")]
 use std::{
     env, fs,
     io::Write,
-    path::{Path, PathBuf},
+    path::Path,
     process::{Command, Stdio},
 };
 
@@ -92,18 +93,18 @@ pub enum GenerateError {
     SuperTypeCycle(#[from] SuperTypeCycleError),
 }
 
-#[derive(Debug, Error, Serialize, Deserialize)]
+#[derive(Debug, Error)]
 pub struct IoError {
-    pub error: String,
-    pub path: Option<String>,
+    pub error: std::io::Error,
+    pub path: Option<PathBuf>,
 }
 
 #[cfg(feature = "load")]
 impl IoError {
-    fn new(error: &std::io::Error, path: Option<&Path>) -> Self {
+    fn new(error: std::io::Error, path: Option<&Path>) -> Self {
         Self {
-            error: error.to_string(),
-            path: path.map(|p| p.to_string_lossy().to_string()),
+            error,
+            path: path.map(Path::to_path_buf),
         }
     }
 }
@@ -112,9 +113,41 @@ impl std::fmt::Display for IoError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.error)?;
         if let Some(ref path) = self.path {
-            write!(f, " ({path})")?;
+            write!(f, " ({})", path.display())?;
         }
         Ok(())
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+struct IoErrorRepr {
+    message: String,
+    raw_os_error: Option<i32>,
+    path: Option<PathBuf>,
+}
+
+impl Serialize for IoError {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        IoErrorRepr {
+            message: self.error.to_string(),
+            raw_os_error: self.error.raw_os_error(),
+            path: self.path.clone(),
+        }
+        .serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for IoError {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let repr = IoErrorRepr::deserialize(deserializer)?;
+        let error = repr.raw_os_error.map_or_else(
+            || std::io::Error::other(repr.message),
+            std::io::Error::from_raw_os_error,
+        );
+        Ok(Self {
+            error,
+            path: repr.path,
+        })
     }
 }
 
@@ -215,6 +248,62 @@ impl Default for OptLevel {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum Diagnostic {
+    UnnecessaryConflicts(Vec<Vec<String>>),
+    UnaryChoice { name: Option<String> },
+    UnarySeq { name: Option<String> },
+    EmptyStringMatch(String),
+    UnsupportedRegexFlag { flag: char, pattern: String },
+}
+
+impl std::fmt::Display for Diagnostic {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::UnnecessaryConflicts(conflicts) => {
+                writeln!(f, "unnecessary conflicts:")?;
+                for (i, conflict) in conflicts.iter().enumerate() {
+                    write!(f, "  ")?;
+                    for (j, symbol) in conflict.iter().enumerate() {
+                        write!(f, "`{symbol}`")?;
+                        if j < conflict.len() - 1 {
+                            write!(f, ", ")?;
+                        }
+                    }
+                    if i < conflicts.len() - 1 {
+                        writeln!(f)?;
+                    }
+                }
+            }
+            Self::UnaryChoice { name } => {
+                write!(
+                    f,
+                    "rule {} contains a `choice` rule with a single element. this is unnecessary.",
+                    name.as_deref().unwrap_or("<ANONYMOUS>")
+                )?;
+            }
+            Self::UnarySeq { name } => {
+                write!(
+                    f,
+                    "rule {} contains a `seq` rule with a single element. this is unnecessary.",
+                    name.as_deref().unwrap_or("<ANONYMOUS>")
+                )?;
+            }
+            Self::EmptyStringMatch(rule) => {
+                write!(
+                    f,
+                    "named extra rule `{rule}` matches the empty string. \
+                     inline this to avoid infinite loops while parsing.",
+                )?;
+            }
+            Self::UnsupportedRegexFlag { flag, pattern } => {
+                write!(f, "unsupported regex flag `{flag}` in pattern `{pattern}`")?;
+            }
+        }
+        Ok(())
+    }
+}
+
 #[cfg(feature = "load")]
 #[expect(
     clippy::too_many_arguments,
@@ -229,6 +318,7 @@ pub fn generate_parser_in_directory<T, U, V>(
     js_runtime: Option<&str>,
     generate_parser: bool,
     optimizations: OptLevel,
+    diagnostics: &mut Vec<Diagnostic>,
 ) -> GenerateResult<()>
 where
     T: Into<PathBuf>,
@@ -245,7 +335,7 @@ where
             .map_err(|e| GenerateError::GrammarPath(e.to_string()))?
         {
             fs::create_dir_all(&path_buf)
-                .map_err(|e| GenerateError::IO(IoError::new(&e, Some(path_buf.as_path()))))?;
+                .map_err(|e| GenerateError::IO(IoError::new(e, Some(path_buf.as_path()))))?;
             repo_path = path_buf;
             repo_path.join("grammar.js")
         } else {
@@ -275,18 +365,19 @@ where
 
     // Ensure that the output directory exists
     fs::create_dir_all(&src_path)
-        .map_err(|e| GenerateError::IO(IoError::new(&e, Some(src_path.as_path()))))?;
+        .map_err(|e| GenerateError::IO(IoError::new(e, Some(src_path.as_path()))))?;
 
     if grammar_path.file_name().unwrap() != "grammar.json" {
         fs::write(src_path.join("grammar.json"), &grammar_json)
-            .map_err(|e| GenerateError::IO(IoError::new(&e, Some(src_path.as_path()))))?;
+            .map_err(|e| GenerateError::IO(IoError::new(e, Some(src_path.as_path()))))?;
     }
 
     // If our job is only to generate `grammar.json` and not `parser.c`, stop here.
-    let input_grammar = parse_grammar(&grammar_json)?;
+    let input_grammar = parse_grammar(&grammar_json, diagnostics)?;
 
     if !generate_parser {
-        let node_types_json = generate_node_types_from_grammar(&input_grammar)?.node_types_json;
+        let node_types_json =
+            generate_node_types_from_grammar(&input_grammar, diagnostics)?.node_types_json;
         write_file(&src_path.join("node-types.json"), node_types_json)?;
         return Ok(());
     }
@@ -303,12 +394,13 @@ where
         semantic_version.map(|v| (v.major as u8, v.minor as u8, v.patch as u8)),
         report_symbol_name,
         optimizations,
+        diagnostics,
     )?;
 
     write_file(&src_path.join("parser.c"), c_code)?;
     write_file(&src_path.join("node-types.json"), node_types_json)?;
     fs::create_dir_all(&header_path)
-        .map_err(|e| GenerateError::IO(IoError::new(&e, Some(header_path.as_path()))))?;
+        .map_err(|e| GenerateError::IO(IoError::new(e, Some(header_path.as_path()))))?;
     write_file(&header_path.join("alloc.h"), ALLOC_HEADER)?;
     write_file(&header_path.join("array.h"), ARRAY_HEADER)?;
     write_file(&header_path.join("parser.h"), PARSER_HEADER)?;
@@ -319,21 +411,26 @@ where
 pub fn generate_parser_for_grammar(
     grammar_json: &str,
     semantic_version: Option<(u8, u8, u8)>,
+    diagnostics: &mut Vec<Diagnostic>,
 ) -> GenerateResult<(String, String)> {
-    let input_grammar = parse_grammar(grammar_json)?;
+    let input_grammar = parse_grammar(grammar_json, diagnostics)?;
     let parser = generate_parser_for_grammar_with_opts(
         &input_grammar,
         LANGUAGE_VERSION,
         semantic_version,
         None,
         OptLevel::default(),
+        diagnostics,
     )?;
     Ok((input_grammar.name, parser.c_code))
 }
 
-fn generate_node_types_from_grammar(input_grammar: &InputGrammar) -> GenerateResult<JSONOutput> {
+fn generate_node_types_from_grammar(
+    input_grammar: &InputGrammar,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> GenerateResult<JSONOutput> {
     let (syntax_grammar, lexical_grammar, inlines, simple_aliases) =
-        prepare_grammar(input_grammar)?;
+        prepare_grammar(input_grammar, diagnostics)?;
     let variable_info =
         node_types::get_variable_info(&syntax_grammar, &lexical_grammar, &simple_aliases)?;
 
@@ -361,6 +458,7 @@ fn generate_parser_for_grammar_with_opts(
     semantic_version: Option<(u8, u8, u8)>,
     report_symbol_name: Option<&str>,
     optimizations: OptLevel,
+    diagnostics: &mut Vec<Diagnostic>,
 ) -> GenerateResult<GeneratedParser> {
     let JSONOutput {
         syntax_grammar,
@@ -370,7 +468,7 @@ fn generate_parser_for_grammar_with_opts(
         variable_info,
         #[cfg(feature = "load")]
         node_types_json,
-    } = generate_node_types_from_grammar(input_grammar)?;
+    } = generate_node_types_from_grammar(input_grammar, diagnostics)?;
     let supertype_symbol_map =
         node_types::get_supertype_symbol_map(&syntax_grammar, &simple_aliases, &variable_info);
     let tables = build_tables(
@@ -381,6 +479,7 @@ fn generate_parser_for_grammar_with_opts(
         &inlines,
         report_symbol_name,
         optimizations,
+        diagnostics,
     )?;
     let c_code = render_c_code(
         &input_grammar.name,
@@ -424,7 +523,7 @@ fn read_grammar_version(repo_path: &Path) -> Result<Option<Version>, ParseVersio
             .exists()
             .then(|| {
                 let contents = fs::read_to_string(path.as_path())
-                    .map_err(|e| ParseVersionError::IO(IoError::new(&e, Some(path.as_path()))))?;
+                    .map_err(|e| ParseVersionError::IO(IoError::new(e, Some(path.as_path()))))?;
                 serde_json::from_str::<TreeSitterJson>(&contents).map_err(|e| {
                     ParseVersionError::JSON(format!("Failed to parse `{}` -- {e}", path.display()))
                 })
@@ -459,7 +558,7 @@ pub fn load_grammar_file(
     match grammar_path.extension().and_then(|e| e.to_str()) {
         Some("js") => Ok(load_js_grammar_file(grammar_path, js_runtime)?),
         Some("json") => Ok(fs::read_to_string(grammar_path)
-            .map_err(|e| LoadGrammarError::IO(IoError::new(&e, Some(grammar_path))))?),
+            .map_err(|e| LoadGrammarError::IO(IoError::new(e, Some(grammar_path))))?),
         _ => Err(LoadGrammarError::FileExtension(grammar_path.to_owned()))?,
     }
 }
@@ -467,7 +566,7 @@ pub fn load_grammar_file(
 #[cfg(feature = "load")]
 fn load_js_grammar_file(grammar_path: &Path, js_runtime: Option<&str>) -> JSResult<String> {
     let grammar_path = dunce::canonicalize(grammar_path)
-        .map_err(|e| JSError::IO(IoError::new(&e, Some(grammar_path))))?;
+        .map_err(|e| JSError::IO(IoError::new(e, Some(grammar_path))))?;
 
     #[cfg(feature = "qjs-rt")]
     if js_runtime == Some("native") {
@@ -557,13 +656,13 @@ fn load_js_grammar_file(grammar_path: &Path, js_runtime: Option<&str>) -> JSResu
                 let mut stdout = std::io::stdout().lock();
                 stdout
                     .write_all(node_output.as_bytes())
-                    .map_err(|e| JSError::IO(IoError::new(&e, None)))?;
+                    .map_err(|e| JSError::IO(IoError::new(e, None)))?;
                 stdout
                     .write_all(b"\n")
-                    .map_err(|e| JSError::IO(IoError::new(&e, None)))?;
+                    .map_err(|e| JSError::IO(IoError::new(e, None)))?;
                 stdout
                     .flush()
-                    .map_err(|e| JSError::IO(IoError::new(&e, None)))?;
+                    .map_err(|e| JSError::IO(IoError::new(e, None)))?;
             }
 
             Ok(serde_json::to_string_pretty(&serde_json::from_str::<
@@ -583,7 +682,7 @@ fn load_js_grammar_file(grammar_path: &Path, js_runtime: Option<&str>) -> JSResu
 
 #[cfg(feature = "load")]
 pub fn write_file(path: &Path, body: impl AsRef<[u8]>) -> GenerateResult<()> {
-    fs::write(path, body).map_err(|e| GenerateError::IO(IoError::new(&e, Some(path))))
+    fs::write(path, body).map_err(|e| GenerateError::IO(IoError::new(e, Some(path))))
 }
 
 #[cfg(test)]
