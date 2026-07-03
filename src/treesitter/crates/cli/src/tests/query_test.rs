@@ -257,6 +257,51 @@ fn test_query_errors_on_invalid_syntax() {
 }
 
 #[test]
+fn test_query_errors_on_anchor_at_group_edge() {
+    allocations::record(|| {
+        let language = get_language("javascript");
+
+        // Anchors between siblings, or at the first/last position of a *node*
+        // pattern, are valid.
+        assert!(Query::new(&language, "((_) . (_))").is_ok());
+        assert!(Query::new(&language, "(program (_) (_) .)").is_ok());
+        assert!(Query::new(&language, "(program (_)* @x . (_))").is_ok());
+
+        // A `.` at the edge of a *group* is rejected. A group is not a node, so it
+        // has no last child to anchor, and there is no sibling within the group to
+        // anchor to.
+        assert_eq!(
+            Query::new(&language, "((_) .)").unwrap_err(),
+            QueryError {
+                row: 0,
+                offset: 5,
+                column: 5,
+                kind: QueryErrorKind::Syntax,
+                message: [
+                    "((_) .)", //
+                    "     ^"
+                ]
+                .join("\n")
+            }
+        );
+        assert_eq!(
+            Query::new(&language, "(program ((_)+ .)? (_))").unwrap_err(),
+            QueryError {
+                row: 0,
+                offset: 15,
+                column: 15,
+                kind: QueryErrorKind::Syntax,
+                message: [
+                    "(program ((_)+ .)? (_))", //
+                    "               ^"
+                ]
+                .join("\n")
+            }
+        );
+    });
+}
+
+#[test]
 fn test_query_errors_on_invalid_symbols() {
     allocations::record(|| {
         let language = get_language("javascript");
@@ -1178,6 +1223,81 @@ fn test_query_matches_with_immediate_siblings() {
 }
 
 #[test]
+fn test_query_matches_with_anchor_after_zero_quantifier() {
+    allocations::record(|| {
+        let language = get_language("javascript");
+        let query = Query::new(
+            &language,
+            "(program (comment)* @doc . (function_declaration name: (identifier) @name))",
+        )
+        .unwrap();
+
+        // No comments and the function is not the first child. An anchor after a
+        // zero-matched quantifier is vacuous, so the function still matches.
+        assert_query_matches(
+            &language,
+            &query,
+            "
+class X {}
+function foo() {}
+",
+            &[(0, vec![("name", "foo")])],
+        );
+
+        // With at least one comment the anchor applies, so the comments must
+        // immediately precede the function.
+        assert_query_matches(
+            &language,
+            &query,
+            "
+// c
+function foo() {}
+",
+            &[(0, vec![("doc", "// c"), ("name", "foo")])],
+        );
+    });
+}
+
+#[test]
+fn test_query_matches_with_last_child_anchor_after_optional() {
+    allocations::record(|| {
+        let language = get_language("c");
+        let query = Query::new(
+            &language,
+            "(preproc_if (preproc_def)+ @def . (preproc_else)? @else .)",
+        )
+        .unwrap();
+
+        // The optional `(preproc_else)?` is absent, so the trailing anchor's
+        // last-child requirement transfers to the last `preproc_def`. A trailing
+        // comment means the def is not the last child, so nothing matches.
+        assert_query_matches(
+            &language,
+            &query,
+            "
+#if X
+#define A
+// c
+#endif
+",
+            &[],
+        );
+
+        // With the def as the last child, the (else-less) match is allowed.
+        assert_query_matches(
+            &language,
+            &query,
+            "
+#if X
+#define A
+#endif
+",
+            &[(0, vec![("def", "#define A\n")])],
+        );
+    });
+}
+
+#[test]
 fn test_query_matches_with_last_named_child() {
     allocations::record(|| {
         let language = get_language("c");
@@ -1345,6 +1465,35 @@ fn test_query_matches_with_repeated_leaf_nodes() {
                 ),
                 (1, vec![("doc", "// eight"), ("name", "d")]),
             ],
+        );
+    });
+}
+
+#[test]
+fn test_query_matches_optional_capture_before_uncaptured_required_sibling() {
+    allocations::record(|| {
+        let language = get_language("rust");
+        let query = Query::new(&language, "(block (line_comment)? @doc (line_comment))").unwrap();
+
+        // The optional `(line_comment)? @doc` before an *uncaptured* required
+        // `(line_comment)` yields two candidate completions at the block:
+        //     - one where the optional captured `// a` (the required node is then `// b`),
+        //     - one where the optional matched zero (the required node absorbs `// a`,
+        //     leaving `@doc` unbound).
+        // The zero-match completion's captures are a strict subset of the other's, so the
+        // longest-match rule must drop it (there is exactly one match). This regressed when
+        // the dedup pass gained an early-break. Without the accompanying capture-position
+        // sort, the break skips the subset "loser" and it leaks as an extra empty match.
+        assert_query_matches(
+            &language,
+            &query,
+            "
+            fn f() {
+                // a
+                // b
+            }
+            ",
+            &[(0, vec![("doc", "// a")])],
         );
     });
 }
