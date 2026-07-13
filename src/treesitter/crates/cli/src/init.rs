@@ -836,6 +836,8 @@ fn generate_java_bindings(
     Ok(())
 }
 
+// TODO: remove old migrations
+
 fn update_package_json(path: &Path) -> Result<()> {
     let mut contents = fs::read_to_string(path)?
         .replace(
@@ -1220,7 +1222,15 @@ fn update_python_setup_py(path: &Path, language_name: &str, opts: &GenerateOpts)
             r#"startswith("cp"):"#,
             r#"startswith("cp") and not get_config_var("Py_GIL_DISABLED"):"#,
         );
-        write_file(path, contents)?;
+        write_file(path, &contents)?;
+    }
+    if !contents.contains("include(\"src/*.c\")") {
+        info!("Updating sdist file list in setup.py");
+        let contents = contents.replace(
+            "include(\"src/tree_sitter/*.h\")",
+            "include(\"src/tree_sitter/*.h\")\n        self.filelist.include(\"src/*.c\")",
+        );
+        write_file(path, &contents)?;
     }
     Ok(())
 }
@@ -1241,8 +1251,13 @@ fn update_swift_package(path: &Path) -> Result<()> {
             "atPath: \"src/scanner.c\"",
             "atPath: \"\\(dir)/src/scanner.c\"",
         )
-        .replace("version: \"0.8.0\")", "version: \"0.9.0\")")
-        .replace("(url:", "(name: \"SwiftTreeSitter\", url:");
+        .replace("version: \"0.8.0\")", "version: \"0.10.0\")")
+        .replace("version: \"0.9.0\")", "version: \"0.10.0\")")
+        .replace("(name: \"SwiftTreeSitter\", url:", "(url:")
+        .replace(
+            "    \"SwiftTreeSitter\"",
+            "    .product(name: \"SwiftTreeSitter\", package: \"swift-tree-sitter\")",
+        );
     if !replaced_contents.eq(&contents) {
         info!("Updating Package.swift");
         write_file(path, replaced_contents)?;
