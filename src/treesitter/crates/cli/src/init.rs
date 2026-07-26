@@ -1215,22 +1215,23 @@ fn update_python_setup_py(path: &Path, language_name: &str, opts: &GenerateOpts)
     if !contents.contains("build_ext") {
         info!("Replacing setup.py");
         generate_file(path, SETUP_PY_TEMPLATE, language_name, opts)?;
-    }
-    if !contents.contains(" and not get_config_var") {
-        info!("Updating Python free-threading support in setup.py");
-        contents = contents.replace(
-            r#"startswith("cp"):"#,
-            r#"startswith("cp") and not get_config_var("Py_GIL_DISABLED"):"#,
-        );
-        write_file(path, &contents)?;
-    }
-    if !contents.contains("include(\"src/*.c\")") {
-        info!("Updating sdist file list in setup.py");
-        let contents = contents.replace(
-            "include(\"src/tree_sitter/*.h\")",
-            "include(\"src/tree_sitter/*.h\")\n        self.filelist.include(\"src/*.c\")",
-        );
-        write_file(path, &contents)?;
+    } else {
+        if !contents.contains(" and not get_config_var") {
+            info!("Updating Python free-threading support in setup.py");
+            contents = contents.replace(
+                r#"startswith("cp"):"#,
+                r#"startswith("cp") and not get_config_var("Py_GIL_DISABLED"):"#,
+            );
+            write_file(path, &contents)?;
+        }
+        if !contents.contains("include(\"src/*.c\")") {
+            info!("Updating sdist file list in setup.py");
+            let contents = contents.replace(
+                "include(\"src/tree_sitter/*.h\")",
+                "include(\"src/tree_sitter/*.h\")\n        self.filelist.include(\"src/*.c\")",
+            );
+            write_file(path, &contents)?;
+        }
     }
     Ok(())
 }
@@ -1524,24 +1525,18 @@ fn generate_file(
         replacement = replacement
             .replace(
                 PARSER_URL_STRIPPED_PLACEHOLDER,
-                &repository.replace("https://", "").to_lowercase(),
+                &repository.replace("https://", ""),
             )
-            .replace(PARSER_URL_PLACEHOLDER, &repository.to_lowercase());
+            .replace(PARSER_URL_PLACEHOLDER, repository);
     } else {
         replacement = replacement
             .replace(
                 PARSER_URL_STRIPPED_PLACEHOLDER,
-                &format!(
-                    "github.com/tree-sitter/tree-sitter-{}",
-                    language_name.to_lowercase()
-                ),
+                &format!("github.com/tree-sitter/tree-sitter-{language_name}"),
             )
             .replace(
                 PARSER_URL_PLACEHOLDER,
-                &format!(
-                    "https://github.com/tree-sitter/tree-sitter-{}",
-                    language_name.to_lowercase()
-                ),
+                &format!("https://github.com/tree-sitter/tree-sitter-{language_name}"),
             );
     }
 
