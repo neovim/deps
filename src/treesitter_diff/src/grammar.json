@@ -73,6 +73,10 @@
         },
         {
           "type": "SYMBOL",
+          "name": "dissimilarity"
+        },
+        {
+          "type": "SYMBOL",
           "name": "old_file"
         },
         {
@@ -93,11 +97,23 @@
         },
         {
           "type": "SYMBOL",
+          "name": "change"
+        },
+        {
+          "type": "SYMBOL",
           "name": "context"
         },
         {
           "type": "SYMBOL",
           "name": "comment"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "special"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "unrecognized"
         }
       ]
     },
@@ -138,6 +154,10 @@
                     {
                       "type": "SYMBOL",
                       "name": "similarity"
+                    },
+                    {
+                      "type": "SYMBOL",
+                      "name": "dissimilarity"
                     }
                   ]
                 },
@@ -152,27 +172,36 @@
             "type": "CHOICE",
             "members": [
               {
-                "type": "SEQ",
+                "type": "CHOICE",
                 "members": [
                   {
+                    "type": "SEQ",
+                    "members": [
+                      {
+                        "type": "SYMBOL",
+                        "name": "old_file"
+                      },
+                      {
+                        "type": "PATTERN",
+                        "value": "\\r?\\n"
+                      },
+                      {
+                        "type": "SYMBOL",
+                        "name": "new_file"
+                      },
+                      {
+                        "type": "PATTERN",
+                        "value": "\\r?\\n"
+                      },
+                      {
+                        "type": "SYMBOL",
+                        "name": "hunks"
+                      }
+                    ]
+                  },
+                  {
                     "type": "SYMBOL",
-                    "name": "old_file"
-                  },
-                  {
-                    "type": "PATTERN",
-                    "value": "\\r?\\n"
-                  },
-                  {
-                    "type": "SYMBOL",
-                    "name": "new_file"
-                  },
-                  {
-                    "type": "PATTERN",
-                    "value": "\\r?\\n"
-                  },
-                  {
-                    "type": "SYMBOL",
-                    "name": "hunks"
+                    "name": "binary_patch"
                   }
                 ]
               },
@@ -182,6 +211,130 @@
             ]
           }
         ]
+      }
+    },
+    "binary_patch": {
+      "type": "PREC_RIGHT",
+      "value": 0,
+      "content": {
+        "type": "SEQ",
+        "members": [
+          {
+            "type": "SEQ",
+            "members": [
+              {
+                "type": "IMMEDIATE_TOKEN",
+                "content": {
+                  "type": "STRING",
+                  "value": "GIT"
+                }
+              },
+              {
+                "type": "STRING",
+                "value": "binary"
+              },
+              {
+                "type": "STRING",
+                "value": "patch"
+              }
+            ]
+          },
+          {
+            "type": "PATTERN",
+            "value": "\\r?\\n"
+          },
+          {
+            "type": "FIELD",
+            "name": "forward",
+            "content": {
+              "type": "SYMBOL",
+              "name": "binary_hunk"
+            }
+          },
+          {
+            "type": "CHOICE",
+            "members": [
+              {
+                "type": "FIELD",
+                "name": "reverse",
+                "content": {
+                  "type": "SYMBOL",
+                  "name": "binary_hunk"
+                }
+              },
+              {
+                "type": "BLANK"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "binary_hunk": {
+      "type": "PREC_RIGHT",
+      "value": 0,
+      "content": {
+        "type": "SEQ",
+        "members": [
+          {
+            "type": "CHOICE",
+            "members": [
+              {
+                "type": "IMMEDIATE_TOKEN",
+                "content": {
+                  "type": "STRING",
+                  "value": "literal"
+                }
+              },
+              {
+                "type": "IMMEDIATE_TOKEN",
+                "content": {
+                  "type": "STRING",
+                  "value": "delta"
+                }
+              }
+            ]
+          },
+          {
+            "type": "ALIAS",
+            "content": {
+              "type": "PATTERN",
+              "value": "\\d+"
+            },
+            "named": true,
+            "value": "size"
+          },
+          {
+            "type": "PATTERN",
+            "value": "\\r?\\n"
+          },
+          {
+            "type": "SYMBOL",
+            "name": "payload"
+          },
+          {
+            "type": "PATTERN",
+            "value": "\\r?\\n"
+          },
+          {
+            "type": "PREC_RIGHT",
+            "value": 0,
+            "content": {
+              "type": "REPEAT",
+              "content": {
+                "type": "PATTERN",
+                "value": "\\r?\\n"
+              }
+            }
+          }
+        ]
+      }
+    },
+    "payload": {
+      "type": "IMMEDIATE_TOKEN",
+      "content": {
+        "type": "PATTERN",
+        "value": "[A-Za-z][0-9A-Za-z!#$%&()*+\\-;<=>?@^_`{|}~]+(?:\\r?\\n[A-Za-z][0-9A-Za-z!#$%&()*+\\-;<=>?@^_`{|}~]+)*"
       }
     },
     "hunks": {
@@ -244,6 +397,24 @@
               "type": "CHOICE",
               "members": [
                 {
+                  "type": "ALIAS",
+                  "content": {
+                    "type": "SYMBOL",
+                    "name": "_hunk_addition"
+                  },
+                  "named": true,
+                  "value": "addition"
+                },
+                {
+                  "type": "ALIAS",
+                  "content": {
+                    "type": "SYMBOL",
+                    "name": "_hunk_deletion"
+                  },
+                  "named": true,
+                  "value": "deletion"
+                },
+                {
                   "type": "SYMBOL",
                   "name": "addition"
                 },
@@ -253,7 +424,19 @@
                 },
                 {
                   "type": "SYMBOL",
+                  "name": "change"
+                },
+                {
+                  "type": "SYMBOL",
                   "name": "context"
+                },
+                {
+                  "type": "SYMBOL",
+                  "name": "special"
+                },
+                {
+                  "type": "SYMBOL",
+                  "name": "unrecognized"
                 }
               ]
             },
@@ -360,8 +543,17 @@
           "type": "SEQ",
           "members": [
             {
-              "type": "STRING",
-              "value": "rename"
+              "type": "CHOICE",
+              "members": [
+                {
+                  "type": "STRING",
+                  "value": "rename"
+                },
+                {
+                  "type": "STRING",
+                  "value": "copy"
+                }
+              ]
             },
             {
               "type": "CHOICE",
@@ -481,6 +673,35 @@
         }
       ]
     },
+    "dissimilarity": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "IMMEDIATE_TOKEN",
+          "content": {
+            "type": "STRING",
+            "value": "dissimilarity"
+          }
+        },
+        {
+          "type": "STRING",
+          "value": "index"
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "PATTERN",
+            "value": "\\d+"
+          },
+          "named": true,
+          "value": "score"
+        },
+        {
+          "type": "STRING",
+          "value": "%"
+        }
+      ]
+    },
     "old_file": {
       "type": "SEQ",
       "members": [
@@ -546,6 +767,38 @@
               "type": "BLANK"
             }
           ]
+        }
+      ]
+    },
+    "_hunk_addition": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "IMMEDIATE_TOKEN",
+          "content": {
+            "type": "STRING",
+            "value": "+++"
+          }
+        },
+        {
+          "type": "PATTERN",
+          "value": "[^\\r\\n]+"
+        }
+      ]
+    },
+    "_hunk_deletion": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "IMMEDIATE_TOKEN",
+          "content": {
+            "type": "STRING",
+            "value": "---"
+          }
+        },
+        {
+          "type": "PATTERN",
+          "value": "[^\\r\\n]+"
         }
       ]
     },
@@ -620,6 +873,30 @@
               "content": {
                 "type": "STRING",
                 "value": "++++"
+              }
+            },
+            {
+              "type": "CHOICE",
+              "members": [
+                {
+                  "type": "PATTERN",
+                  "value": "[^\\r\\n]+"
+                },
+                {
+                  "type": "BLANK"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "SEQ",
+          "members": [
+            {
+              "type": "IMMEDIATE_TOKEN",
+              "content": {
+                "type": "STRING",
+                "value": ">"
               }
             },
             {
@@ -724,19 +1001,80 @@
               ]
             }
           ]
+        },
+        {
+          "type": "SEQ",
+          "members": [
+            {
+              "type": "IMMEDIATE_TOKEN",
+              "content": {
+                "type": "STRING",
+                "value": "<"
+              }
+            },
+            {
+              "type": "CHOICE",
+              "members": [
+                {
+                  "type": "PATTERN",
+                  "value": "[^\\r\\n]+"
+                },
+                {
+                  "type": "BLANK"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "change": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "IMMEDIATE_TOKEN",
+          "content": {
+            "type": "STRING",
+            "value": "!"
+          }
+        },
+        {
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "PATTERN",
+              "value": "[^\\r\\n]+"
+            },
+            {
+              "type": "BLANK"
+            }
+          ]
         }
       ]
     },
     "context": {
-      "type": "TOKEN",
-      "content": {
-        "type": "PREC",
-        "value": -1,
-        "content": {
-          "type": "PATTERN",
-          "value": "[^\\r\\n]+"
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "IMMEDIATE_TOKEN",
+          "content": {
+            "type": "STRING",
+            "value": " "
+          }
+        },
+        {
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "PATTERN",
+              "value": "[^\\r\\n]+"
+            },
+            {
+              "type": "BLANK"
+            }
+          ]
         }
-      }
+      ]
     },
     "comment": {
       "type": "SEQ",
@@ -762,6 +1100,41 @@
         }
       ]
     },
+    "special": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "IMMEDIATE_TOKEN",
+          "content": {
+            "type": "STRING",
+            "value": "\\"
+          }
+        },
+        {
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "PATTERN",
+              "value": "[^\\r\\n]+"
+            },
+            {
+              "type": "BLANK"
+            }
+          ]
+        }
+      ]
+    },
+    "unrecognized": {
+      "type": "TOKEN",
+      "content": {
+        "type": "PREC",
+        "value": -1,
+        "content": {
+          "type": "PATTERN",
+          "value": "[^\\r\\n]+"
+        }
+      }
+    },
     "linerange": {
       "type": "PATTERN",
       "value": "[-\\+]\\d+(,\\d+)?"
@@ -775,7 +1148,7 @@
     },
     "commit": {
       "type": "PATTERN",
-      "value": "[a-f0-9]{7,40}"
+      "value": "[a-f0-9]{4,64}"
     },
     "mode": {
       "type": "PATTERN",

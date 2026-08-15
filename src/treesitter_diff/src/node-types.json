@@ -20,6 +20,51 @@
     }
   },
   {
+    "type": "binary_hunk",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "payload",
+          "named": true
+        },
+        {
+          "type": "size",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "binary_patch",
+    "named": true,
+    "fields": {
+      "forward": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "binary_hunk",
+            "named": true
+          }
+        ]
+      },
+      "reverse": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "binary_hunk",
+            "named": true
+          }
+        ]
+      }
+    }
+  },
+  {
     "type": "block",
     "named": true,
     "fields": {},
@@ -32,7 +77,15 @@
           "named": true
         },
         {
+          "type": "binary_patch",
+          "named": true
+        },
+        {
           "type": "command",
+          "named": true
+        },
+        {
+          "type": "dissimilarity",
           "named": true
         },
         {
@@ -63,6 +116,11 @@
     }
   },
   {
+    "type": "change",
+    "named": true,
+    "fields": {}
+  },
+  {
     "type": "changes",
     "named": true,
     "fields": {},
@@ -75,11 +133,23 @@
           "named": true
         },
         {
+          "type": "change",
+          "named": true
+        },
+        {
           "type": "context",
           "named": true
         },
         {
           "type": "deletion",
+          "named": true
+        },
+        {
+          "type": "special",
+          "named": true
+        },
+        {
+          "type": "unrecognized",
           "named": true
         }
       ]
@@ -110,9 +180,29 @@
     "fields": {}
   },
   {
+    "type": "context",
+    "named": true,
+    "fields": {}
+  },
+  {
     "type": "deletion",
     "named": true,
     "fields": {}
+  },
+  {
+    "type": "dissimilarity",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": false,
+      "required": true,
+      "types": [
+        {
+          "type": "score",
+          "named": true
+        }
+      ]
+    }
   },
   {
     "type": "file_change",
@@ -285,6 +375,10 @@
           "named": true
         },
         {
+          "type": "change",
+          "named": true
+        },
+        {
           "type": "comment",
           "named": true
         },
@@ -294,6 +388,10 @@
         },
         {
           "type": "deletion",
+          "named": true
+        },
+        {
+          "type": "dissimilarity",
           "named": true
         },
         {
@@ -319,9 +417,30 @@
         {
           "type": "similarity",
           "named": true
+        },
+        {
+          "type": "special",
+          "named": true
+        },
+        {
+          "type": "unrecognized",
+          "named": true
         }
       ]
     }
+  },
+  {
+    "type": "special",
+    "named": true,
+    "fields": {}
+  },
+  {
+    "type": " ",
+    "named": false
+  },
+  {
+    "type": "!",
+    "named": false
   },
   {
     "type": "#",
@@ -368,11 +487,27 @@
     "named": false
   },
   {
+    "type": "<",
+    "named": false
+  },
+  {
+    "type": ">",
+    "named": false
+  },
+  {
     "type": "@@",
     "named": false
   },
   {
     "type": "Binary",
+    "named": false
+  },
+  {
+    "type": "GIT",
+    "named": false
+  },
+  {
+    "type": "\\",
     "named": false
   },
   {
@@ -384,15 +519,23 @@
     "named": true
   },
   {
+    "type": "binary",
+    "named": false
+  },
+  {
     "type": "commit",
     "named": true
   },
   {
-    "type": "context",
-    "named": true
+    "type": "copy",
+    "named": false
   },
   {
     "type": "deleted",
+    "named": false
+  },
+  {
+    "type": "delta",
     "named": false
   },
   {
@@ -401,6 +544,10 @@
   },
   {
     "type": "differ",
+    "named": false
+  },
+  {
+    "type": "dissimilarity",
     "named": false
   },
   {
@@ -424,6 +571,10 @@
     "named": true
   },
   {
+    "type": "literal",
+    "named": false
+  },
+  {
     "type": "mode",
     "named": false
   },
@@ -434,6 +585,14 @@
   {
     "type": "old",
     "named": false
+  },
+  {
+    "type": "patch",
+    "named": false
+  },
+  {
+    "type": "payload",
+    "named": true
   },
   {
     "type": "rename",
@@ -448,7 +607,15 @@
     "named": false
   },
   {
+    "type": "size",
+    "named": true
+  },
+  {
     "type": "to",
     "named": false
+  },
+  {
+    "type": "unrecognized",
+    "named": true
   }
 ]

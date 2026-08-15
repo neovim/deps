@@ -508,7 +508,7 @@ impl Language {
     /// Get the name of this language. This returns `None` in older parsers.
     #[doc(alias = "ts_language_name")]
     #[must_use]
-    pub fn name(&self) -> Option<&'static str> {
+    pub fn name(&self) -> Option<&str> {
         let ptr = unsafe { ffi::ts_language_name(self.0) };
         (!ptr.is_null()).then(|| unsafe { CStr::from_ptr(ptr) }.to_str().unwrap())
     }
@@ -582,7 +582,7 @@ impl Language {
     /// Get the name of the node kind for the given numerical id.
     #[doc(alias = "ts_language_symbol_name")]
     #[must_use]
-    pub fn node_kind_for_id(&self, id: u16) -> Option<&'static str> {
+    pub fn node_kind_for_id(&self, id: u16) -> Option<&str> {
         let ptr = unsafe { ffi::ts_language_symbol_name(self.0, id) };
         (!ptr.is_null()).then(|| unsafe { CStr::from_ptr(ptr) }.to_str().unwrap())
     }
@@ -631,7 +631,7 @@ impl Language {
     /// Get the field name for the given numerical id.
     #[doc(alias = "ts_language_field_name_for_id")]
     #[must_use]
-    pub fn field_name_for_id(&self, field_id: u16) -> Option<&'static str> {
+    pub fn field_name_for_id(&self, field_id: u16) -> Option<&str> {
         let ptr = unsafe { ffi::ts_language_field_name_for_id(self.0, field_id) };
         (!ptr.is_null()).then(|| unsafe { CStr::from_ptr(ptr) }.to_str().unwrap())
     }
@@ -670,14 +670,20 @@ impl Language {
     /// This returns `None` if state is invalid for this language.
     ///
     /// Iterating [`LookaheadIterator`] will yield valid symbols in the given
-    /// parse state. Newly created lookahead iterators will return the `ERROR`
-    /// symbol from [`LookaheadIterator::current_symbol`].
+    /// parse state. A newly created iterator is not positioned on a symbol, so
+    /// [`LookaheadIterator::current_symbol`] returns `None` until the first
+    /// [`Iterator::next`] call.
+    ///
+    /// The iterator retains the language, so the language may be dropped while
+    /// the iterator is still in use.
     ///
     /// Lookahead iterators can be useful to generate suggestions and improve
     /// syntax error diagnostics. To get symbols valid in an `ERROR` node, use the
-    /// lookahead iterator on its first leaf node state. For `MISSING` nodes, a
-    /// lookahead iterator created on the previous non-extra leaf node may be
-    /// appropriate.
+    /// lookahead iterator on its first leaf node state. For a missing node, use
+    /// the node's [`parse_state`](Node::parse_state). Keep in mind that lookahead
+    /// symbols are valid in that parse state, but are not necessarily valid
+    /// continuations in the context of the actual following token or guaranteed
+    /// to be considered during error recovery.
     #[doc(alias = "ts_lookahead_iterator_new")]
     #[must_use]
     pub fn lookahead_iterator(&self, state: u16) -> Option<LookaheadIterator> {
@@ -1621,7 +1627,7 @@ impl<'tree> Node<'tree> {
     /// Get this node's type as a string.
     #[doc(alias = "ts_node_type")]
     #[must_use]
-    pub fn kind(&self) -> &'static str {
+    pub fn kind(&self) -> &'tree str {
         unsafe { CStr::from_ptr(ffi::ts_node_type(self.0)) }
             .to_str()
             .unwrap()
@@ -1631,7 +1637,7 @@ impl<'tree> Node<'tree> {
     /// aliases as a string.
     #[doc(alias = "ts_node_grammar_type")]
     #[must_use]
-    pub fn grammar_name(&self) -> &'static str {
+    pub fn grammar_name(&self) -> &'tree str {
         unsafe { CStr::from_ptr(ffi::ts_node_grammar_type(self.0)) }
             .to_str()
             .unwrap()
@@ -1689,7 +1695,14 @@ impl<'tree> Node<'tree> {
         unsafe { ffi::ts_node_is_error(self.0) }
     }
 
-    /// Get this node's parse state.
+    /// Get the parse state immediately before this node.
+    ///
+    /// For a missing node, this is the state from the recovery path that was
+    /// selected by the parser. It can be used with
+    /// [`Language::lookahead_iterator`] to inspect the symbols that are valid in
+    /// that state. This does not necessarily include every symbol that could be
+    /// recovered by inserting a missing node, because the recovery process can
+    /// consider multiple stack versions.
     #[doc(alias = "ts_node_parse_state")]
     #[must_use]
     pub fn parse_state(&self) -> u16 {
@@ -1831,7 +1844,7 @@ impl<'tree> Node<'tree> {
     /// Get the field name of this node's child at the given index.
     #[doc(alias = "ts_node_field_name_for_child")]
     #[must_use]
-    pub fn field_name_for_child(&self, child_index: u32) -> Option<&'static str> {
+    pub fn field_name_for_child(&self, child_index: u32) -> Option<&'tree str> {
         unsafe {
             let ptr = ffi::ts_node_field_name_for_child(self.0, child_index);
             (!ptr.is_null()).then(|| CStr::from_ptr(ptr).to_str().unwrap())
@@ -1840,7 +1853,7 @@ impl<'tree> Node<'tree> {
 
     /// Get the field name of this node's named child at the given index.
     #[must_use]
-    pub fn field_name_for_named_child(&self, named_child_index: u32) -> Option<&'static str> {
+    pub fn field_name_for_named_child(&self, named_child_index: u32) -> Option<&'tree str> {
         unsafe {
             let ptr = ffi::ts_node_field_name_for_named_child(self.0, named_child_index);
             (!ptr.is_null()).then(|| CStr::from_ptr(ptr).to_str().unwrap())
@@ -2165,7 +2178,7 @@ impl<'tree> TreeCursor<'tree> {
     /// Get the field name of this tree cursor's current node.
     #[doc(alias = "ts_tree_cursor_current_field_name")]
     #[must_use]
-    pub fn field_name(&self) -> Option<&'static str> {
+    pub fn field_name(&self) -> Option<&'tree str> {
         unsafe {
             let ptr = ffi::ts_tree_cursor_current_field_name(&raw const self.0);
             (!ptr.is_null()).then(|| CStr::from_ptr(ptr).to_str().unwrap())
@@ -2328,22 +2341,34 @@ impl LookaheadIterator {
     }
 
     /// Get the current symbol of the lookahead iterator.
+    ///
+    /// Returns `None` if the iterator is not positioned on a symbol:
+    ///
+    /// - Before the first [`Iterator::next`] call
+    /// - After the iterator is exhausted
+    /// - After a [`Self::reset`] or [`Self::reset_state`] call
     #[doc(alias = "ts_lookahead_iterator_current_symbol")]
     #[must_use]
-    pub fn current_symbol(&self) -> u16 {
-        unsafe { ffi::ts_lookahead_iterator_current_symbol(self.0.as_ptr()) }
+    pub fn current_symbol(&self) -> Option<u16> {
+        // C signals "not positioned" through a null symbol name.
+        let name = unsafe { ffi::ts_lookahead_iterator_current_symbol_name(self.0.as_ptr()) };
+        (!name.is_null())
+            .then(|| unsafe { ffi::ts_lookahead_iterator_current_symbol(self.0.as_ptr()) })
     }
 
     /// Get the current symbol name of the lookahead iterator.
+    ///
+    /// Returns `None` if the iterator is not positioned on a symbol.
     #[doc(alias = "ts_lookahead_iterator_current_symbol_name")]
     #[must_use]
-    pub fn current_symbol_name(&self) -> &'static str {
+    pub fn current_symbol_name(&self) -> Option<&str> {
         unsafe {
-            CStr::from_ptr(ffi::ts_lookahead_iterator_current_symbol_name(
-                self.0.as_ptr(),
-            ))
-            .to_str()
-            .unwrap()
+            let name = ffi::ts_lookahead_iterator_current_symbol_name(self.0.as_ptr());
+            if name.is_null() {
+                None
+            } else {
+                Some(CStr::from_ptr(name).to_str().unwrap())
+            }
         }
     }
 
@@ -2366,30 +2391,43 @@ impl LookaheadIterator {
     }
 
     /// Iterate symbol names.
-    pub fn iter_names(&mut self) -> impl Iterator<Item = &'static str> + '_ {
+    pub fn iter_names(&mut self) -> impl iter::FusedIterator<Item = &str> + '_ {
         LookaheadNamesIterator(self)
     }
 }
 
-impl Iterator for LookaheadNamesIterator<'_> {
-    type Item = &'static str;
+impl<'a> Iterator for LookaheadNamesIterator<'a> {
+    type Item = &'a str;
 
     #[doc(alias = "ts_lookahead_iterator_next")]
     fn next(&mut self) -> Option<Self::Item> {
-        unsafe { ffi::ts_lookahead_iterator_next(self.0.0.as_ptr()) }
-            .then(|| self.0.current_symbol_name())
+        let ptr = self.0.0.as_ptr();
+        // SAFETY: The borrow keeps the iterator (and the language refcount it holds)
+        // alive for `'a`. The name is non-null because the iterator is positioned
+        // whenever `next` returns `true`.
+        unsafe {
+            ffi::ts_lookahead_iterator_next(ptr).then(|| {
+                let name = ffi::ts_lookahead_iterator_current_symbol_name(ptr);
+                debug_assert!(!name.is_null());
+                CStr::from_ptr(name).to_str().unwrap()
+            })
+        }
     }
 }
+
+impl iter::FusedIterator for LookaheadNamesIterator<'_> {}
 
 impl Iterator for LookaheadIterator {
     type Item = u16;
 
     #[doc(alias = "ts_lookahead_iterator_next")]
     fn next(&mut self) -> Option<Self::Item> {
-        // the first symbol is always `0` so we can safely skip it
-        unsafe { ffi::ts_lookahead_iterator_next(self.0.as_ptr()) }.then(|| self.current_symbol())
+        unsafe { ffi::ts_lookahead_iterator_next(self.0.as_ptr()) }
+            .then(|| unsafe { ffi::ts_lookahead_iterator_current_symbol(self.0.as_ptr()) })
     }
 }
+
+impl iter::FusedIterator for LookaheadIterator {}
 
 impl Drop for LookaheadIterator {
     #[doc(alias = "ts_lookahead_iterator_delete")]

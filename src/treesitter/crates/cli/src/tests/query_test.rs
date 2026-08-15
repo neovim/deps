@@ -416,6 +416,16 @@ fn test_query_errors_on_invalid_symbols() {
                 message: "\"fakefield\"".to_string()
             }
         );
+        assert_eq!(
+            Query::new(&language, "(MISS)").unwrap_err(),
+            QueryError {
+                row: 0,
+                offset: 1,
+                column: 1,
+                kind: QueryErrorKind::NodeType,
+                message: "\"MISS\"".to_string(),
+            }
+        );
     });
 }
 
@@ -1254,6 +1264,48 @@ function foo() {}
 function foo() {}
 ",
             &[(0, vec![("doc", "// c"), ("name", "foo")])],
+        );
+    });
+}
+
+#[test]
+fn test_query_matches_with_anchor_after_nested_zero_quantifier() {
+    allocations::record(|| {
+        let language = get_language("javascript");
+        let query = Query::new(
+            &language,
+            r#"
+            (_
+              (field_definition
+                property: (_) @name
+                value: (_)? @value
+              ) @field
+              .
+              ";" @semicolon
+            )
+            "#,
+        )
+        .unwrap();
+
+        assert_query_matches(
+            &language,
+            &query,
+            "class Foo { bar; baz = 0; }",
+            &[
+                (
+                    0,
+                    vec![("field", "bar"), ("name", "bar"), ("semicolon", ";")],
+                ),
+                (
+                    0,
+                    vec![
+                        ("field", "baz = 0"),
+                        ("name", "baz"),
+                        ("value", "0"),
+                        ("semicolon", ";"),
+                    ],
+                ),
+            ],
         );
     });
 }

@@ -39,6 +39,181 @@ index dc36969..f37fde0 100644
         (changes
           (context)
           (context)
+          (context)
+          (deletion)
+          (addition)
+          (addition)
+          (addition)
+          (context)
+          (context))))))
+
+================================================================================
+Multiple hunks
+================================================================================
+diff --git a/foo.lua b/foo.lua
+index 1234567..89abcde 100644
+--- a/foo.lua
++++ b/foo.lua
+@@ -1,2 +1,2 @@
+ local a = 1
+-local b = 2
++local b = 3
+@@ -10,2 +10,2 @@
+ local x = 1
+-local y = 2
++local y = 3
+
+--------------------------------------------------------------------------------
+
+(source
+  (block
+    (command
+      (argument)
+      (filename))
+    (index
+      (commit)
+      (commit)
+      (mode))
+    (old_file
+      (filename))
+    (new_file
+      (filename))
+    (hunks
+      (hunk
+        (location
+          (linerange)
+          (linerange))
+        (changes
+          (context)
+          (deletion)
+          (addition)))
+      (hunk
+        (location
+          (linerange)
+          (linerange))
+        (changes
+          (context)
+          (deletion)
+          (addition))))))
+
+================================================================================
+Abbreviated object IDs
+================================================================================
+diff --git a/foo.lua b/foo.lua
+index 284f..8c13 100644
+--- a/foo.lua
++++ b/foo.lua
+@@ -1,2 +1,2 @@
+ local a = 1
+-local b = 2
++local b = 3
+
+--------------------------------------------------------------------------------
+
+(source
+  (block
+    (command
+      (argument)
+      (filename))
+    (index
+      (commit)
+      (commit)
+      (mode))
+    (old_file
+      (filename))
+    (new_file
+      (filename))
+    (hunks
+      (hunk
+        (location
+          (linerange)
+          (linerange))
+        (changes
+          (context)
+          (deletion)
+          (addition))))))
+
+================================================================================
+SHA-256 object IDs
+================================================================================
+diff --git a/foo.lua b/foo.lua
+index 0edfb5eb52bed270799aae16a21bc8adac2cb6815d3f3d7e7f6f313c0af97aff..4a91400df7071e5273d21b1c47dcad82c045f37ef7130a128b39334e5635ef87 100644
+--- a/foo.lua
++++ b/foo.lua
+@@ -1,2 +1,2 @@
+ local a = 1
+-local b = 2
++local b = 3
+
+--------------------------------------------------------------------------------
+
+(source
+  (block
+    (command
+      (argument)
+      (filename))
+    (index
+      (commit)
+      (commit)
+      (mode))
+    (old_file
+      (filename))
+    (new_file
+      (filename))
+    (hunks
+      (hunk
+        (location
+          (linerange)
+          (linerange))
+        (changes
+          (context)
+          (deletion)
+          (addition))))))
+
+================================================================================
+Single-file small change with preceding empty context
+================================================================================
+diff --git a/grammar.js b/grammar.js
+index dc36969..f37fde0 100644
+--- a/grammar.js
++++ b/grammar.js
+@@ -6,6 +6,8 @@ module.exports = grammar({
+ 
+   extras: ($) => [],
+ 
+   rules: {
+-    source: ($) => "hello",
++    source: ($) => repeat($._line),
++
++    _line: ($) => choice(),
+   },
+ });
+
+--------------------------------------------------------------------------------
+
+(source
+  (block
+    (command
+      (argument)
+      (filename))
+    (index
+      (commit)
+      (commit)
+      (mode))
+    (old_file
+      (filename))
+    (new_file
+      (filename))
+    (hunks
+      (hunk
+        (location
+          (linerange)
+          (linerange))
+        (changes
+          (context)
+          (context)
+          (context)
+          (context)
           (deletion)
           (addition)
           (addition)
@@ -109,6 +284,98 @@ rename to tmp.md
       (filename))))
 
 ================================================================================
+Copy detection
+================================================================================
+diff --git a/src.txt b/dst.txt
+similarity index 79%
+copy from src.txt
+copy to dst.txt
+index 9db9bbf..867825f 100644
+--- a/src.txt
++++ b/dst.txt
+@@ -3,4 +3,4 @@ bravo
+ charlie
+ delta
+ echo
+-foxtrot
++golf
+
+--------------------------------------------------------------------------------
+
+(source
+  (block
+    (command
+      (argument)
+      (filename))
+    (similarity
+      (score))
+    (file_change
+      (filename))
+    (file_change
+      (filename))
+    (index
+      (commit)
+      (commit)
+      (mode))
+    (old_file
+      (filename))
+    (new_file
+      (filename))
+    (hunks
+      (hunk
+        (location
+          (linerange)
+          (linerange))
+        (changes
+          (context)
+          (context)
+          (context)
+          (deletion)
+          (addition))))))
+
+================================================================================
+Dissimilarity index
+================================================================================
+diff --git a/big.txt b/big.txt
+dissimilarity index 100%
+index 562673c..35ac9f0 100644
+--- a/big.txt
++++ b/big.txt
+@@ -1,2 +1,2 @@
+-old one
+-old two
++new one
++new two
+
+--------------------------------------------------------------------------------
+
+(source
+  (block
+    (command
+      (argument)
+      (filename))
+    (dissimilarity
+      (score))
+    (index
+      (commit)
+      (commit)
+      (mode))
+    (old_file
+      (filename))
+    (new_file
+      (filename))
+    (hunks
+      (hunk
+        (location
+          (linerange)
+          (linerange))
+        (changes
+          (deletion)
+          (deletion)
+          (addition)
+          (addition))))))
+
+================================================================================
 Location with no context
 ================================================================================
 @@ -0,0 +1 @@
@@ -155,7 +422,7 @@ index 00000000..ee9808dc
           (linerange))
         (changes
           (addition)
-          (context))))))
+          (special))))))
 
 ================================================================================
 Just a file declaration and no newline
@@ -225,6 +492,8 @@ index 321c90a..b4a5cba 100644
           (deletion)
           (addition)
           (addition)
+          (context)
+          (context)
           (context)))))
   (block
     (command
@@ -284,6 +553,126 @@ Leading plus additions
   (addition)
   (addition)
   (addition))
+
+================================================================================
+Leading triple markers in hunk changes
+================================================================================
+diff --git a/a.txt b/a.txt
+index 1234567..89abcde 100644
+--- a/a.txt
++++ b/a.txt
+@@ -1,3 +1,3 @@
+--- C, C++
++++ C, C--
+ context
+
+--------------------------------------------------------------------------------
+
+(source
+  (block
+    (command
+      (argument)
+      (filename))
+    (index
+      (commit)
+      (commit)
+      (mode))
+    (old_file
+      (filename))
+    (new_file
+      (filename))
+    (hunks
+      (hunk
+        (location
+          (linerange)
+          (linerange))
+        (changes
+          (deletion)
+          (addition)
+          (context))))))
+
+================================================================================
+Deviant change markers
+================================================================================
+< old line
+> new line
+! changed line
+!
+
+--------------------------------------------------------------------------------
+
+(source
+  (deletion)
+  (addition)
+  (change)
+  (change))
+
+================================================================================
+Default diff metadata fallback
+================================================================================
+2c2
+< howdy
+---
+> hello
+
+--------------------------------------------------------------------------------
+
+(source
+  (unrecognized)
+  (deletion)
+  (deletion)
+  (addition))
+
+================================================================================
+Copied context metadata fallback
+================================================================================
+***************
+*** 1,3 ****
+! changed line
+* copied context marker
+
+--------------------------------------------------------------------------------
+
+(source
+  (unrecognized)
+  (unrecognized)
+  (change)
+  (unrecognized))
+
+================================================================================
+Unrecognized hunk marker fallback
+================================================================================
+diff --git a/tmp.txt b/tmp.txt
+index 0000000..1111111 100644
+--- a/tmp.txt
++++ b/tmp.txt
+@@ -1,2 +1,2 @@
+? unknown marker
++known addition
+
+--------------------------------------------------------------------------------
+
+(source
+  (block
+    (command
+      (argument)
+      (filename))
+    (index
+      (commit)
+      (commit)
+      (mode))
+    (old_file
+      (filename))
+    (new_file
+      (filename))
+    (hunks
+      (hunk
+        (location
+          (linerange)
+          (linerange))
+        (changes
+          (unrecognized)
+          (addition))))))
 
 ================================================================================
 File mode changes
