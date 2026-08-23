@@ -76,12 +76,14 @@ pub type GenerateResult<T> = Result<T, GenerateError>;
 #[derive(Debug, Error, Serialize, Deserialize)]
 pub enum GenerateError {
     #[error("Error with specified path -- {0}")]
-    GrammarPath(String),
+    GrammarPath(IoError),
     #[error(transparent)]
     IO(IoError),
     #[cfg(feature = "load")]
     #[error(transparent)]
     LoadGrammarFile(#[from] LoadGrammarError),
+    #[error("Grammar file `{0}` not found")]
+    GrammarFileNotFound(PathBuf),
     #[error(transparent)]
     ParseGrammar(#[from] ParseGrammarError),
     #[error(transparent)]
@@ -254,13 +256,14 @@ impl Default for OptLevel {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum Diagnostic {
     UnnecessaryConflicts(Vec<Vec<String>>),
     UnaryChoice { name: Option<String> },
     UnarySeq { name: Option<String> },
     EmptyStringMatch(String),
     UnsupportedRegexFlag { flag: char, pattern: String },
+    SupertypeInlined { name: String },
 }
 
 impl std::fmt::Display for Diagnostic {
@@ -305,6 +308,12 @@ impl std::fmt::Display for Diagnostic {
             Self::UnsupportedRegexFlag { flag, pattern } => {
                 write!(f, "unsupported regex flag `{flag}` in pattern `{pattern}`")?;
             }
+            Self::SupertypeInlined { name } => {
+                write!(
+                    f,
+                    "rule `{name}` is both a supertype and inlined. the supertype is ignored."
+                )?;
+            }
         }
         Ok(())
     }
@@ -338,8 +347,13 @@ where
         let path_buf: PathBuf = path.into();
         if !path_buf
             .try_exists()
-            .map_err(|e| GenerateError::GrammarPath(e.to_string()))?
+            .map_err(|e| GenerateError::GrammarPath(IoError::new(e, Some(&path_buf))))?
         {
+            // A nonexistent path with an extension (i.e. tree-sitter-foo/grammar.json)
+            // is a missing input file, not a directory to create.
+            if path_buf.extension().is_some() {
+                return Err(GenerateError::GrammarFileNotFound(path_buf));
+            }
             fs::create_dir_all(&path_buf)
                 .map_err(|e| GenerateError::IO(IoError::new(e, Some(path_buf.as_path()))))?;
             repo_path = path_buf;
@@ -461,7 +475,7 @@ fn generate_node_types_from_grammar(
     )?;
     Ok(JSONOutput {
         #[cfg(feature = "load")]
-        node_types_json: serde_json::to_string_pretty(&node_types_json).unwrap(),
+        node_types_json,
         syntax_grammar,
         lexical_grammar,
         inlines,

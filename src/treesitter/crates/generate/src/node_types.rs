@@ -4,6 +4,8 @@ use rustc_hash::FxHashMap;
 #[cfg(feature = "load")]
 use rustc_hash::FxHashSet;
 
+#[cfg(feature = "load")]
+use serde::ser::{SerializeMap, SerializeSeq, SerializeStruct};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -35,45 +37,31 @@ pub struct VariableInfo {
     pub has_multi_step_production: bool,
 }
 
-#[derive(Debug, Serialize, PartialEq, Eq, Default, PartialOrd, Ord)]
+#[derive(Debug, PartialEq, Eq, Default)]
 #[cfg(feature = "load")]
-pub struct NodeInfoJSON {
-    #[serde(rename = "type")]
-    kind: String,
+struct NodeInfoJSON {
+    kind: StrId,
     named: bool,
-    #[serde(skip_serializing_if = "std::ops::Not::not")]
     root: bool,
-    #[serde(skip_serializing_if = "std::ops::Not::not")]
     extra: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    fields: Option<BTreeMap<String, FieldInfoJSON>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    fields: Option<NodeFields>,
     children: Option<FieldInfoJSON>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    subtypes: Option<Vec<NodeTypeJSON>>,
+    subtypes: Option<Vec<NodeTypeRef>>,
 }
 
-#[derive(Clone, Debug, Serialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[cfg(feature = "load")]
-pub struct NodeTypeJSON {
-    #[serde(rename = "type")]
-    kind: String,
+struct NodeTypeRef {
+    kind: StrId,
     named: bool,
 }
 
-#[derive(Debug, Serialize, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, PartialEq, Eq)]
 #[cfg(feature = "load")]
-pub struct FieldInfoJSON {
+struct FieldInfoJSON {
     multiple: bool,
     required: bool,
-    types: Vec<NodeTypeJSON>,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct ChildQuantity {
-    exists: bool,
-    required: bool,
-    multiple: bool,
+    types: Vec<NodeTypeRef>,
 }
 
 #[cfg(feature = "load")]
@@ -85,6 +73,16 @@ impl Default for FieldInfoJSON {
             types: Vec::new(),
         }
     }
+}
+
+#[cfg(feature = "load")]
+type NodeFields = BTreeMap<StrId, FieldInfoJSON>;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ChildQuantity {
+    exists: bool,
+    required: bool,
+    multiple: bool,
 }
 
 impl Default for ChildQuantity {
@@ -202,6 +200,28 @@ pub fn get_variable_info(
     default_aliases: &AliasMap,
     str_pool: &StrPool,
 ) -> VariableInfoResult<Vec<VariableInfo>> {
+    let mut result =
+        compute_variable_info_fixed_point(syntax_grammar, lexical_grammar, default_aliases);
+    validate_supertype_structure(
+        &result,
+        syntax_grammar,
+        lexical_grammar,
+        default_aliases,
+        str_pool,
+    )?;
+    strip_hidden_child_types(&mut result, syntax_grammar, lexical_grammar);
+    Ok(result)
+}
+
+/// Iteratively compute variable info for every syntax variable until a fixed
+/// point is reached. Each variable's summary can depend on the summaries of
+/// other hidden variables, and variables can have mutually recursive structure,
+/// so we loop until no more changes occur.
+fn compute_variable_info_fixed_point(
+    syntax_grammar: &SyntaxGrammar,
+    lexical_grammar: &LexicalGrammar,
+    default_aliases: &AliasMap,
+) -> Vec<VariableInfo> {
     let child_type_is_visible = |t: &ChildType| {
         variable_type_for_child_type(t, syntax_grammar, lexical_grammar) >= VariableType::Anonymous
     };
@@ -210,9 +230,6 @@ pub fn get_variable_info(
         variable_type_for_child_type(t, syntax_grammar, lexical_grammar) == VariableType::Named
     };
 
-    // Each variable's summary can depend on the summaries of other hidden variables,
-    // and variables can have mutually recursive structure. So we compute the summaries
-    // iteratively, in a loop that terminates only when no more changes are possible.
     let mut did_change = true;
     let mut all_initialized = false;
     let mut result = vec![VariableInfo::default(); syntax_grammar.variables.len()];
@@ -254,10 +271,7 @@ pub fn get_variable_info(
                     // Maintain the set of child types associated with each field, and the quantity
                     // of children associated with each field in this production.
                     if let Some(field_name) = step.field() {
-                        let field_info = variable_info
-                            .fields
-                            .entry(field_name)
-                            .or_insert_with(FieldInfo::default);
+                        let field_info = variable_info.fields.entry(field_name).or_default();
                         did_change |= extend_sorted(&mut field_info.types, Some(&child_type));
 
                         let production_field_quantity = production_field_quantities
@@ -288,52 +302,14 @@ pub fn get_variable_info(
 
                     // Inherit all child information from hidden children.
                     if child_is_hidden && child_symbol.is_non_terminal() {
-                        let child_variable_info = &result[child_symbol.index as usize];
-
-                        // If a hidden child can have multiple children, then its parent node can
-                        // appear to have multiple children.
-                        if child_variable_info.has_multi_step_production {
-                            variable_info.has_multi_step_production = true;
-                        }
-
-                        // If a hidden child has fields, then the parent node can appear to have
-                        // those same fields.
-                        for (&field_name, child_field_info) in &child_variable_info.fields {
-                            production_field_quantities
-                                .entry(field_name)
-                                .or_insert_with(ChildQuantity::zero)
-                                .append(child_field_info.quantity);
-                            did_change |= extend_sorted(
-                                &mut variable_info
-                                    .fields
-                                    .entry(field_name)
-                                    .or_insert_with(FieldInfo::default)
-                                    .types,
-                                &child_field_info.types,
-                            );
-                        }
-
-                        // If a hidden child has children, then the parent node can appear to have
-                        // those same children.
-                        production_children_quantity.append(child_variable_info.children.quantity);
-                        did_change |= extend_sorted(
-                            &mut variable_info.children.types,
-                            &child_variable_info.children.types,
+                        did_change |= inherit_hidden_child_info(
+                            &result[child_symbol.index as usize],
+                            step.field().is_none(),
+                            &mut variable_info,
+                            &mut production_field_quantities,
+                            &mut production_children_quantity,
+                            &mut production_children_without_fields_quantity,
                         );
-
-                        // If a hidden child can have named children without fields, then the parent
-                        // node can appear to have those same children.
-                        if step.field().is_none() {
-                            let grandchildren_info = &child_variable_info.children_without_fields;
-                            if !grandchildren_info.types.is_empty() {
-                                production_children_without_fields_quantity
-                                    .append(child_variable_info.children_without_fields.quantity);
-                                did_change |= extend_sorted(
-                                    &mut variable_info.children_without_fields.types,
-                                    &child_variable_info.children_without_fields.types,
-                                );
-                            }
-                        }
                     }
 
                     // Note whether or not this production contains children whose summaries
@@ -374,6 +350,79 @@ pub fn get_variable_info(
         all_initialized = true;
     }
 
+    result
+}
+
+/// Propagate fields, children, and children-without-fields from a hidden
+/// child variable into the parent variable info. This returns whether
+/// anything changed.
+fn inherit_hidden_child_info(
+    child_variable_info: &VariableInfo,
+    step_has_no_field: bool,
+    variable_info: &mut VariableInfo,
+    production_field_quantities: &mut FxHashMap<StrId, ChildQuantity>,
+    production_children_quantity: &mut ChildQuantity,
+    production_children_without_fields_quantity: &mut ChildQuantity,
+) -> bool {
+    let mut did_change = false;
+
+    // If a hidden child can have multiple children, then its parent node can
+    // appear to have multiple children.
+    if child_variable_info.has_multi_step_production {
+        variable_info.has_multi_step_production = true;
+    }
+
+    // If a hidden child has fields, then the parent node can appear to have
+    // those same fields.
+    for (&field_name, child_field_info) in &child_variable_info.fields {
+        production_field_quantities
+            .entry(field_name)
+            .or_insert_with(ChildQuantity::zero)
+            .append(child_field_info.quantity);
+        did_change |= extend_sorted(
+            &mut variable_info.fields.entry(field_name).or_default().types,
+            &child_field_info.types,
+        );
+    }
+
+    // If a hidden child has children, then the parent node can appear to have
+    // those same children.
+    production_children_quantity.append(child_variable_info.children.quantity);
+    did_change |= extend_sorted(
+        &mut variable_info.children.types,
+        &child_variable_info.children.types,
+    );
+
+    // If a hidden child can have named children without fields, then the parent
+    // node can appear to have those same children.
+    if step_has_no_field {
+        let grandchildren_info = &child_variable_info.children_without_fields;
+        if !grandchildren_info.types.is_empty() {
+            production_children_without_fields_quantity
+                .append(child_variable_info.children_without_fields.quantity);
+            did_change |= extend_sorted(
+                &mut variable_info.children_without_fields.types,
+                &child_variable_info.children_without_fields.types,
+            );
+        }
+    }
+
+    did_change
+}
+
+/// Verify that no supertype symbol has multi-step productions, which would
+/// mean it can have more than one visible child.
+fn validate_supertype_structure(
+    result: &[VariableInfo],
+    syntax_grammar: &SyntaxGrammar,
+    lexical_grammar: &LexicalGrammar,
+    default_aliases: &AliasMap,
+    str_pool: &StrPool,
+) -> VariableInfoResult<()> {
+    let child_type_is_visible = |t: &ChildType| {
+        variable_type_for_child_type(t, syntax_grammar, lexical_grammar) >= VariableType::Anonymous
+    };
+
     for supertype_symbol in &syntax_grammar.supertype_symbols {
         if result[supertype_symbol.index as usize].has_multi_step_production {
             let variable = &syntax_grammar.variables[supertype_symbol.index as usize];
@@ -405,15 +454,27 @@ pub fn get_variable_info(
             }))?;
         }
     }
+    Ok(())
+}
 
-    // Update all of the node type lists to eliminate hidden nodes.
+/// Remove hidden child types from supertype children lists, field type lists,
+/// and children-without-fields lists, and drop fields that become empty.
+fn strip_hidden_child_types(
+    result: &mut [VariableInfo],
+    syntax_grammar: &SyntaxGrammar,
+    lexical_grammar: &LexicalGrammar,
+) {
+    let child_type_is_visible = |t: &ChildType| {
+        variable_type_for_child_type(t, syntax_grammar, lexical_grammar) >= VariableType::Anonymous
+    };
+
     for supertype_symbol in &syntax_grammar.supertype_symbols {
         result[supertype_symbol.index as usize]
             .children
             .types
             .retain(child_type_is_visible);
     }
-    for variable_info in &mut result {
+    for variable_info in result.iter_mut() {
         for field_info in variable_info.fields.values_mut() {
             field_info.types.retain(child_type_is_visible);
         }
@@ -423,8 +484,6 @@ pub fn get_variable_info(
             .types
             .retain(child_type_is_visible);
     }
-
-    Ok(result)
 }
 
 fn get_aliases_by_symbol(
@@ -526,40 +585,124 @@ pub fn generate_node_types_json(
     default_aliases: &AliasMap,
     variable_info: &[VariableInfo],
     str_pool: &StrPool,
-) -> SuperTypeCycleResult<Vec<NodeInfoJSON>> {
-    let mut node_types_json = BTreeMap::new();
+) -> SuperTypeCycleResult<String> {
+    let nodes = generate_node_types(
+        syntax_grammar,
+        lexical_grammar,
+        default_aliases,
+        variable_info,
+        str_pool,
+    )?;
 
-    let child_type_to_node_type = |child_type: &ChildType| match child_type {
-        ChildType::Aliased(alias) => NodeTypeJSON {
-            kind: str_pool.resolve(alias.value).to_string(),
+    Ok(serde_json::to_string_pretty(&SerializeWithPool {
+        value: nodes.as_slice(),
+        str_pool,
+    })
+    .unwrap())
+}
+
+#[cfg(feature = "load")]
+fn generate_node_types(
+    syntax_grammar: &SyntaxGrammar,
+    lexical_grammar: &LexicalGrammar,
+    default_aliases: &AliasMap,
+    variable_info: &[VariableInfo],
+    str_pool: &StrPool,
+) -> SuperTypeCycleResult<Vec<NodeInfoJSON>> {
+    let aliases_by_symbol = get_aliases_by_symbol(syntax_grammar, default_aliases);
+    let extra_names = collect_extra_names(syntax_grammar, lexical_grammar, &aliases_by_symbol);
+
+    let mut node_types_json = BTreeMap::new();
+    let mut subtype_map = build_supertype_entries(
+        &mut node_types_json,
+        syntax_grammar,
+        lexical_grammar,
+        default_aliases,
+        variable_info,
+        str_pool,
+        &extra_names,
+    );
+    build_regular_entries(
+        &mut node_types_json,
+        syntax_grammar,
+        lexical_grammar,
+        default_aliases,
+        variable_info,
+        str_pool,
+        &aliases_by_symbol,
+        &extra_names,
+    );
+
+    sort_subtype_map_topologically(&mut subtype_map, str_pool)?;
+    apply_supertype_collapsing(&mut node_types_json, &subtype_map);
+
+    let anonymous_node_types = build_token_entries(
+        &mut node_types_json,
+        syntax_grammar,
+        lexical_grammar,
+        &aliases_by_symbol,
+        &extra_names,
+    );
+
+    let mut result = node_types_json.into_iter().map(|e| e.1).collect::<Vec<_>>();
+    result.extend(anonymous_node_types);
+    result.sort_unstable_by(|a, b| {
+        b.subtypes
+            .is_some()
+            .cmp(&a.subtypes.is_some())
+            .then_with(|| {
+                let a_is_leaf = a.children.is_none() && a.fields.is_none();
+                let b_is_leaf = b.children.is_none() && b.fields.is_none();
+                a_is_leaf.cmp(&b_is_leaf)
+            })
+            .then_with(|| cmp_str_ids(a.kind, b.kind, str_pool))
+            .then_with(|| a.named.cmp(&b.named))
+            .then_with(|| a.root.cmp(&b.root))
+            .then_with(|| a.extra.cmp(&b.extra))
+    });
+    result.dedup();
+    Ok(result)
+}
+
+/// Convert a child type into its JSON representation, resolving any alias.
+#[cfg(feature = "load")]
+fn child_type_to_node_type(
+    child_type: &ChildType,
+    syntax_grammar: &SyntaxGrammar,
+    lexical_grammar: &LexicalGrammar,
+    default_aliases: &AliasMap,
+) -> NodeTypeRef {
+    match child_type {
+        ChildType::Aliased(alias) => NodeTypeRef {
+            kind: alias.value,
             named: alias.is_named,
         },
         ChildType::Normal(symbol) => {
             if let Some(alias) = default_aliases.get(symbol) {
-                NodeTypeJSON {
-                    kind: str_pool.resolve(alias.value).to_string(),
+                NodeTypeRef {
+                    kind: alias.value,
                     named: alias.is_named,
                 }
             } else {
                 match symbol.kind {
                     SymbolType::NonTerminal => {
                         let variable = &syntax_grammar.variables[symbol.index as usize];
-                        NodeTypeJSON {
-                            kind: str_pool.resolve(variable.name).to_string(),
+                        NodeTypeRef {
+                            kind: variable.name,
                             named: variable.kind != VariableType::Anonymous,
                         }
                     }
                     SymbolType::Terminal => {
                         let variable = &lexical_grammar.variables[symbol.index as usize];
-                        NodeTypeJSON {
-                            kind: str_pool.resolve(variable.name).to_string(),
+                        NodeTypeRef {
+                            kind: variable.name,
                             named: variable.kind != VariableType::Anonymous,
                         }
                     }
                     SymbolType::External => {
                         let variable = &syntax_grammar.external_tokens[symbol.index as usize];
-                        NodeTypeJSON {
-                            kind: str_pool.resolve(variable.name).to_string(),
+                        NodeTypeRef {
+                            kind: variable.name,
                             named: variable.kind != VariableType::Anonymous,
                         }
                     }
@@ -567,25 +710,44 @@ pub fn generate_node_types_json(
                 }
             }
         }
-    };
+    }
+}
 
-    let populate_field_info_json = |json: &mut FieldInfoJSON, info: &FieldInfo| {
-        if info.types.is_empty() {
-            json.required = false;
-        } else {
-            json.multiple |= info.quantity.multiple;
-            json.required &= info.quantity.required;
-            json.types
-                .extend(info.types.iter().map(child_type_to_node_type));
-            json.types.sort_unstable();
-            json.types.dedup();
-        }
-    };
+/// Merge a field's computed info into its JSON representation. No types
+/// means the field is absent from this rule, so it can't be required.
+#[cfg(feature = "load")]
+fn populate_field_info_json(
+    json: &mut FieldInfoJSON,
+    info: &FieldInfo,
+    syntax_grammar: &SyntaxGrammar,
+    lexical_grammar: &LexicalGrammar,
+    default_aliases: &AliasMap,
+    str_pool: &StrPool,
+) {
+    if info.types.is_empty() {
+        json.required = false;
+    } else {
+        json.multiple |= info.quantity.multiple;
+        json.required &= info.quantity.required;
+        json.types.extend(
+            info.types.iter().map(|t| {
+                child_type_to_node_type(t, syntax_grammar, lexical_grammar, default_aliases)
+            }),
+        );
+        sort_node_type_refs(&mut json.types, str_pool);
+        json.types.dedup();
+    }
+}
 
-    let aliases_by_symbol = get_aliases_by_symbol(syntax_grammar, default_aliases);
-
+/// Collect every name an `extra` symbol can appear under, including aliases.
+#[cfg(feature = "load")]
+fn collect_extra_names(
+    syntax_grammar: &SyntaxGrammar,
+    lexical_grammar: &LexicalGrammar,
+    aliases_by_symbol: &FxHashMap<Symbol, BTreeSet<Option<Alias>>>,
+) -> FxHashSet<StrId> {
     let empty = BTreeSet::new();
-    let extra_names = syntax_grammar
+    syntax_grammar
         .extra_symbols
         .iter()
         .flat_map(|symbol| {
@@ -597,135 +759,189 @@ pub fn generate_node_types_json(
                     alias.as_ref().map_or_else(
                         || match symbol.kind {
                             SymbolType::NonTerminal => {
-                                &syntax_grammar.variables[symbol.index as usize].name
+                                syntax_grammar.variables[symbol.index as usize].name
                             }
                             SymbolType::Terminal => {
-                                &lexical_grammar.variables[symbol.index as usize].name
+                                lexical_grammar.variables[symbol.index as usize].name
                             }
                             SymbolType::External => {
-                                &syntax_grammar.external_tokens[symbol.index as usize].name
+                                syntax_grammar.external_tokens[symbol.index as usize].name
                             }
                             _ => unreachable!(),
                         },
-                        |alias| &alias.value,
+                        |alias| alias.value,
                     )
                 })
         })
-        .collect::<FxHashSet<_>>();
+        .collect::<FxHashSet<_>>()
+}
 
+/// Add one JSON entry per supertype and build the supertype-to-subtypes map.
+#[cfg(feature = "load")]
+fn build_supertype_entries(
+    node_types_json: &mut BTreeMap<StrId, NodeInfoJSON>,
+    syntax_grammar: &SyntaxGrammar,
+    lexical_grammar: &LexicalGrammar,
+    default_aliases: &AliasMap,
+    variable_info: &[VariableInfo],
+    str_pool: &StrPool,
+    extra_names: &FxHashSet<StrId>,
+) -> Vec<(NodeTypeRef, Vec<NodeTypeRef>)> {
     let mut subtype_map = Vec::new();
     for (i, info) in variable_info.iter().enumerate() {
         let symbol = Symbol::non_terminal(i);
+        if !syntax_grammar.supertype_symbols.contains(&symbol) {
+            continue;
+        }
         let variable = &syntax_grammar.variables[i];
-        if syntax_grammar.supertype_symbols.contains(&symbol) {
-            let node_type_json =
-                node_types_json
-                    .entry(variable.name)
-                    .or_insert_with(|| NodeInfoJSON {
-                        kind: str_pool.resolve(variable.name).to_string(),
-                        named: true,
-                        root: false,
-                        extra: extra_names.contains(&variable.name),
-                        fields: None,
-                        children: None,
-                        subtypes: None,
-                    });
-            let mut subtypes = info
-                .children
-                .types
-                .iter()
-                .map(child_type_to_node_type)
-                .collect::<Vec<_>>();
-            subtypes.sort_unstable();
-            subtypes.dedup();
-            let supertype = NodeTypeJSON {
-                kind: node_type_json.kind.clone(),
+        let node_type_json = node_types_json
+            .entry(variable.name)
+            .or_insert_with(|| NodeInfoJSON {
+                kind: variable.name,
                 named: true,
-            };
+                root: false,
+                extra: extra_names.contains(&variable.name),
+                fields: None,
+                children: None,
+                subtypes: None,
+            });
+        let mut subtypes = info
+            .children
+            .types
+            .iter()
+            .map(|t| child_type_to_node_type(t, syntax_grammar, lexical_grammar, default_aliases))
+            .collect::<Vec<_>>();
+        sort_node_type_refs(&mut subtypes, str_pool);
+        subtypes.dedup();
+        let supertype = NodeTypeRef {
+            kind: node_type_json.kind,
+            named: true,
+        };
 
-            // We only add to the subtype map if there are visible subtypes.
-            // A supertype may have zero subtypes if its children are all
-            // hidden (e.g., wrapping a hidden external token).
-            if !subtypes.is_empty() {
-                subtype_map.push((supertype, subtypes.clone()));
+        // We only add to the subtype map if there are visible subtypes.
+        // A supertype may have zero subtypes if its children are all
+        // hidden (e.g., wrapping a hidden external token).
+        if !subtypes.is_empty() {
+            subtype_map.push((supertype, subtypes.clone()));
+        }
+        node_type_json.subtypes = Some(subtypes);
+    }
+    subtype_map
+}
+
+/// Add JSON entries for visible non-supertype rules, merged into every name
+/// they can appear under.
+#[cfg(feature = "load")]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "all parameters are required to build the entries"
+)]
+fn build_regular_entries(
+    node_types_json: &mut BTreeMap<StrId, NodeInfoJSON>,
+    syntax_grammar: &SyntaxGrammar,
+    lexical_grammar: &LexicalGrammar,
+    default_aliases: &AliasMap,
+    variable_info: &[VariableInfo],
+    str_pool: &StrPool,
+    aliases_by_symbol: &FxHashMap<Symbol, BTreeSet<Option<Alias>>>,
+    extra_names: &FxHashSet<StrId>,
+) {
+    let empty = BTreeSet::new();
+    for (i, info) in variable_info.iter().enumerate() {
+        let symbol = Symbol::non_terminal(i);
+        if syntax_grammar.supertype_symbols.contains(&symbol)
+            || syntax_grammar.variables_to_inline.contains(&symbol)
+        {
+            continue;
+        }
+        let variable = &syntax_grammar.variables[i];
+
+        // If a rule is aliased under multiple names, then its information
+        // contributes to multiple entries in the final JSON.
+        for alias in aliases_by_symbol.get(&symbol).unwrap_or(&empty) {
+            let kind;
+            let is_named;
+            if let Some(alias) = alias {
+                kind = &alias.value;
+                is_named = alias.is_named;
+            } else if variable.kind.is_visible() {
+                kind = &variable.name;
+                is_named = variable.kind == VariableType::Named;
+            } else {
+                continue;
             }
-            node_type_json.subtypes = Some(subtypes);
-        } else if !syntax_grammar.variables_to_inline.contains(&symbol) {
-            // If a rule is aliased under multiple names, then its information
-            // contributes to multiple entries in the final JSON.
-            for alias in aliases_by_symbol.get(&symbol).unwrap_or(&BTreeSet::new()) {
-                let kind;
-                let is_named;
-                if let Some(alias) = alias {
-                    kind = &alias.value;
-                    is_named = alias.is_named;
-                } else if variable.kind.is_visible() {
-                    kind = &variable.name;
-                    is_named = variable.kind == VariableType::Named;
-                } else {
-                    continue;
+
+            // There may already be an entry with this name, because multiple
+            // rules may be aliased with the same name.
+            let mut node_type_existed = true;
+            let node_type_json = node_types_json.entry(*kind).or_insert_with(|| {
+                node_type_existed = false;
+                NodeInfoJSON {
+                    kind: *kind,
+                    named: is_named,
+                    root: i == 0,
+                    extra: extra_names.contains(kind),
+                    fields: Some(BTreeMap::new()),
+                    children: None,
+                    subtypes: None,
                 }
+            });
 
-                // There may already be an entry with this name, because multiple
-                // rules may be aliased with the same name.
-                let mut node_type_existed = true;
-                let node_type_json = node_types_json.entry(*kind).or_insert_with(|| {
-                    node_type_existed = false;
-                    NodeInfoJSON {
-                        kind: str_pool.resolve(*kind).to_string(),
-                        named: is_named,
-                        root: i == 0,
-                        extra: extra_names.contains(&kind),
-                        fields: Some(BTreeMap::new()),
-                        children: None,
-                        subtypes: None,
-                    }
-                });
-
-                let fields_json = node_type_json.fields.as_mut().unwrap();
-                for (new_field, field_info) in &info.fields {
-                    let field_json = fields_json
-                        .entry(str_pool.resolve(*new_field).to_string())
-                        .or_insert_with(|| {
-                            // If another rule is aliased with the same name, and does *not* have this
-                            // field, then this field cannot be required.
-                            let mut field_json = FieldInfoJSON::default();
-                            if node_type_existed {
-                                field_json.required = false;
-                            }
-                            field_json
-                        });
-                    populate_field_info_json(field_json, field_info);
-                }
-
-                // If another rule is aliased with the same name, any fields that aren't present in
-                // this cannot be required.
-                for (existing_field, field_json) in fields_json.iter_mut() {
-                    if !info
-                        .fields
-                        .keys()
-                        .any(|&f| str_pool.resolve(f).eq(existing_field))
-                    {
+            let fields_json = node_type_json.fields.as_mut().unwrap();
+            for (new_field, field_info) in &info.fields {
+                let field_json = fields_json.entry(*new_field).or_insert_with(|| {
+                    // If another rule is aliased with the same name, and does *not* have this
+                    // field, then this field cannot be required.
+                    let mut field_json = FieldInfoJSON::default();
+                    if node_type_existed {
                         field_json.required = false;
                     }
-                }
-
+                    field_json
+                });
                 populate_field_info_json(
-                    node_type_json
-                        .children
-                        .get_or_insert_with(FieldInfoJSON::default),
-                    &info.children_without_fields,
+                    field_json,
+                    field_info,
+                    syntax_grammar,
+                    lexical_grammar,
+                    default_aliases,
+                    str_pool,
                 );
             }
+
+            // If another rule is aliased with the same name, any fields that aren't present in
+            // this cannot be required.
+            for (existing_field, field_json) in fields_json.iter_mut() {
+                if !info.fields.contains_key(existing_field) {
+                    field_json.required = false;
+                }
+            }
+
+            populate_field_info_json(
+                node_type_json
+                    .children
+                    .get_or_insert_with(FieldInfoJSON::default),
+                &info.children_without_fields,
+                syntax_grammar,
+                lexical_grammar,
+                default_aliases,
+                str_pool,
+            );
         }
     }
+}
 
-    // Sort the subtype map topologically so that subtypes are listed before their supertypes.
+/// Sort the subtype map topologically so that subtypes are listed before
+/// their supertypes.
+#[cfg(feature = "load")]
+fn sort_subtype_map_topologically(
+    subtype_map: &mut [(NodeTypeRef, Vec<NodeTypeRef>)],
+    str_pool: &StrPool,
+) -> SuperTypeCycleResult<()> {
     let mut sorted_kinds = Vec::with_capacity(subtype_map.len());
-    let mut top_sort = topological_sort::TopologicalSort::<String>::new();
-    for (supertype, subtypes) in &subtype_map {
+    let mut top_sort = topological_sort::TopologicalSort::<StrId>::new();
+    for (supertype, subtypes) in subtype_map.iter() {
         for subtype in subtypes {
-            top_sort.add_dependency(subtype.kind.clone(), supertype.kind.clone());
+            top_sort.add_dependency(subtype.kind, supertype.kind);
         }
     }
     loop {
@@ -733,22 +949,33 @@ pub fn generate_node_types_json(
         match (next_kinds.is_empty(), top_sort.is_empty()) {
             (true, true) => break,
             (true, false) => {
-                let mut items = top_sort.collect::<Vec<String>>();
+                let mut items = top_sort
+                    .map(|s| str_pool.resolve(s).to_string())
+                    .collect::<Vec<String>>();
                 items.sort();
                 return Err(SuperTypeCycleError { items });
             }
             (false, _) => {
-                next_kinds.sort();
+                next_kinds.sort_unstable_by(|a, b| cmp_str_ids(*a, *b, str_pool));
                 sorted_kinds.extend(next_kinds);
             }
         }
     }
     subtype_map.sort_by(|a, b| {
-        let a_idx = sorted_kinds.iter().position(|n| n.eq(&a.0.kind)).unwrap();
-        let b_idx = sorted_kinds.iter().position(|n| n.eq(&b.0.kind)).unwrap();
+        let a_idx = sorted_kinds.iter().position(|n| *n == a.0.kind).unwrap();
+        let b_idx = sorted_kinds.iter().position(|n| *n == b.0.kind).unwrap();
         a_idx.cmp(&b_idx)
     });
+    Ok(())
+}
 
+/// Collapse a supertype's subtypes into the supertype itself in child and
+/// field type lists.
+#[cfg(feature = "load")]
+fn apply_supertype_collapsing(
+    node_types_json: &mut BTreeMap<StrId, NodeInfoJSON>,
+    subtype_map: &[(NodeTypeRef, Vec<NodeTypeRef>)],
+) {
     for node_type_json in node_types_json.values_mut() {
         if node_type_json
             .children
@@ -759,15 +986,27 @@ pub fn generate_node_types_json(
         }
 
         if let Some(children) = &mut node_type_json.children {
-            process_supertypes(children, &subtype_map);
+            process_supertypes(children, subtype_map);
         }
         if let Some(fields) = &mut node_type_json.fields {
             for field_info in fields.values_mut() {
-                process_supertypes(field_info, &subtype_map);
+                process_supertypes(field_info, subtype_map);
             }
         }
     }
+}
 
+/// Add JSON entries for named tokens, returning the anonymous ones to be
+/// appended separately.
+#[cfg(feature = "load")]
+fn build_token_entries(
+    node_types_json: &mut BTreeMap<StrId, NodeInfoJSON>,
+    syntax_grammar: &SyntaxGrammar,
+    lexical_grammar: &LexicalGrammar,
+    aliases_by_symbol: &FxHashMap<Symbol, BTreeSet<Option<Alias>>>,
+    extra_names: &FxHashSet<StrId>,
+) -> Vec<NodeInfoJSON> {
+    let empty = BTreeSet::new();
     let mut anonymous_node_types = Vec::new();
 
     let regular_tokens = lexical_grammar
@@ -808,7 +1047,7 @@ pub fn generate_node_types_json(
         match kind {
             VariableType::Named => {
                 let node_type_json = node_types_json.entry(name).or_insert_with(|| NodeInfoJSON {
-                    kind: str_pool.resolve(name).to_string(),
+                    kind: name,
                     named: true,
                     root: false,
                     extra: extra_names.contains(&name),
@@ -826,7 +1065,7 @@ pub fn generate_node_types_json(
                 }
             }
             VariableType::Anonymous => anonymous_node_types.push(NodeInfoJSON {
-                kind: str_pool.resolve(name).to_string(),
+                kind: name,
                 named: false,
                 root: false,
                 extra: extra_names.contains(&name),
@@ -838,28 +1077,11 @@ pub fn generate_node_types_json(
         }
     }
 
-    let mut result = node_types_json.into_iter().map(|e| e.1).collect::<Vec<_>>();
-    result.extend(anonymous_node_types);
-    result.sort_unstable_by(|a, b| {
-        b.subtypes
-            .is_some()
-            .cmp(&a.subtypes.is_some())
-            .then_with(|| {
-                let a_is_leaf = a.children.is_none() && a.fields.is_none();
-                let b_is_leaf = b.children.is_none() && b.fields.is_none();
-                a_is_leaf.cmp(&b_is_leaf)
-            })
-            .then_with(|| a.kind.cmp(&b.kind))
-            .then_with(|| a.named.cmp(&b.named))
-            .then_with(|| a.root.cmp(&b.root))
-            .then_with(|| a.extra.cmp(&b.extra))
-    });
-    result.dedup();
-    Ok(result)
+    anonymous_node_types
 }
 
 #[cfg(feature = "load")]
-fn process_supertypes(info: &mut FieldInfoJSON, subtype_map: &[(NodeTypeJSON, Vec<NodeTypeJSON>)]) {
+fn process_supertypes(info: &mut FieldInfoJSON, subtype_map: &[(NodeTypeRef, Vec<NodeTypeRef>)]) {
     for (supertype, subtypes) in subtype_map {
         if info.types.contains(supertype) {
             info.types.retain(|t| !subtypes.contains(t));
@@ -867,6 +1089,12 @@ fn process_supertypes(info: &mut FieldInfoJSON, subtype_map: &[(NodeTypeJSON, Ve
     }
 }
 
+/// Determine the visibility of a child type in the node-types output.
+///
+/// Priority chain: aliases override everything, then supertypes are always
+/// `Named`, inlined rules are always `Hidden`, and everything else falls
+/// back to the variable's declared kind. A symbol is never both a supertype
+/// and inlined, since `intern_symbols` drops the supertype of such rules.
 fn variable_type_for_child_type(
     child_type: &ChildType,
     syntax_grammar: &SyntaxGrammar,
@@ -875,9 +1103,16 @@ fn variable_type_for_child_type(
     match child_type {
         ChildType::Aliased(alias) => alias.kind(),
         ChildType::Normal(symbol) => {
-            if syntax_grammar.supertype_symbols.contains(symbol) {
+            let is_supertype = syntax_grammar.supertype_symbols.contains(symbol);
+            let is_inline = syntax_grammar.variables_to_inline.contains(symbol);
+            debug_assert!(
+                !(is_supertype && is_inline),
+                "symbol {} is both a supertype and inlined",
+                symbol.index
+            );
+            if is_supertype {
                 VariableType::Named
-            } else if syntax_grammar.variables_to_inline.contains(symbol) {
+            } else if is_inline {
                 VariableType::Hidden
             } else {
                 let symbol_index = symbol.index as usize;
@@ -904,6 +1139,152 @@ where
             acc
         }
     })
+}
+
+#[cfg(feature = "load")]
+fn cmp_str_ids(a: StrId, b: StrId, str_pool: &StrPool) -> std::cmp::Ordering {
+    str_pool.resolve(a).cmp(str_pool.resolve(b))
+}
+
+#[cfg(feature = "load")]
+fn sort_node_type_refs(types: &mut [NodeTypeRef], str_pool: &StrPool) {
+    types.sort_unstable_by(|a, b| {
+        cmp_str_ids(a.kind, b.kind, str_pool).then_with(|| a.named.cmp(&b.named))
+    });
+}
+
+#[cfg(feature = "load")]
+struct SerializeWithPool<'a, T: ?Sized> {
+    value: &'a T,
+    str_pool: &'a StrPool,
+}
+
+#[cfg(feature = "load")]
+impl Serialize for SerializeWithPool<'_, [NodeInfoJSON]> {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let mut seq = serializer.serialize_seq(Some(self.value.len()))?;
+        for node in self.value {
+            seq.serialize_element(&SerializeWithPool {
+                value: node,
+                str_pool: self.str_pool,
+            })?;
+        }
+        seq.end()
+    }
+}
+
+#[cfg(feature = "load")]
+impl Serialize for SerializeWithPool<'_, NodeTypeRef> {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let mut state = serializer.serialize_struct("NodeTypeRef", 2)?;
+        state.serialize_field("type", self.str_pool.resolve(self.value.kind))?;
+        state.serialize_field("named", &self.value.named)?;
+        state.end()
+    }
+}
+
+#[cfg(feature = "load")]
+impl Serialize for SerializeWithPool<'_, [NodeTypeRef]> {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let mut seq = serializer.serialize_seq(Some(self.value.len()))?;
+        for node_type in self.value {
+            seq.serialize_element(&SerializeWithPool {
+                value: node_type,
+                str_pool: self.str_pool,
+            })?;
+        }
+        seq.end()
+    }
+}
+
+#[cfg(feature = "load")]
+impl Serialize for SerializeWithPool<'_, FieldInfoJSON> {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let mut state = serializer.serialize_struct("FieldInfo", 3)?;
+        state.serialize_field("multiple", &self.value.multiple)?;
+        state.serialize_field("required", &self.value.required)?;
+        state.serialize_field(
+            "types",
+            &SerializeWithPool {
+                value: self.value.types.as_slice(),
+                str_pool: self.str_pool,
+            },
+        )?;
+        state.end()
+    }
+}
+
+#[cfg(feature = "load")]
+impl Serialize for SerializeWithPool<'_, NodeFields> {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let mut fields = self.value.iter().collect::<Vec<_>>();
+        fields.sort_unstable_by(|(a, _), (b, _)| cmp_str_ids(**a, **b, self.str_pool));
+
+        let mut map = serializer.serialize_map(Some(fields.len()))?;
+        for (name, field_info) in fields {
+            map.serialize_entry(
+                self.str_pool.resolve(*name),
+                &SerializeWithPool {
+                    value: field_info,
+                    str_pool: self.str_pool,
+                },
+            )?;
+        }
+        map.end()
+    }
+}
+
+#[cfg(feature = "load")]
+impl Serialize for SerializeWithPool<'_, NodeInfoJSON> {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let node = self.value;
+        let field_count = 2
+            + usize::from(node.root)
+            + usize::from(node.extra)
+            + usize::from(node.fields.is_some())
+            + usize::from(node.children.is_some())
+            + usize::from(node.subtypes.is_some());
+
+        let mut state = serializer.serialize_struct("NodeInfo", field_count)?;
+        state.serialize_field("type", self.str_pool.resolve(node.kind))?;
+        state.serialize_field("named", &node.named)?;
+
+        if node.root {
+            state.serialize_field("root", &node.root)?;
+        }
+        if node.extra {
+            state.serialize_field("extra", &node.extra)?;
+        }
+        if let Some(fields) = &node.fields {
+            state.serialize_field(
+                "fields",
+                &SerializeWithPool {
+                    value: fields,
+                    str_pool: self.str_pool,
+                },
+            )?;
+        }
+        if let Some(children) = &node.children {
+            state.serialize_field(
+                "children",
+                &SerializeWithPool {
+                    value: children,
+                    str_pool: self.str_pool,
+                },
+            )?;
+        }
+        if let Some(subtypes) = &node.subtypes {
+            state.serialize_field(
+                "subtypes",
+                &SerializeWithPool {
+                    value: subtypes.as_slice(),
+                    str_pool: self.str_pool,
+                },
+            )?;
+        }
+
+        state.end()
+    }
 }
 
 #[cfg(all(test, feature = "load"))]
@@ -934,6 +1315,12 @@ mod tests {
         };
         let v2 = string(&mut pool, "x");
         let v3 = string(&mut pool, "y");
+
+        let v1_name = pool.intern("v1");
+        let v2_name = pool.intern("v2");
+        let semicolon = pool.intern(";");
+        let f1_name = pool.intern("f1");
+        let f2_name = pool.intern("f2");
         let node_types = get_node_types(InputGrammar {
             variables: vec![
                 Variable {
@@ -961,7 +1348,7 @@ mod tests {
         assert_eq!(
             node_types[0],
             NodeInfoJSON {
-                kind: "v1".to_string(),
+                kind: v1_name,
                 named: true,
                 root: true,
                 extra: false,
@@ -970,23 +1357,23 @@ mod tests {
                 fields: Some(
                     vec![
                         (
-                            "f1".to_string(),
+                            f1_name,
                             FieldInfoJSON {
                                 multiple: false,
                                 required: true,
-                                types: vec![NodeTypeJSON {
-                                    kind: "v2".to_string(),
+                                types: vec![NodeTypeRef {
+                                    kind: v2_name,
                                     named: true,
                                 }]
                             }
                         ),
                         (
-                            "f2".to_string(),
+                            f2_name,
                             FieldInfoJSON {
                                 multiple: false,
                                 required: true,
-                                types: vec![NodeTypeJSON {
-                                    kind: ";".to_string(),
+                                types: vec![NodeTypeRef {
+                                    kind: semicolon,
                                     named: false,
                                 }]
                             }
@@ -1000,7 +1387,7 @@ mod tests {
         assert_eq!(
             node_types[1],
             NodeInfoJSON {
-                kind: ";".to_string(),
+                kind: semicolon,
                 named: false,
                 root: false,
                 extra: false,
@@ -1012,7 +1399,7 @@ mod tests {
         assert_eq!(
             node_types[2],
             NodeInfoJSON {
-                kind: "v2".to_string(),
+                kind: v2_name,
                 named: true,
                 root: false,
                 extra: false,
@@ -1040,6 +1427,12 @@ mod tests {
         let v2 = string(&mut pool, "x");
         let v3 = string(&mut pool, "y");
         let extra = named(&mut pool, "v3");
+        let v1_name = pool.intern("v1");
+        let v2_name = pool.intern("v2");
+        let v3_name = pool.intern("v3");
+        let semicolon = pool.intern(";");
+        let f1_name = pool.intern("f1");
+        let f2_name = pool.intern("f2");
         let node_types = get_node_types(InputGrammar {
             extra_roots: vec![extra],
             variables: vec![
@@ -1071,7 +1464,7 @@ mod tests {
         assert_eq!(
             node_types[0],
             NodeInfoJSON {
-                kind: "v1".to_string(),
+                kind: v1_name,
                 named: true,
                 root: true,
                 extra: false,
@@ -1080,23 +1473,23 @@ mod tests {
                 fields: Some(
                     vec![
                         (
-                            "f1".to_string(),
+                            f1_name,
                             FieldInfoJSON {
                                 multiple: false,
                                 required: true,
-                                types: vec![NodeTypeJSON {
-                                    kind: "v2".to_string(),
+                                types: vec![NodeTypeRef {
+                                    kind: v2_name,
                                     named: true,
                                 }]
                             }
                         ),
                         (
-                            "f2".to_string(),
+                            f2_name,
                             FieldInfoJSON {
                                 multiple: false,
                                 required: true,
-                                types: vec![NodeTypeJSON {
-                                    kind: ";".to_string(),
+                                types: vec![NodeTypeRef {
+                                    kind: semicolon,
                                     named: false,
                                 }]
                             }
@@ -1110,7 +1503,7 @@ mod tests {
         assert_eq!(
             node_types[1],
             NodeInfoJSON {
-                kind: ";".to_string(),
+                kind: semicolon,
                 named: false,
                 root: false,
                 extra: false,
@@ -1122,7 +1515,7 @@ mod tests {
         assert_eq!(
             node_types[2],
             NodeInfoJSON {
-                kind: "v2".to_string(),
+                kind: v2_name,
                 named: true,
                 root: false,
                 extra: false,
@@ -1134,7 +1527,7 @@ mod tests {
         assert_eq!(
             node_types[3],
             NodeInfoJSON {
-                kind: "v3".to_string(),
+                kind: v3_name,
                 named: true,
                 root: false,
                 extra: true,
@@ -1169,6 +1562,12 @@ mod tests {
             pool.seq(&[y, z])
         };
         let extra = named(&mut pool, "v3");
+        let v1_name = pool.intern("v1");
+        let v2_name = pool.intern("v2");
+        let v3_name = pool.intern("v3");
+        let semicolon = pool.intern(";");
+        let f1_name = pool.intern("f1");
+        let f2_name = pool.intern("f2");
         let node_types = get_node_types(InputGrammar {
             extra_roots: vec![extra],
             variables: vec![
@@ -1200,7 +1599,7 @@ mod tests {
         assert_eq!(
             node_types[0],
             NodeInfoJSON {
-                kind: "v1".to_string(),
+                kind: v1_name,
                 named: true,
                 root: true,
                 extra: false,
@@ -1209,23 +1608,23 @@ mod tests {
                 fields: Some(
                     vec![
                         (
-                            "f1".to_string(),
+                            f1_name,
                             FieldInfoJSON {
                                 multiple: false,
                                 required: true,
-                                types: vec![NodeTypeJSON {
-                                    kind: "v2".to_string(),
+                                types: vec![NodeTypeRef {
+                                    kind: v2_name,
                                     named: true,
                                 }]
                             }
                         ),
                         (
-                            "f2".to_string(),
+                            f2_name,
                             FieldInfoJSON {
                                 multiple: false,
                                 required: true,
-                                types: vec![NodeTypeJSON {
-                                    kind: ";".to_string(),
+                                types: vec![NodeTypeRef {
+                                    kind: semicolon,
                                     named: false,
                                 }]
                             }
@@ -1239,19 +1638,19 @@ mod tests {
         assert_eq!(
             node_types[1],
             NodeInfoJSON {
-                kind: "v3".to_string(),
+                kind: v3_name,
                 named: true,
                 root: false,
                 extra: true,
                 subtypes: None,
                 children: None,
-                fields: Some(BTreeMap::default())
+                fields: Some(NodeFields::default())
             }
         );
         assert_eq!(
             node_types[2],
             NodeInfoJSON {
-                kind: ";".to_string(),
+                kind: semicolon,
                 named: false,
                 root: false,
                 extra: false,
@@ -1263,7 +1662,7 @@ mod tests {
         assert_eq!(
             node_types[3],
             NodeInfoJSON {
-                kind: "v2".to_string(),
+                kind: v2_name,
                 named: true,
                 root: false,
                 extra: false,
@@ -1291,6 +1690,12 @@ mod tests {
         };
         let v3 = string(&mut pool, "x");
         let v4 = string(&mut pool, "y");
+        let v1_name = pool.intern("v1");
+        let v2_name = pool.intern("_v2");
+        let v3_name = pool.intern("v3");
+        let v4_name = pool.intern("v4");
+        let asterisk = pool.intern("*");
+        let f1_name = pool.intern("f1");
         let node_types = get_node_types(InputGrammar {
             supertype_names: vec![pool.intern("_v2")],
             variables: vec![
@@ -1319,23 +1724,23 @@ mod tests {
         assert_eq!(
             node_types[0],
             NodeInfoJSON {
-                kind: "_v2".to_string(),
+                kind: v2_name,
                 named: true,
                 root: false,
                 extra: false,
                 fields: None,
                 children: None,
                 subtypes: Some(vec![
-                    NodeTypeJSON {
-                        kind: "*".to_string(),
+                    NodeTypeRef {
+                        kind: asterisk,
                         named: false,
                     },
-                    NodeTypeJSON {
-                        kind: "v3".to_string(),
+                    NodeTypeRef {
+                        kind: v3_name,
                         named: true,
                     },
-                    NodeTypeJSON {
-                        kind: "v4".to_string(),
+                    NodeTypeRef {
+                        kind: v4_name,
                         named: true,
                     },
                 ]),
@@ -1344,7 +1749,7 @@ mod tests {
         assert_eq!(
             node_types[1],
             NodeInfoJSON {
-                kind: "v1".to_string(),
+                kind: v1_name,
                 named: true,
                 root: true,
                 extra: false,
@@ -1352,12 +1757,12 @@ mod tests {
                 children: None,
                 fields: Some(
                     vec![(
-                        "f1".to_string(),
+                        f1_name,
                         FieldInfoJSON {
                             multiple: false,
                             required: true,
-                            types: vec![NodeTypeJSON {
-                                kind: "_v2".to_string(),
+                            types: vec![NodeTypeRef {
+                                kind: v2_name,
                                 named: true,
                             }]
                         }
@@ -1445,6 +1850,11 @@ mod tests {
         };
         let v3 = string(&mut pool, "x");
         let v4 = string(&mut pool, "y");
+        let v1_name = pool.intern("v1");
+        let v2_name = pool.intern("v2");
+        let v3_name = pool.intern("v3");
+        let v4_name = pool.intern("v4");
+        let f1_name = pool.intern("f1");
         let node_types = get_node_types(InputGrammar {
             variables: vec![
                 Variable {
@@ -1472,7 +1882,7 @@ mod tests {
         assert_eq!(
             node_types[0],
             NodeInfoJSON {
-                kind: "v1".to_string(),
+                kind: v1_name,
                 named: true,
                 root: true,
                 extra: false,
@@ -1481,24 +1891,24 @@ mod tests {
                     multiple: true,
                     required: true,
                     types: vec![
-                        NodeTypeJSON {
-                            kind: "v2".to_string(),
+                        NodeTypeRef {
+                            kind: v2_name,
                             named: true,
                         },
-                        NodeTypeJSON {
-                            kind: "v4".to_string(),
+                        NodeTypeRef {
+                            kind: v4_name,
                             named: true,
                         },
                     ]
                 }),
                 fields: Some(
                     vec![(
-                        "f1".to_string(),
+                        f1_name,
                         FieldInfoJSON {
                             multiple: false,
                             required: true,
-                            types: vec![NodeTypeJSON {
-                                kind: "v3".to_string(),
+                            types: vec![NodeTypeRef {
+                                kind: v3_name,
                                 named: true,
                             }]
                         }
@@ -1511,7 +1921,7 @@ mod tests {
         assert_eq!(
             node_types[1],
             NodeInfoJSON {
-                kind: "v2".to_string(),
+                kind: v2_name,
                 named: true,
                 root: false,
                 extra: false,
@@ -1519,12 +1929,12 @@ mod tests {
                 children: Some(FieldInfoJSON {
                     multiple: false,
                     required: false,
-                    types: vec![NodeTypeJSON {
-                        kind: "v3".to_string(),
+                    types: vec![NodeTypeRef {
+                        kind: v3_name,
                         named: true,
                     },]
                 }),
-                fields: Some(BTreeMap::new()),
+                fields: Some(NodeFields::default()),
             }
         );
     }
@@ -1541,6 +1951,9 @@ mod tests {
             alias(&mut pool, a, "x", true)
         };
         let v3 = string(&mut pool, "b");
+        let v1_name = pool.intern("v1");
+        let v3_name = pool.intern("v3");
+        let x_name = pool.intern("x");
         let node_types = get_node_types(InputGrammar {
             inline_names: vec![pool.intern("v2")],
             variables: vec![
@@ -1566,7 +1979,7 @@ mod tests {
         assert_eq!(
             node_types[0],
             NodeInfoJSON {
-                kind: "v1".to_string(),
+                kind: v1_name,
                 named: true,
                 root: true,
                 extra: false,
@@ -1575,17 +1988,17 @@ mod tests {
                     multiple: true,
                     required: true,
                     types: vec![
-                        NodeTypeJSON {
-                            kind: "v3".to_string(),
+                        NodeTypeRef {
+                            kind: v3_name,
                             named: true,
                         },
-                        NodeTypeJSON {
-                            kind: "x".to_string(),
+                        NodeTypeRef {
+                            kind: x_name,
                             named: true,
                         },
                     ]
                 }),
-                fields: Some(BTreeMap::new()),
+                fields: Some(NodeFields::default()),
             }
         );
     }
@@ -1615,6 +2028,9 @@ mod tests {
         };
         let identifier = pattern(&mut pool, "\\w+");
         let foo_identifier = pattern(&mut pool, "[\\w-]+");
+        let identifier_name = pool.intern("identifier");
+        let foo_identifier_name = pool.intern("foo_identifier");
+        let type_identifier_name = pool.intern("type_identifier");
         let node_types = get_node_types(InputGrammar {
             variables: vec![
                 Variable {
@@ -1643,11 +2059,14 @@ mod tests {
         })
         .unwrap();
 
-        assert_eq!(node_types.iter().find(|t| t.kind == "foo_identifier"), None);
         assert_eq!(
-            node_types.iter().find(|t| t.kind == "identifier"),
+            node_types.iter().find(|t| t.kind == foo_identifier_name),
+            None
+        );
+        assert_eq!(
+            node_types.iter().find(|t| t.kind == identifier_name),
             Some(&NodeInfoJSON {
-                kind: "identifier".to_string(),
+                kind: identifier_name,
                 named: true,
                 root: false,
                 extra: false,
@@ -1657,9 +2076,9 @@ mod tests {
             })
         );
         assert_eq!(
-            node_types.iter().find(|t| t.kind == "type_identifier"),
+            node_types.iter().find(|t| t.kind == type_identifier_name),
             Some(&NodeInfoJSON {
-                kind: "type_identifier".to_string(),
+                kind: type_identifier_name,
                 named: true,
                 root: false,
                 extra: false,
@@ -1693,6 +2112,10 @@ mod tests {
         };
         let b = string(&mut pool, "b");
         let c = string(&mut pool, "c");
+        let a_name = pool.intern("a");
+        let b_name = pool.intern("b");
+        let c_name = pool.intern("c");
+        let f1_name = pool.intern("f1");
         let node_types = get_node_types(InputGrammar {
             variables: vec![
                 Variable {
@@ -1716,7 +2139,7 @@ mod tests {
         assert_eq!(
             node_types[0],
             NodeInfoJSON {
-                kind: "a".to_string(),
+                kind: a_name,
                 named: true,
                 root: true,
                 extra: false,
@@ -1724,19 +2147,19 @@ mod tests {
                 children: Some(FieldInfoJSON {
                     multiple: true,
                     required: true,
-                    types: vec![NodeTypeJSON {
-                        kind: "c".to_string(),
+                    types: vec![NodeTypeRef {
+                        kind: c_name,
                         named: true,
                     },]
                 }),
                 fields: Some(
                     vec![(
-                        "f1".to_string(),
+                        f1_name,
                         FieldInfoJSON {
                             multiple: true,
                             required: false,
-                            types: vec![NodeTypeJSON {
-                                kind: "b".to_string(),
+                            types: vec![NodeTypeRef {
+                                kind: b_name,
                                 named: true,
                             }]
                         }
@@ -1762,6 +2185,7 @@ mod tests {
             };
             pool.seq(&[a, b])
         };
+        let script_name = pool.intern("script");
         let node_types = get_node_types(InputGrammar {
             variables: vec![Variable {
                 name: pool.intern("script"),
@@ -1775,11 +2199,11 @@ mod tests {
         assert_eq!(
             node_types,
             [NodeInfoJSON {
-                kind: "script".to_string(),
+                kind: script_name,
                 named: true,
                 root: true,
                 extra: false,
-                fields: Some(BTreeMap::new()),
+                fields: Some(NodeFields::default()),
                 children: None,
                 subtypes: None
             }]
@@ -1823,6 +2247,16 @@ mod tests {
             };
             pool.seq(&[f2a, f2b, f3])
         };
+        let a_name = pool.intern("a");
+        let script_name = pool.intern("script");
+        let name_1 = pool.intern("1");
+        let name_2 = pool.intern("2");
+        let name_22 = pool.intern("22");
+        let name_222 = pool.intern("222");
+        let name_3 = pool.intern("3");
+        let f1_name = pool.intern("f1");
+        let f2_name = pool.intern("f2");
+        let f3_name = pool.intern("f3");
         let node_types = get_node_types(InputGrammar {
             variables: vec![
                 Variable {
@@ -1844,11 +2278,16 @@ mod tests {
         .unwrap();
 
         assert_eq!(
-            &node_types
-                .iter()
-                .map(|t| t.kind.as_str())
-                .collect::<Vec<_>>(),
-            &["a", "script", "1", "2", "22", "222", "3"]
+            &node_types.iter().map(|t| t.kind).collect::<Vec<_>>(),
+            &[
+                a_name,
+                script_name,
+                name_1,
+                name_2,
+                name_22,
+                name_222,
+                name_3
+            ],
         );
 
         assert_eq!(
@@ -1856,7 +2295,7 @@ mod tests {
             &[
                 // A combination of the types for `a` and `b`.
                 NodeInfoJSON {
-                    kind: "a".to_string(),
+                    kind: a_name,
                     named: true,
                     root: false,
                     extra: false,
@@ -1865,44 +2304,44 @@ mod tests {
                     fields: Some(
                         vec![
                             (
-                                "f1".to_string(),
+                                f1_name,
                                 FieldInfoJSON {
                                     multiple: false,
                                     required: false,
-                                    types: vec![NodeTypeJSON {
-                                        kind: "1".to_string(),
+                                    types: vec![NodeTypeRef {
+                                        kind: name_1,
                                         named: false,
                                     }]
                                 }
                             ),
                             (
-                                "f2".to_string(),
+                                f2_name,
                                 FieldInfoJSON {
                                     multiple: true,
                                     required: true,
                                     types: vec![
-                                        NodeTypeJSON {
-                                            kind: "2".to_string(),
+                                        NodeTypeRef {
+                                            kind: name_2,
                                             named: false,
                                         },
-                                        NodeTypeJSON {
-                                            kind: "22".to_string(),
+                                        NodeTypeRef {
+                                            kind: name_22,
                                             named: false,
                                         },
-                                        NodeTypeJSON {
-                                            kind: "222".to_string(),
+                                        NodeTypeRef {
+                                            kind: name_222,
                                             named: false,
                                         }
                                     ]
                                 },
                             ),
                             (
-                                "f3".to_string(),
+                                f3_name,
                                 FieldInfoJSON {
                                     multiple: false,
                                     required: false,
-                                    types: vec![NodeTypeJSON {
-                                        kind: "3".to_string(),
+                                    types: vec![NodeTypeRef {
+                                        kind: name_3,
                                         named: false,
                                     }]
                                 }
@@ -1913,7 +2352,7 @@ mod tests {
                     ),
                 },
                 NodeInfoJSON {
-                    kind: "script".to_string(),
+                    kind: script_name,
                     named: true,
                     root: true,
                     extra: false,
@@ -1922,12 +2361,12 @@ mod tests {
                     children: Some(FieldInfoJSON {
                         multiple: false,
                         required: true,
-                        types: vec![NodeTypeJSON {
-                            kind: "a".to_string(),
+                        types: vec![NodeTypeRef {
+                            kind: a_name,
                             named: true,
                         }]
                     }),
-                    fields: Some(BTreeMap::new()),
+                    fields: Some(NodeFields::default()),
                 }
             ]
         );
@@ -1959,6 +2398,11 @@ mod tests {
             pool.choice(&[cc, d])
         };
 
+        let name_a = pool.intern("a");
+        let name_b = pool.intern("b");
+        let name_c = pool.intern("c");
+        let name_capital_b = pool.intern("B");
+        let name_capital_c = pool.intern("C");
         // above Alias D
         let node_types = get_node_types(InputGrammar {
             variables: vec![
@@ -1982,13 +2426,13 @@ mod tests {
         .unwrap();
 
         assert_eq!(
-            node_types.iter().map(|n| &n.kind).collect::<Vec<_>>(),
-            &["a", "b", "c", "B", "C"]
+            node_types.iter().map(|n| n.kind).collect::<Vec<_>>(),
+            &[name_a, name_b, name_c, name_capital_b, name_capital_c]
         );
         assert_eq!(
             node_types[1],
             NodeInfoJSON {
-                kind: "b".to_string(),
+                kind: name_b,
                 named: true,
                 root: false,
                 extra: false,
@@ -1996,12 +2440,12 @@ mod tests {
                 children: Some(FieldInfoJSON {
                     multiple: true,
                     required: false,
-                    types: vec![NodeTypeJSON {
-                        kind: "c".to_string(),
+                    types: vec![NodeTypeRef {
+                        kind: name_c,
                         named: true,
                     }]
                 }),
-                fields: Some(BTreeMap::new()),
+                fields: Some(NodeFields::default()),
             }
         );
     }
@@ -2266,6 +2710,76 @@ mod tests {
         );
     }
 
+    #[test]
+    fn test_supertype_and_inline_conflict() {
+        // v1: field("f1", _v2)
+        // _v2: choice(v3, v4)
+        // supertypes: [_v2]
+        // inline: [_v2]
+        let mut pool = RulePool::default();
+        let v1_name = pool.intern("v1");
+        let v2_name = pool.intern("_v2");
+        let v3_name = pool.intern("v3");
+        let v4_name = pool.intern("v4");
+        let f1_name = pool.intern("f1");
+        let v1_root = {
+            let v2 = pool.named_symbol(v2_name);
+            field(&mut pool, "f1", v2)
+        };
+        let v2_root = {
+            let v3 = named(&mut pool, "v3");
+            let v4 = named(&mut pool, "v4");
+            pool.choice(&[v3, v4])
+        };
+        let v3_root = string(&mut pool, "x");
+        let v4_root = string(&mut pool, "y");
+        let grammar = InputGrammar {
+            variables: vec![
+                Variable {
+                    name: v1_name,
+                    root: v1_root,
+                },
+                Variable {
+                    name: v2_name,
+                    root: v2_root,
+                },
+                Variable {
+                    name: v3_name,
+                    root: v3_root,
+                },
+                Variable {
+                    name: v4_name,
+                    root: v4_root,
+                },
+            ],
+            supertype_names: vec![v2_name],
+            inline_names: vec![v2_name],
+            pool,
+            ..Default::default()
+        };
+
+        let node_types = get_node_types(grammar).unwrap();
+
+        // The supertype entry for `_v2` is dropped, since the rule is inlined
+        // away and can never appear in a tree. Previously a phantom `_v2`
+        // entry with subtypes was emitted.
+        assert!(node_types.iter().all(|n| n.kind != v2_name));
+        let v1 = node_types.iter().find(|n| n.kind == v1_name).unwrap();
+        assert_eq!(
+            v1.fields.as_ref().unwrap()[&f1_name].types,
+            vec![
+                NodeTypeRef {
+                    kind: v3_name,
+                    named: true,
+                },
+                NodeTypeRef {
+                    kind: v4_name,
+                    named: true,
+                },
+            ]
+        );
+    }
+
     fn get_node_types(grammar: InputGrammar) -> SuperTypeCycleResult<Vec<NodeInfoJSON>> {
         let PreparedGrammar {
             syntax_grammar,
@@ -2281,7 +2795,7 @@ mod tests {
             &str_pool,
         )
         .unwrap();
-        generate_node_types_json(
+        generate_node_types(
             &syntax_grammar,
             &lexical_grammar,
             &default_aliases,
