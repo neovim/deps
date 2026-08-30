@@ -1,7 +1,7 @@
 Neovim prebuilt dependencies
 ============================
 
-This is a *write-only* repo of third-party dependencies for use by the Neovim
+This is a cache of third-party dependencies for use by the Neovim
 CI build.
 
 - `src/`
