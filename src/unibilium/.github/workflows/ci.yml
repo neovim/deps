@@ -1,0 +1,74 @@
+name: test
+on:
+  push:
+    branches:
+      - 'master'
+  pull_request:
+    branches:
+      - 'master'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Install dependencies
+        run: sudo apt --update install build-essential libtool-bin libncurses-dev autoconf
+
+      - name: Build
+        run: |
+          autoreconf -fi
+          ./configure
+          make all
+
+      - name: Run tests
+        run: make test
+
+  linux-cmake:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Install dependencies
+        run: sudo apt --update install build-essential libncurses-dev cmake
+
+      - name: Build
+        run: |
+          cmake -B build .
+          cmake --build build
+
+      - name: Run tests
+        run: ctest --test-dir build --output-on-failure
+
+  linux-zig:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7.0.0
+        with:
+          persist-credentials: false
+
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        with:
+          version: 0.16.0
+
+      - name: Install dependencies
+        run: sudo apt --update install build-essential libncurses-dev cmake
+
+      - name: Build
+        run: zig build
