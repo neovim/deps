@@ -1,8 +1,7 @@
 Neovim prebuilt dependencies
 ============================
 
-This is a cache of third-party dependencies for use by the Neovim
-CI build.
+This is a cache of third-party dependencies for use by "offline" builds.
 
 - `src/`
     - Cache of dependency sources.
