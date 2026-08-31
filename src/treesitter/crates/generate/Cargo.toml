@@ -1,17 +1,17 @@
 [package]
-name                   = "tree-sitter-generate"
-version.workspace      = true
-description            = "Library for generating C source code from a tree-sitter grammar"
-authors.workspace      = true
-edition.workspace      = true
+name = "tree-sitter-generate"
+version.workspace = true
+description = "Library for generating C source code from a tree-sitter grammar"
+authors.workspace = true
+edition.workspace = true
 rust-version.workspace = true
-readme                 = "README.md"
-homepage.workspace     = true
-repository.workspace   = true
-documentation          = "https://docs.rs/tree-sitter-generate"
-license.workspace      = true
-keywords.workspace     = true
-categories.workspace   = true
+readme = "README.md"
+homepage.workspace = true
+repository.workspace = true
+documentation = "https://docs.rs/tree-sitter-generate"
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
 
 [lib]
 path = "src/generate.rs"
@@ -21,12 +21,13 @@ workspace = true
 
 [features]
 default = [ "qjs-rt" ]
-load    = [ "dep:semver" ]
-qjs-rt  = [ "load", "rquickjs", "pathdiff" ]
+load = [ "dep:semver" ]
+qjs-rt = [ "load", "rquickjs", "pathdiff" ]
 
 [dependencies]
 bitflags = "2.11.1"
 dunce = "1.0.5"
+hashbrown.workspace = true
 indexmap.workspace = true
 log.workspace = true
 pathdiff = { optional = true, version = "0.2.3" }

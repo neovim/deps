@@ -33,6 +33,12 @@ function blank() {
   };
 }
 
+function eof() {
+  return {
+    type: "EOF"
+  };
+}
+
 function field(name, rule) {
   if (typeof name !== "string" || !/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name)) {
     throw new Error(`Invalid field name '${name}': field names must start with a letter or underscore, followed by letters, digits, or underscores`);
@@ -334,7 +340,7 @@ function grammar(baseGrammar, options) {
     }
   }
 
-  let reserved = baseGrammar.reserved;
+  let reserved = { ...baseGrammar.reserved };
   if (options.reserved) {
     if (typeof options.reserved !== "object") {
       throw new Error("Grammar's 'reserved' property must be an object.");
@@ -374,14 +380,16 @@ function grammar(baseGrammar, options) {
 
   let word = baseGrammar.word;
   if (options.word) {
-    word = options.word.call(ruleBuilder, ruleBuilder).name;
-    if (typeof word != 'string') {
+    const wordRule = options.word.call(ruleBuilder, ruleBuilder);
+    if (wordRule?.name === 'ReferenceError') {
+      throw new Error("Grammar's 'word' property must be a valid named rule.");
+    }
+
+    if (wordRule?.type !== 'SYMBOL' || typeof wordRule.name !== 'string') {
       throw new Error("Grammar's 'word' property must be a named rule.");
     }
 
-    if (word === 'ReferenceError') {
-      throw new Error("Grammar's 'word' property must be a valid rule name.");
-    }
+    word = wordRule.name;
   }
 
   let conflicts = baseGrammar.conflicts;
@@ -402,7 +410,13 @@ function grammar(baseGrammar, options) {
         throw new Error("Grammar's conflicts must be an array of arrays of rules.");
       }
 
-      return conflictSet.map(symbol => normalize(symbol).name);
+      return conflictSet.map(symbol => {
+        const rule = normalize(symbol);
+        if (rule.type !== 'SYMBOL') {
+          throw new Error("Grammar's conflicts must contain only named rules.");
+        }
+        return rule.name;
+      });
     });
   }
 
@@ -420,12 +434,15 @@ function grammar(baseGrammar, options) {
     }
 
     inline = inlineRules.filter((symbol, index, self) => {
-      if (self.findIndex(s => s.name === symbol.name) !== index) {
-        console.log(`Warning: duplicate inline rule '${symbol.name}'`);
+      if (symbol?.name === 'ReferenceError') {
+        console.log(`Warning: inline rule '${symbol.symbol.name}' is not defined.`);
         return false;
       }
-      if (symbol.name === 'ReferenceError') {
-        console.log(`Warning: inline rule '${symbol.symbol.name}' is not defined.`);
+      if (symbol?.type !== 'SYMBOL' || typeof symbol.name !== 'string') {
+        throw new Error("Grammar's inline property must contain only named rules.");
+      }
+      if (self.findIndex(s => s?.name === symbol.name) !== index) {
+        console.log(`Warning: duplicate inline rule '${symbol.name}'`);
         return false;
       }
       return true;
@@ -446,8 +463,11 @@ function grammar(baseGrammar, options) {
     }
 
     supertypes = supertypeRules.map(symbol => {
-      if (symbol.name === 'ReferenceError') {
+      if (symbol?.name === 'ReferenceError') {
         throw new Error(`Supertype rule \`${symbol.symbol.name}\` is not defined.`);
+      }
+      if (symbol?.type !== 'SYMBOL' || typeof symbol.name !== 'string') {
+        throw new Error("Grammar's supertypes property must contain only named rules.");
       }
       return symbol.name;
     });
@@ -466,7 +486,15 @@ function grammar(baseGrammar, options) {
       if (!Array.isArray(list)) {
         throw new Error("Grammar's precedences must be an array of arrays of rules.");
       }
-      return list.map(normalize);
+      return list.map(entry => {
+        const rule = normalize(entry);
+        if (rule.type !== 'STRING' && rule.type !== 'SYMBOL') {
+          throw new Error(
+            "Grammar's precedences must contain only precedence names or named rules."
+          );
+        }
+        return rule;
+      });
     });
   }
 
@@ -528,6 +556,7 @@ function getEnv(name) {
 
 globalThis.alias = alias;
 globalThis.blank = blank;
+globalThis.eof = eof;
 globalThis.choice = choice;
 globalThis.optional = optional;
 globalThis.prec = prec;

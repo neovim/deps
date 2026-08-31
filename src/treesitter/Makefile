@@ -129,8 +129,13 @@ lint-web:
 	npm --prefix lib/binding_web ci
 	npm --prefix lib/binding_web run lint
 
+lint-toml:
+	taplo check
+	taplo format --check --diff
+
 format:
 	cargo fmt --all
+	taplo format
 
 changelog:
 	@git-cliff --config .github/cliff.toml --prepend CHANGELOG.md --latest --github-token $(shell gh auth token)

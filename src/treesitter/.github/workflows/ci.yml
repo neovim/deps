@@ -27,10 +27,19 @@ jobs:
           toolchain: stable
           components: clippy, rustfmt
 
-      - name: Lint files
-        run: |
-          make lint
-          make lint-web
+      - name: Lint Rust files
+        run: make lint
+
+      - name: Install Taplo
+        uses: taiki-e/install-action@v2
+        with:
+          tool: taplo@0.10.0
+
+      - name: Lint TOML files
+        run: make lint-toml
+
+      - name: Lint web files
+        run: make lint-web
 
   sanitize:
     uses: ./.github/workflows/sanitize.yml

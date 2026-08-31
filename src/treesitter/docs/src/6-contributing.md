@@ -89,6 +89,10 @@ npm install # or your JS package manager of choice
 npm run build
 ```
 
+```admonish note
+If using a local Emscripten installation, the version must match the one [pinned by this repository][emscripten-version].
+```
+
 Build the Rust libraries and the CLI:
 
 ```sh
@@ -136,6 +140,20 @@ Similarly, to test the Wasm binding, you need to compile these parsers to Wasm:
 ```sh
 cargo xtask generate-fixtures --wasm
 cargo xtask test-wasm
+```
+
+### Formatting TOML
+
+TOML files are formatted with [Taplo][taplo] according to `.taplo.toml`. Install the Taplo CLI with:
+
+```sh
+cargo install taplo-cli --locked
+```
+
+After editing a TOML file, format it by passing its path to Taplo:
+
+```sh
+taplo fmt path/to/file.toml
 ```
 
 #### Wasm Stdlib
@@ -338,6 +356,7 @@ and the tree-sitter module is fetched from [here][js url]. This, along with the 
 [docker]: https://www.docker.com
 [docs src]: https://github.com/tree-sitter/tree-sitter/tree/master/docs/src
 [emscripten]: https://emscripten.org
+[emscripten-version]: https://github.com/tree-sitter/tree-sitter/blob/master/crates/loader/emscripten-version
 [generate crate]: https://crates.io/crates/tree-sitter-generate
 [gh.io repo]: https://github.com/tree-sitter/tree-sitter.github.io
 [go.dev]: https://pkg.go.dev
@@ -362,6 +381,7 @@ and the tree-sitter module is fetched from [here][js url]. This, along with the 
 [pypi]: https://pypi.org
 [rust]: https://rustup.rs
 [tags crate]: https://crates.io/crates/tree-sitter-tags
+[taplo]: https://taplo.tamasfe.dev
 [ts repo]: https://github.com/tree-sitter/tree-sitter
 [wasi_sdk]: https://github.com/WebAssembly/wasi-sdk
 [wasi-sdk-releases]: https://github.com/WebAssembly/wasi-sdk/releases

@@ -28,7 +28,6 @@
             ./flake.lock
             ./FUNDING.json
             ./README.md
-            ./Dockerfile
             (fs.fileFilter (file: lib.strings.hasInfix ".git" file.name) ./.)
             (fs.fileFilter (file: file.hasExt "nix") ./.)
           ]

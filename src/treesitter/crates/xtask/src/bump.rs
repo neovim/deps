@@ -285,7 +285,10 @@ fn update_zig(next_version: &Version) -> Result<()> {
 fn fetch_workspace_version() -> Result<String> {
     std::fs::read_to_string("Cargo.toml")?
         .lines()
-        .find(|line| line.starts_with("version = "))
+        .find(|line| {
+            line.split_once('=')
+                .is_some_and(|(key, _)| key.trim() == "version")
+        })
         .and_then(|line| {
             line.split_terminator('"')
                 .next_back()

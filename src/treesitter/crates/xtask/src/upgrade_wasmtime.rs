@@ -9,15 +9,28 @@ const WASMTIME_RELEASE_URL: &str = "https://github.com/bytecodealliance/wasmtime
 
 fn update_cargo(version: &Version) -> Result<()> {
     let file = std::fs::read_to_string("lib/Cargo.toml")?;
-    let mut old_lines = file.lines();
-    let mut new_lines = Vec::with_capacity(old_lines.size_hint().0);
+    let mut in_wasmtime_dependency = false;
+    let mut updated = false;
+    let mut new_lines = Vec::with_capacity(file.lines().size_hint().0);
 
-    while let Some(line) = old_lines.next() {
-        new_lines.push(line.to_string());
-        if line == "[dependencies.wasmtime-c-api]" {
-            let _ = old_lines.next();
-            new_lines.push(format!("version = \"{version}\""));
+    for line in file.lines() {
+        if line.starts_with('[') {
+            in_wasmtime_dependency = line == "[dependencies.wasmtime-c-api]";
         }
+
+        if in_wasmtime_dependency
+            && let Some((key, _)) = line.split_once('=')
+            && key.trim() == "version"
+        {
+            new_lines.push(format!("{key}= \"{version}\""));
+            updated = true;
+        } else {
+            new_lines.push(line.to_string());
+        }
+    }
+
+    if !updated {
+        anyhow::bail!("Failed to find wasmtime-c-api version in lib/Cargo.toml");
     }
 
     std::fs::write("lib/Cargo.toml", new_lines.join("\n") + "\n")?;

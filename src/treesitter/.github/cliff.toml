@@ -69,4 +69,4 @@ sort_commits = "oldest"
 
 [remote.github]
 owner = "tree-sitter"
-repo  = "tree-sitter"
+repo = "tree-sitter"

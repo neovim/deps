@@ -43,6 +43,11 @@
     },
     "./debug/web-tree-sitter.wasm": "./debug/web-tree-sitter.wasm"
   },
+  "browser": {
+    "fs": false,
+    "fs/promises": false,
+    "module": false
+  },
   "types": "web-tree-sitter.d.ts",
   "keywords": [
     "incremental",
@@ -75,7 +80,7 @@
     "@vitest/coverage-v8": "^3.0.5",
     "dts-buddy": "^0.8.3",
     "esbuild": "^0.28.2",
-    "eslint": "^10.8.1",
+    "eslint": "^10.9.0",
     "source-map": "^0.8.0",
     "tsx": "^4.23.12",
     "typescript": "^5.7.3",
