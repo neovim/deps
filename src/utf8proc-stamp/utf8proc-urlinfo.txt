@@ -6,7 +6,7 @@ method=url
 command=/usr/local/bin/cmake;-DCMAKE_MESSAGE_LOG_LEVEL=VERBOSE;-P;/home/runner/work/deps/deps/neovim/deps/build/src/utf8proc-stamp/download-utf8proc.cmake;COMMAND;/usr/local/bin/cmake;-DCMAKE_MESSAGE_LOG_LEVEL=VERBOSE;-P;/home/runner/work/deps/deps/neovim/deps/build/src/utf8proc-stamp/verify-utf8proc.cmake;COMMAND;/usr/local/bin/cmake;-DCMAKE_MESSAGE_LOG_LEVEL=VERBOSE;-P;/home/runner/work/deps/deps/neovim/deps/build/src/utf8proc-stamp/extract-utf8proc.cmake
 source_dir=/home/runner/work/deps/deps/neovim/deps/build/src/utf8proc
 work_dir=/home/runner/work/deps/deps/neovim/deps/build/src
-url(s)=https://github.com/juliastrings/utf8proc/archive/v2.11.3.tar.gz
-hash=SHA256=abfed50b6d4da51345713661370290f4f4747263ee73dc90356299dfc7990c78
+url(s)=https://github.com/juliastrings/utf8proc/archive/v2.12.0.tar.gz
+hash=SHA256=f564011d38b2888d583d510b08e69ffa15aa117155db1b9b49ef1dfe1fa25111
       no_extract=
 
