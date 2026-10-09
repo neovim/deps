@@ -543,6 +543,7 @@ static Subtree ts_parser__lex(
       ts_lexer_start(&self->lexer);
       ts_parser__external_scanner_deserialize(self, external_token);
       found_token = ts_parser__external_scanner_scan(self, lex_mode.external_lex_state);
+      called_get_column |= self->lexer.did_get_column;
       if (self->has_scanner_error) return NULL_SUBTREE;
       ts_lexer_finish(&self->lexer, &lookahead_end_byte);
 
@@ -582,7 +583,6 @@ static Subtree ts_parser__lex(
 
       if (found_token) {
         found_external_token = true;
-        called_get_column = self->lexer.did_get_column;
         break;
       }
 
@@ -1207,6 +1207,9 @@ static bool ts_parser__do_all_potential_reductions(
       continue;
     } else if (lookahead_symbol != 0) {
       ts_stack_remove_version(self->stack, version);
+      // Removing this version shifts the next reduction version into its slot.
+      // Check that version before advancing.
+      continue;
     }
 
     if (version == starting_version) {

@@ -254,6 +254,21 @@ fn test_parsing_with_custom_utf16_be_input() {
 }
 
 #[test]
+fn test_utf16_decodes_surrogate_pairs() {
+    let mut parser = Parser::new();
+    let language = get_test_fixture_language("utf16_surrogate_oob");
+    parser.set_language(&language).unwrap();
+
+    let le = [0xD83D_u16.to_le(), 0xDE00_u16.to_le()];
+    let tree = parser.parse_utf16_le(le, None).unwrap();
+    assert_eq!(tree.root_node().to_sexp(), "(program (supplementary))");
+
+    let be = [0xD83D_u16.to_be(), 0xDE00_u16.to_be()];
+    let tree = parser.parse_utf16_be(be, None).unwrap();
+    assert_eq!(tree.root_node().to_sexp(), "(program (supplementary))");
+}
+
+#[test]
 fn test_utf16_decode_does_not_read_oob() {
     // Test for a buffer over-read in ts_decode_utf16_le/be when a lead surrogate
     // is the last code unit in a chunk. The test grammar's external scanner
@@ -673,6 +688,37 @@ fn test_parsing_after_editing_tree_that_depends_on_column_position() {
 
     assert_eq!(tree.root_node().to_sexp(), "(x_is_at (even_column))",);
     assert_eq!(recorder.strings_read(), vec!["\n\n  x"]);
+}
+
+#[test]
+fn test_parsing_after_failed_external_scan_that_depends_on_column() {
+    let mut parser = Parser::new();
+    parser
+        .set_language(&get_test_fixture_language("depends_on_column_failed_scan"))
+        .unwrap();
+
+    let mut code = b"ax".to_vec();
+    let mut tree = parser.parse(&code, None).unwrap();
+    assert_eq!(tree.root_node().to_sexp(), "(document (letter) (tail))");
+
+    perform_edit(
+        &mut tree,
+        &mut code,
+        &Edit {
+            position: 0,
+            deleted_length: 1,
+            inserted_text: b"\n".to_vec(),
+        },
+    )
+    .unwrap();
+
+    let incremental = parser.parse(&code, Some(&tree)).unwrap();
+    let fresh = parser.parse(&code, None).unwrap();
+    assert_eq!(fresh.root_node().to_sexp(), "(document (newline) (head))");
+    assert_eq!(
+        incremental.root_node().to_sexp(),
+        fresh.root_node().to_sexp()
+    );
 }
 
 #[test]
@@ -2202,6 +2248,34 @@ fn test_parse_options_reborrow() {
 }
 
 #[test]
+fn test_error_recovery_checks_versions_after_failed_missing_token_reduction() {
+    let mut parser = Parser::new();
+    parser
+        .set_language(&get_test_fixture_language("error_recovery_loop"))
+        .unwrap();
+
+    let input = b"<<a/a>{[:aaaaa";
+    let mut progress_checks = 0;
+    let tree = parser
+        .parse_with_options(
+            &mut |offset, _| &input[offset..],
+            None,
+            Some(ParseOptions::new().progress_callback(&mut |_| {
+                progress_checks += 1;
+                if progress_checks > 100 {
+                    // error recovery should finish without repeating the same stack versions
+                    ControlFlow::Break(())
+                } else {
+                    ControlFlow::Continue(())
+                }
+            })),
+        )
+        .unwrap();
+
+    assert_eq!(tree.root_node().end_byte(), input.len());
+}
+
+#[test]
 fn test_grammar_that_should_hang_and_not_segfault() {
     fn hang_test() {
         let test_grammar_dir = fixtures_dir()
@@ -2242,4 +2316,41 @@ fn test_grammar_that_should_hang_and_not_segfault() {
             panic!("The test thread disconnected unexpectedly")
         }
     }
+}
+
+#[test]
+fn test_parsing_after_balancing_tree_that_depends_on_column() {
+    let mut parser = Parser::new();
+    parser
+        .set_language(&get_test_fixture_language("depends_on_column_repetition"))
+        .unwrap();
+
+    let mut code = b"\nax\na".to_vec();
+    let mut tree = parser.parse(&code, None).unwrap();
+    assert_eq!(
+        tree.root_node().to_sexp(),
+        "(document (newline) (word) (tail) (newline) (word))"
+    );
+
+    perform_edit(
+        &mut tree,
+        &mut code,
+        &Edit {
+            position: 2,
+            deleted_length: 0,
+            inserted_text: b"\n".to_vec(),
+        },
+    )
+    .unwrap();
+
+    let incremental = parser.parse(&code, Some(&tree)).unwrap();
+    let fresh = parser.parse(&code, None).unwrap();
+    assert_eq!(
+        fresh.root_node().to_sexp(),
+        "(document (newline) (word) (newline) (head) (newline) (word))"
+    );
+    assert_eq!(
+        incremental.root_node().to_sexp(),
+        fresh.root_node().to_sexp()
+    );
 }

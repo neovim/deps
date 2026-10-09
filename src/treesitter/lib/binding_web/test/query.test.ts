@@ -585,9 +585,10 @@ describe('Query', () => {
     });
   });
 
-  describe('Executes with a timeout', { timeout: 10000 }, () => {
+  describe('Executes with a timeout', { timeout: 60000 }, () => {
     it('Returns less than the expected matches', () => {
-      tree = parser.parse('function foo() while (true) { } }\n'.repeat(1000))!;
+      const count = 10000;
+      tree = parser.parse('function foo() while (true) { } }\n'.repeat(count))!;
       query = new Query(JavaScript, '(function_declaration) @function');
 
       const startTime = performance.now();
@@ -603,10 +604,30 @@ describe('Query', () => {
           },
         }
       );
-      expect(matches.length).toBeLessThan(1000);
+      expect(matches.length).toBeLessThan(count);
 
       const matches2 = query.matches(tree.rootNode);
-      expect(matches2).toHaveLength(1000);
+      expect(matches2).toHaveLength(count);
+    });
+    it('Stops captures when the progress callback returns true', () => {
+      const numbers = Array.from({ length: 1000 }, (_, i) => i).join(',');
+      tree = parser.parse(`[${numbers}];`)!;
+      // The first pattern stays in progress until the array ends, so every number
+      // capture finishes behind it.
+      query = new Query(JavaScript, '(array (number) @first (string)) (number) @number');
+
+      let calls = 0;
+      const captures = query.captures(tree.rootNode, {
+        progressCallback: () => {
+          calls++;
+          return true;
+        },
+      });
+      expect(captures.length).toBeLessThan(1000);
+      expect(calls).toBe(1);
+
+      const captures2 = query.captures(tree.rootNode);
+      expect(captures2).toHaveLength(1000);
     });
   });
 });

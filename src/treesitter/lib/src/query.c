@@ -234,11 +234,11 @@ typedef struct {
   // never allow `list` to allocate more entries than this, dropping pending
   // matches if needed to stay under the limit.
   uint32_t max_capture_list_count;
-  // The number of capture lists allocated in `list` that are not currently in
+  // The ids of the capture lists allocated in `list` that are not currently in
   // use. We reuse those existing-but-unused capture lists before trying to
-  // allocate any new ones. We use an invalid value (UINT32_MAX) for a capture
+  // allocate any new ones. We use an invalid value (`UINT32_MAX`) for a capture
   // list's length to indicate that it's not in use.
-  uint32_t free_capture_list_count;
+  Array(uint32_t) free_id_stack;
 } CaptureListPool;
 
 /*
@@ -344,7 +344,7 @@ struct TSQueryCursor {
   uint32_t next_finished_state_id;
   const TSQueryCursorOptions *query_options;
   TSQueryCursorState query_state;
-  unsigned operation_count;
+  unsigned work_count;
   bool on_visible_node;
   bool ascending;
   bool halted;
@@ -356,7 +356,10 @@ static const uint16_t PATTERN_DONE_MARKER = UINT16_MAX;
 static const uint16_t NONE = UINT16_MAX;
 static const uint32_t CAPTURE_LIST_NONE = UINT32_MAX;
 static const TSSymbol WILDCARD_SYMBOL = 0;
-static const unsigned OP_COUNT_PER_QUERY_CALLBACK_CHECK = 100;
+// The cursor calls the progress callback once it has done this much work.
+// Entering or leaving a node costs one, plus one for each in-progress state,
+// because every step visits all of them.
+static const unsigned WORK_PER_QUERY_CALLBACK_CHECK = 1000;
 
 /**********
  * Stream
@@ -445,16 +448,17 @@ static CaptureListPool capture_list_pool_new(void) {
     .list = array_new(),
     .empty_list = array_new(),
     .max_capture_list_count = UINT32_MAX,
-    .free_capture_list_count = 0,
+    .free_id_stack = array_new(),
   };
 }
 
 static void capture_list_pool_reset(CaptureListPool *self) {
+  array_clear(&self->free_id_stack);
   for (uint32_t i = 0; i < self->list.size; i++) {
     // This invalid size means that the list is not in use.
     array_get(&self->list, i)->size = UINT32_MAX;
+    array_push(&self->free_id_stack, i);
   }
-  self->free_capture_list_count = self->list.size;
 }
 
 static void capture_list_pool_delete(CaptureListPool *self) {
@@ -462,6 +466,7 @@ static void capture_list_pool_delete(CaptureListPool *self) {
     array_delete(array_get(&self->list, i));
   }
   array_delete(&self->list);
+  array_delete(&self->free_id_stack);
 }
 
 static const CaptureList *capture_list_pool_get(const CaptureListPool *self, uint32_t id) {
@@ -477,19 +482,15 @@ static CaptureList *capture_list_pool_get_mut(CaptureListPool *self, uint32_t id
 static bool capture_list_pool_is_empty(const CaptureListPool *self) {
   // The capture list pool is empty if all allocated lists are in use, and we
   // have reached the maximum allowed number of allocated lists.
-  return self->free_capture_list_count == 0 && self->list.size >= self->max_capture_list_count;
+  return self->free_id_stack.size == 0 && self->list.size >= self->max_capture_list_count;
 }
 
 static uint32_t capture_list_pool_acquire(CaptureListPool *self) {
   // First see if any already allocated capture list is currently unused.
-  if (self->free_capture_list_count > 0) {
-    for (uint32_t i = 0; i < self->list.size; i++) {
-      if (array_get(&self->list, i)->size == UINT32_MAX) {
-        array_clear(array_get(&self->list, i));
-        self->free_capture_list_count--;
-        return i;
-      }
-    }
+  if (self->free_id_stack.size > 0) {
+    uint32_t id = array_pop(&self->free_id_stack);
+    array_clear(array_get(&self->list, id));
+    return id;
   }
 
   // Otherwise allocate and initialize a new capture list, as long as that
@@ -506,8 +507,10 @@ static uint32_t capture_list_pool_acquire(CaptureListPool *self) {
 
 static void capture_list_pool_release(CaptureListPool *self, uint32_t id) {
   if (id >= self->list.size) return;
-  array_get(&self->list, id)->size = UINT32_MAX;
-  self->free_capture_list_count++;
+  CaptureList *list = array_get(&self->list, id);
+  if (list->size == UINT32_MAX) return; // Guard against releasing a list twice
+  list->size = UINT32_MAX;
+  array_push(&self->free_id_stack, id);
 }
 
 /********************
@@ -3442,7 +3445,7 @@ TSQueryCursor *ts_query_cursor_new(void) {
       .end_byte = UINT32_MAX,
     },
     .max_start_depth = UINT32_MAX,
-    .operation_count = 0,
+    .work_count = 0,
   };
   array_reserve(&self->states, 8);
   array_reserve(&self->finished_states, 8);
@@ -3519,7 +3522,7 @@ void ts_query_cursor_exec(
   self->halted = false;
   self->query = query;
   self->did_exceed_match_limit = false;
-  self->operation_count = 0;
+  self->work_count = 0;
   self->query_options = NULL;
   self->query_state = (TSQueryCursorState) {0};
 }
@@ -4043,24 +4046,22 @@ static inline bool ts_query_cursor__advance(
       }
     }
 
-    if (++self->operation_count == OP_COUNT_PER_QUERY_CALLBACK_CHECK) {
-      self->operation_count = 0;
-    }
+    if (did_match || self->halted) return did_match;
 
-    if (self->query_options && self->query_options->progress_callback) {
-      self->query_state.current_byte_offset = ts_node_start_byte(ts_tree_cursor_current_node(&self->cursor));
-    }
-    if (
-      did_match ||
-      self->halted ||
-      (
-        self->operation_count == 0 &&
-        (
-          (self->query_options && self->query_options->progress_callback && self->query_options->progress_callback(&self->query_state))
-        )
-      )
-    ) {
-      return did_match;
+    // Consult the progress callback after a bounded amount of work.
+    // Only iterations that do work are charged.
+    self->work_count += 1 + self->states.size;
+    if (self->work_count >= WORK_PER_QUERY_CALLBACK_CHECK) {
+      self->work_count = 0;
+      if (self->query_options && self->query_options->progress_callback) {
+        self->query_state.current_byte_offset = ts_node_start_byte(ts_tree_cursor_current_node(&self->cursor));
+        if (self->query_options->progress_callback(&self->query_state)) {
+          // Halt the same way reaching the end of the tree does. The next iteration
+          // discards the in-progress states, so only finished matches are returned.
+          self->halted = true;
+          continue;
+        }
+      }
     }
 
     // Exit the current node.
