@@ -166,23 +166,23 @@ module.exports = grammar({
             seq(
                 alias($._fenced_code_block_start_backtick, $.fenced_code_block_delimiter),
                 optional($._whitespace),
-                optional($.info_string),
+                optional(field('info_string', $.info_string)),
                 $._newline,
                 optional($.code_fence_content),
-                optional(seq(alias($._fenced_code_block_end_backtick, $.fenced_code_block_delimiter), $._close_block, $._newline)),
+                optional(seq(alias($._fenced_code_block_end_backtick, $.fenced_code_block_delimiter), $._close_block, choice($._newline, $._eof))),
                 $._block_close,
             ),
             seq(
                 alias($._fenced_code_block_start_tilde, $.fenced_code_block_delimiter),
                 optional($._whitespace),
-                optional($.info_string),
+                optional(field('info_string', $.info_string)),
                 $._newline,
                 optional($.code_fence_content),
-                optional(seq(alias($._fenced_code_block_end_tilde, $.fenced_code_block_delimiter), $._close_block, $._newline)),
+                optional(seq(alias($._fenced_code_block_end_tilde, $.fenced_code_block_delimiter), $._close_block, choice($._newline, $._eof))),
                 $._block_close,
             ),
         )),
-        code_fence_content: $ => repeat1(choice($._newline, $._line)),
+        code_fence_content: $ => repeat1(choice($._newline, seq($._line, choice($._newline, $._eof)))),
         info_string: $ => choice(
             seq($.language, repeat(choice($._line, $.backslash_escape, $.entity_reference, $.numeric_character_reference))),
             seq(

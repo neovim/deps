@@ -2269,8 +2269,12 @@
                 "type": "CHOICE",
                 "members": [
                   {
-                    "type": "SYMBOL",
-                    "name": "info_string"
+                    "type": "FIELD",
+                    "name": "info_string",
+                    "content": {
+                      "type": "SYMBOL",
+                      "name": "info_string"
+                    }
                   },
                   {
                     "type": "BLANK"
@@ -2313,8 +2317,17 @@
                         "name": "_close_block"
                       },
                       {
-                        "type": "SYMBOL",
-                        "name": "_newline"
+                        "type": "CHOICE",
+                        "members": [
+                          {
+                            "type": "SYMBOL",
+                            "name": "_newline"
+                          },
+                          {
+                            "type": "SYMBOL",
+                            "name": "_eof"
+                          }
+                        ]
                       }
                     ]
                   },
@@ -2357,8 +2370,12 @@
                 "type": "CHOICE",
                 "members": [
                   {
-                    "type": "SYMBOL",
-                    "name": "info_string"
+                    "type": "FIELD",
+                    "name": "info_string",
+                    "content": {
+                      "type": "SYMBOL",
+                      "name": "info_string"
+                    }
                   },
                   {
                     "type": "BLANK"
@@ -2401,8 +2418,17 @@
                         "name": "_close_block"
                       },
                       {
-                        "type": "SYMBOL",
-                        "name": "_newline"
+                        "type": "CHOICE",
+                        "members": [
+                          {
+                            "type": "SYMBOL",
+                            "name": "_newline"
+                          },
+                          {
+                            "type": "SYMBOL",
+                            "name": "_eof"
+                          }
+                        ]
                       }
                     ]
                   },
@@ -2430,8 +2456,26 @@
             "name": "_newline"
           },
           {
-            "type": "SYMBOL",
-            "name": "_line"
+            "type": "SEQ",
+            "members": [
+              {
+                "type": "SYMBOL",
+                "name": "_line"
+              },
+              {
+                "type": "CHOICE",
+                "members": [
+                  {
+                    "type": "SYMBOL",
+                    "name": "_newline"
+                  },
+                  {
+                    "type": "SYMBOL",
+                    "name": "_eof"
+                  }
+                ]
+              }
+            ]
           }
         ]
       }

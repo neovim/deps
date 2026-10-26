@@ -169,3 +169,76 @@ globalNS.method1(5, 10);
             (list_marker_parenthesis)
             (paragraph
               (inline))))))))
+
+================================================================================
+#268 - HTML comment block that ends on its opening line
+================================================================================
+<!-->
+
+<!--->
+
+# after
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (html_block)
+    (html_block))
+  (section
+    (atx_heading
+      (atx_h1_marker)
+      (inline))))
+
+================================================================================
+#266 - Closing code fence at the end of input without a line ending
+================================================================================
+```sh
+x
+```
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (fenced_code_block
+      (fenced_code_block_delimiter)
+      (info_string
+        (language))
+      (block_continuation)
+      (code_fence_content
+        (block_continuation))
+      (fenced_code_block_delimiter))))
+
+================================================================================
+#275 - Fence characters after the start of a line do not close the block
+================================================================================
+```
+foo```
+    ```
+```
+
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (fenced_code_block
+      (fenced_code_block_delimiter)
+      (block_continuation)
+      (code_fence_content
+        (block_continuation)
+        (block_continuation))
+      (fenced_code_block_delimiter))))
+
+================================================================================
+#275 - Fence characters after the start of the last line do not close the block
+================================================================================
+```
+foo```
+--------------------------------------------------------------------------------
+
+(document
+  (section
+    (fenced_code_block
+      (fenced_code_block_delimiter)
+      (block_continuation)
+      (code_fence_content))))
