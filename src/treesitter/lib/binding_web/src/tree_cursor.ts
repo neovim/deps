@@ -5,27 +5,16 @@ import { TRANSFER_BUFFER } from './parser';
 import { getText, Tree } from './tree';
 import { newFinalizer } from './finalization_registry';
 
-const finalizer = newFinalizer((address: number) => {
-  C._ts_tree_cursor_delete_wasm(address);
+const finalizer = newFinalizer((handles: number[]) => {
+  marshalTreeCursor({ handles });
+  // Deleting a cursor only frees its stack, so it doesn't need the tree.
+  C._ts_tree_cursor_delete_wasm(0);
 });
 
 /** A stateful object for walking a syntax {@link Tree} efficiently. */
 export class TreeCursor {
   /** @internal */
-  // @ts-expect-error: never read
-  private [0] = 0; // Internal handle for Wasm
-
-  /** @internal */
-  // @ts-expect-error: never read
-  private [1] = 0; // Internal handle for Wasm
-
-  /** @internal */
-  // @ts-expect-error: never read
-  private [2] = 0; // Internal handle for Wasm
-
-  /** @internal */
-  // @ts-expect-error: never read
-  private [3] = 0; // Internal handle for Wasm
+  readonly handles = [0, 0, 0, 0]; // Internal handles for Wasm, shared with the finalizer.
 
   /** @internal */
   private tree: Tree;
@@ -35,15 +24,14 @@ export class TreeCursor {
     assertInternal(internal);
     this.tree = tree;
     unmarshalTreeCursor(this);
-    finalizer?.register(this, this.tree[0], this);
+    finalizer?.register(this, this.handles, this);
   }
 
   /** Creates a deep copy of the tree cursor. This allocates new memory. */
   copy(): TreeCursor {
-    const copy = new TreeCursor(INTERNAL, this.tree);
+    marshalTreeCursor(this);
     C._ts_tree_cursor_copy_wasm(this.tree[0]);
-    unmarshalTreeCursor(copy);
-    return copy;
+    return new TreeCursor(INTERNAL, this.tree);
   }
 
   /** Delete the tree cursor, freeing its resources. */
@@ -51,7 +39,7 @@ export class TreeCursor {
     finalizer?.unregister(this);
     marshalTreeCursor(this);
     C._ts_tree_cursor_delete_wasm(this.tree[0]);
-    this[0] = this[1] = this[2] = 0;
+    this.handles.fill(0);
   }
 
   /** Get the tree cursor's current {@link Node}. */
@@ -286,10 +274,10 @@ export class TreeCursor {
 
   /**
    * Move this cursor to the first child of its current node that contains or
-   * starts after the given byte offset.
+   * starts after the given position.
    *
-   * This returns the index of the child node if one was found, and returns
-   * `null` if no such child was found.
+   * This returns `true` if the cursor successfully moved to a child node, and returns
+   * `false` if no such child was found.
    */
   gotoFirstChildForPosition(goalPosition: Point): boolean {
     marshalTreeCursor(this);
@@ -306,8 +294,9 @@ export class TreeCursor {
   reset(node: Node): void {
     marshalNode(node);
     marshalTreeCursor(this, TRANSFER_BUFFER + SIZE_OF_NODE);
-    C._ts_tree_cursor_reset_wasm(this.tree[0]);
+    C._ts_tree_cursor_reset_wasm(node.tree[0]);
     unmarshalTreeCursor(this);
+    this.tree = node.tree;
   }
 
   /**
@@ -321,5 +310,6 @@ export class TreeCursor {
     marshalTreeCursor(cursor, TRANSFER_BUFFER + SIZE_OF_CURSOR);
     C._ts_tree_cursor_reset_to_wasm(this.tree[0], cursor.tree[0]);
     unmarshalTreeCursor(this);
+    this.tree = cursor.tree;
   }
 }

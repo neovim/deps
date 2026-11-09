@@ -1,5 +1,5 @@
 #include <stdlib.h>
-// ^ keyword
+// ^ keyword.import
 //        ^ string
 
 #include "something.h"

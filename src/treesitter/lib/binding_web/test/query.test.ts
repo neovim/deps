@@ -96,6 +96,24 @@ describe('Query', () => {
       ]);
     });
 
+    it('can search in specified index ranges', () => {
+      tree = parser.parse('[a, b,\nc, d,\ne, f,\ng, h]')!;
+      query = new Query(JavaScript, '(identifier) @element');
+      const matches = query.matches(
+        tree.rootNode,
+        {
+          startIndex: 8,
+          endIndex: 20,
+        }
+      );
+      expect(formatMatches(matches)).toEqual([
+        { patternIndex: 0, captures: [{ patternIndex: 0, name: 'element', text: 'd' }] },
+        { patternIndex: 0, captures: [{ patternIndex: 0, name: 'element', text: 'e' }] },
+        { patternIndex: 0, captures: [{ patternIndex: 0, name: 'element', text: 'f' }] },
+        { patternIndex: 0, captures: [{ patternIndex: 0, name: 'element', text: 'g' }] },
+      ]);
+    });
+
     it('can search in contained within point ranges', () => {
       tree = parser.parse(`[
                 {"key1": "value1"},
@@ -144,8 +162,8 @@ describe('Query', () => {
       const matches = query.matches(
         tree.rootNode,
         {
-          startContainingIndex: 290,
-          endContainingIndex: 432,
+          startContainingIndex: 145,
+          endContainingIndex: 216,
         }
       );
       expect(formatMatches(matches)).toEqual([
@@ -239,6 +257,18 @@ describe('Query', () => {
         { patternIndex: 1, name: 'function.def', text: 'no' },
         { patternIndex: 3, name: 'operator', text: '=' },
         { patternIndex: 1, name: 'function.alias', text: 'pq' },
+      ]);
+    });
+
+    it('can search in specified index ranges', () => {
+      tree = parser.parse('[a, b,\nc, d,\ne, f,\ng, h]')!;
+      query = new Query(JavaScript, '(identifier) @element');
+      const captures = query.captures(tree.rootNode, { startIndex: 8, endIndex: 20 });
+      expect(formatCaptures(captures)).toEqual([
+        { patternIndex: 0, name: 'element', text: 'd' },
+        { patternIndex: 0, name: 'element', text: 'e' },
+        { patternIndex: 0, name: 'element', text: 'f' },
+        { patternIndex: 0, name: 'element', text: 'g' },
       ]);
     });
 
@@ -556,6 +586,26 @@ describe('Query', () => {
         patterns2.length +
         '((identifier) @b (#match? @b i))\n'.length
       );
+    });
+
+    it('Returns string indices for sources with non-ASCII characters', () => {
+      const source = '; héllö wörld\n(identifier) @a\n(object "{" "}")';
+      const query = new Query(JavaScript, source);
+
+      expect(query.startIndexForPattern(0)).toBe(source.indexOf('(identifier)'));
+      expect(query.endIndexForPattern(0)).toBe(source.indexOf('(object'));
+      expect(query.startIndexForPattern(1)).toBe(source.indexOf('(object'));
+      expect(query.endIndexForPattern(1)).toBe(source.length);
+    });
+  });
+
+  describe('.isPatternGuaranteedAtStep', () => {
+    it('takes string indices into the source', () => {
+      const source = '; héllö wörld\n(object "{" "}")';
+      const query = new Query(JavaScript, source);
+
+      expect(query.isPatternGuaranteedAtStep(source.indexOf('object'))).toBe(false);
+      expect(query.isPatternGuaranteedAtStep(source.indexOf('{'))).toBe(true);
     });
   });
 

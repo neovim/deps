@@ -329,7 +329,7 @@ static inline TSNode ts_node__first_child_for_byte(
         if (ts_node__is_relevant(child, include_anonymous)) {
           return child;
         } else if (ts_node_child_count(child) > 0) {
-          if (iterator.child_index < ts_subtree_child_count(ts_node__subtree(child))) {
+          if (!ts_node_child_iterator_done(&iterator)) {
             last_iterator = iterator;
             has_last_iterator = true;
           }
@@ -518,7 +518,8 @@ bool ts_node_has_changes(TSNode self) {
 }
 
 bool ts_node_has_error(TSNode self) {
-  return ts_subtree_error_cost(ts_node__subtree(self)) > 0;
+  return ts_node_is_error(self) ||
+    ts_subtree_error_cost(ts_node__subtree(self)) > 0;
 }
 
 bool ts_node_is_error(TSNode self) {

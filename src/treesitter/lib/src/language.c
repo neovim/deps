@@ -281,13 +281,13 @@ TSSymbol ts_language_symbol_for_name(
   uint32_t length,
   bool is_named
 ) {
-  if (is_named && !strncmp(string, "ERROR", length)) return ts_builtin_sym_error;
+  if (is_named && length == 5 && !strncmp(string, "ERROR", length)) return ts_builtin_sym_error;
   uint16_t count = (uint16_t)ts_language_symbol_count(self);
   for (TSSymbol i = 0; i < count; i++) {
     TSSymbolMetadata metadata = ts_language_symbol_metadata(self, i);
     if ((!metadata.visible && !metadata.supertype) || metadata.named != is_named) continue;
     const char *symbol_name = self->symbol_names[i];
-    if (!strncmp(symbol_name, string, length) && !symbol_name[length]) {
+    if (!strncmp(symbol_name, string, length) && strlen(symbol_name) == length) {
       return self->public_symbol_map[i];
     }
   }

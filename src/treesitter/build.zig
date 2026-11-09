@@ -22,12 +22,13 @@ pub fn build(b: *std.Build) !void {
         .name = "tree-sitter",
         .linkage = if (shared) .dynamic else .static,
         .root_module = tree_sitter,
+        .win32_module_definition = b.path(if (wasm) "lib/src/tree_sitter_wasm.def" else "lib/src/tree_sitter.def"),
     });
 
     if (amalgamated) {
         tree_sitter.addCSourceFile(.{
             .file = b.path("lib/src/lib.c"),
-            .flags = &.{"-std=c11"},
+            .flags = &.{ "-std=c11", "-fvisibility=hidden" },
         });
     } else {
         const files = try findSourceFiles(b, io);
@@ -35,7 +36,7 @@ pub fn build(b: *std.Build) !void {
         tree_sitter.addCSourceFiles(.{
             .root = b.path("lib/src"),
             .files = files,
-            .flags = &.{"-std=c11"},
+            .flags = &.{ "-std=c11", "-fvisibility=hidden" },
         });
     }
 
@@ -130,7 +131,10 @@ pub fn wasmtimeDep(target: std.Target) []const u8 {
 fn findSourceFiles(b: *std.Build, io: std.Io) ![]const []const u8 {
     var sources: std.ArrayListUnmanaged([]const u8) = .empty;
 
-    var dir = try b.build_root.handle.openDir(io, "lib/src", .{ .iterate = true });
+    var dir = try if (@hasField(std.Build, "root")) // zig >= 0.17
+        b.root.openDir(io, "lib/src", .{ .iterate = true })
+    else
+        b.build_root.handle.openDir(io, "lib/src", .{ .iterate = true });
     var iter = dir.iterate();
     defer dir.close(io);
 

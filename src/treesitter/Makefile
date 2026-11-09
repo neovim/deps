@@ -1,4 +1,4 @@
-VERSION := 0.27.1
+VERSION := 0.27.2
 DESCRIPTION := An incremental parsing system for programming tools
 HOMEPAGE_URL := https://tree-sitter.github.io/tree-sitter/
 
@@ -42,6 +42,7 @@ ifneq ($(findstring darwin,$(MACHINE)),)
 else ifneq ($(findstring mingw32,$(MACHINE)),)
 	SOEXT = dll
 	LINKSHARED += -s -shared -Wl,--out-implib,libtree-sitter.dll.a
+	DEF := lib/src/tree_sitter.def
 else
 	SOEXT = so
 	SOEXTVER_MAJOR = $(SOEXT).$(SONAME_MAJOR)
@@ -57,7 +58,7 @@ all: libtree-sitter.a libtree-sitter.$(SOEXT) tree-sitter.pc
 libtree-sitter.a: $(OBJ)
 	$(AR) $(ARFLAGS) $@ $^
 
-libtree-sitter.$(SOEXT): $(OBJ)
+libtree-sitter.$(SOEXT): $(OBJ) $(DEF)
 	$(CC) $(LDFLAGS) $(LINKSHARED) $^ $(LDLIBS) -o $@
 ifneq ($(STRIP),)
 	$(STRIP) $@
@@ -80,7 +81,7 @@ shared: libtree-sitter.$(SOEXT)
 static: libtree-sitter.a
 
 clean:
-	$(RM) $(OBJ) tree-sitter.pc libtree-sitter.a libtree-sitter.$(SOEXT) libtree-stitter.dll.a
+	$(RM) $(OBJ) tree-sitter.pc libtree-sitter.a libtree-sitter.$(SOEXT) libtree-sitter.dll.a
 
 install: all
 	install -d '$(DESTDIR)$(INCLUDEDIR)'/tree_sitter '$(DESTDIR)$(PCLIBDIR)' '$(DESTDIR)$(LIBDIR)'
@@ -104,7 +105,6 @@ uninstall:
 		'$(DESTDIR)$(LIBDIR)'/libtree-sitter.$(SOEXT) \
 		'$(DESTDIR)$(INCLUDEDIR)'/tree_sitter/api.h \
 		'$(DESTDIR)$(PCLIBDIR)'/tree-sitter.pc
-	rmdir '$(DESTDIR)$(INCLUDEDIR)'/tree_sitter
 
 .PHONY: all shared static install uninstall clean
 

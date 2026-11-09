@@ -371,6 +371,20 @@ fn test_first_named_child_for_offset() {
 }
 
 #[test]
+fn test_first_named_child_for_offset_after_anonymous_children() {
+    let mut parser = Parser::new();
+    parser.set_language(&get_language("c")).unwrap();
+    let tree = parser.parse("for (;;);", None).unwrap();
+    assert!(!tree.root_node().has_error());
+
+    let for_node = tree.root_node().named_child(0).unwrap();
+    assert_eq!(for_node.kind(), "for_statement");
+    let body_node = for_node.child_by_field_name("body").unwrap();
+    assert_eq!(body_node.kind(), "expression_statement");
+    assert_eq!(for_node.first_named_child_for_byte(0), Some(body_node));
+}
+
+#[test]
 fn test_node_field_name_for_child() {
     let mut parser = Parser::new();
     parser.set_language(&get_language("c")).unwrap();
@@ -843,6 +857,25 @@ fn test_node_is_error() {
     let child = root_node.child(0).unwrap();
     assert_eq!(child.kind(), "ERROR");
     assert!(child.is_error());
+}
+
+#[test]
+fn test_node_has_error() {
+    let mut parser = Parser::new();
+    parser.set_language(&get_language("json")).unwrap();
+    let tree = parser.parse("!", None).unwrap();
+
+    let root = tree.root_node();
+    assert!(root.has_error());
+
+    let error = root.child(0).unwrap();
+    assert!(error.is_error());
+    assert!(error.has_error());
+
+    let terminal_error = error.child(0).unwrap();
+    assert!(terminal_error.is_error());
+    assert_eq!(terminal_error.child_count(), 0);
+    assert!(terminal_error.has_error());
 }
 
 #[test]

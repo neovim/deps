@@ -91,6 +91,23 @@ describe('Tree', () => {
         '(program (expression_statement (binary_expression left: (binary_expression left: (identifier) right: (identifier)) right: (identifier))))'
       );
     });
+
+    it('updates the positions of nodes that are edited directly', () => {
+      input = 'abc + cde\nfgh';
+      tree = parser.parse(input)!;
+      const sameRowNode = tree.rootNode.descendantForIndex(input.indexOf('cde'))!;
+      const laterRowNode = tree.rootNode.descendantForIndex(input.indexOf('fgh'))!;
+
+      [input, edit] = spliceInput(input, 0, 0, 'x\ny\nz');
+      expect(input).toBe('x\ny\nzabc + cde\nfgh');
+      sameRowNode.edit(edit);
+      laterRowNode.edit(edit);
+
+      expect(sameRowNode.startIndex).toBe(input.indexOf('cde'));
+      expect(sameRowNode.startPosition).toEqual({ row: 2, column: 7 });
+      expect(laterRowNode.startIndex).toBe(input.indexOf('fgh'));
+      expect(laterRowNode.startPosition).toEqual({ row: 3, column: 0 });
+    });
   });
 
   describe('.getChangedRanges(previous)', () => {
@@ -360,6 +377,90 @@ describe('Tree', () => {
 
       expect(cursor.gotoParent()).toBe(true);
       expect(cursor.gotoParent()).toBe(false);
+    });
+
+    it('returns a cursor that can be reset into another tree', () => {
+      tree = parser.parse('a * b + c / d')!;
+      const otherTree = parser.parse('xyz')!;
+      cursor = tree.walk();
+
+      cursor.reset(otherTree.rootNode.firstChild!);
+      expect(cursor.nodeText).toBe('xyz');
+      expect(cursor.currentNode.tree).toBe(otherTree);
+
+      const original = tree.walk();
+      cursor.resetTo(original);
+      expect(cursor.nodeText).toBe('a * b + c / d');
+      expect(cursor.currentNode.tree).toBe(tree);
+
+      original.delete();
+      otherTree.delete();
+    });
+
+    it('returns a cursor that can be copied after using another cursor', () => {
+      tree = parser.parse('a * b + c / d')!;
+      cursor = tree.walk();
+      cursor.gotoFirstChild();
+      cursor.gotoFirstChild();
+
+      const other = tree.walk();
+      expect(other.nodeType).toBe('program');
+
+      const copy = cursor.copy();
+      expect(copy.nodeType).toBe('binary_expression');
+      expect(copy.currentDepth).toBe(2);
+      copy.delete();
+      other.delete();
+    });
+
+    it('returns a copy that moves independently of the original', () => {
+      tree = parser.parse('a * b + c / d')!;
+      cursor = tree.walk();
+      cursor.gotoFirstChild();
+      cursor.gotoFirstChild();
+
+      const copy = cursor.copy();
+      copy.gotoFirstChild();
+      cursor.gotoLastChild();
+      expect(copy.nodeText).toBe('a * b');
+      expect(cursor.nodeText).toBe('c / d');
+      copy.delete();
+    });
+
+    it('returns a cursor that can move to the first child for an index', () => {
+      tree = parser.parse('a * b + c / d')!;
+      cursor = tree.walk();
+      cursor.gotoFirstChild();
+      cursor.gotoFirstChild();
+
+      expect(cursor.gotoFirstChildForIndex(8)).toBe(true);
+      expect(cursor.nodeText).toBe('c / d');
+
+      cursor.gotoParent();
+      expect(cursor.gotoFirstChildForIndex(0)).toBe(true);
+      expect(cursor.nodeText).toBe('a * b');
+
+      cursor.gotoParent();
+      expect(cursor.gotoFirstChildForIndex(13)).toBe(false);
+      expect(cursor.nodeText).toBe('a * b + c / d');
+    });
+
+    it('returns a cursor that can move to the first child for a position', () => {
+      tree = parser.parse('a * b + c / d')!;
+      cursor = tree.walk();
+      cursor.gotoFirstChild();
+      cursor.gotoFirstChild();
+
+      expect(cursor.gotoFirstChildForPosition({ row: 0, column: 8 })).toBe(true);
+      expect(cursor.nodeText).toBe('c / d');
+
+      cursor.gotoParent();
+      expect(cursor.gotoFirstChildForPosition({ row: 0, column: 0 })).toBe(true);
+      expect(cursor.nodeText).toBe('a * b');
+
+      cursor.gotoParent();
+      expect(cursor.gotoFirstChildForPosition({ row: 1, column: 0 })).toBe(false);
+      expect(cursor.nodeText).toBe('a * b + c / d');
     });
   });
 

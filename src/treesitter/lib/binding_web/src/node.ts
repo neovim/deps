@@ -418,15 +418,15 @@ export class Node {
     // Convert the type strings to numeric type symbols
     const symbols: number[] = [];
     const typesBySymbol = this.tree.language.types;
-    for (const node_type of types) {
-      if (node_type == "ERROR") {
-        symbols.push(65535); // Internally, ts_builtin_sym_error is -1, which is UINT_16MAX
-      }
-    }
     for (let i = 0, n = typesBySymbol.length; i < n; i++) {
       if (types.includes(typesBySymbol[i])) {
         symbols.push(i);
       }
+    }
+    // `symbols_contain` in tree-sitter.c expects ascending symbols, and
+    // ts_builtin_sym_error is -1, which is UINT16_MAX, so it goes last.
+    if (types.includes('ERROR')) {
+      symbols.push(65535); // Internally, ts_builtin_sym_error is -1, which is UINT_16MAX
     }
 
     // Copy the array of symbols to the Wasm heap
@@ -607,33 +607,9 @@ export class Node {
    * you want to keep and continue to use after an edit.
    */
   edit(edit: Edit) {
-    if (this.startIndex >= edit.oldEndIndex) {
-      this.startIndex = edit.newEndIndex + (this.startIndex - edit.oldEndIndex);
-      let subbedPointRow;
-      let subbedPointColumn;
-      if (this.startPosition.row > edit.oldEndPosition.row) {
-        subbedPointRow = this.startPosition.row - edit.oldEndPosition.row;
-        subbedPointColumn = this.startPosition.column;
-      } else {
-        subbedPointRow = 0;
-        subbedPointColumn = this.startPosition.column;
-        if (this.startPosition.column >= edit.oldEndPosition.column) {
-          subbedPointColumn =
-            this.startPosition.column - edit.oldEndPosition.column;
-        }
-      }
-
-      if (subbedPointRow > 0) {
-        this.startPosition.row += subbedPointRow;
-        this.startPosition.column = subbedPointColumn;
-      } else {
-        this.startPosition.column += subbedPointColumn;
-      }
-    } else if (this.startIndex > edit.startIndex) {
-      this.startIndex = edit.newEndIndex;
-      this.startPosition.row = edit.newEndPosition.row;
-      this.startPosition.column = edit.newEndPosition.column;
-    }
+    const { point, index } = edit.editPoint(this.startPosition, this.startIndex);
+    this.startPosition = point;
+    this.startIndex = index;
   }
 
   /** Get the S-expression representation of this node. */
