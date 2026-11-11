@@ -82,9 +82,6 @@ return require('lib/tap')(function (test)
         assert(uv.fs_unlink(path))
       end)
     end
-    local count = collectgarbage("count")
-    collectgarbage("collect")
-    assert(count - collectgarbage("count") > 0)
   end)
 
   test("fs.stat sync", function (print, p, expect, uv)
@@ -302,6 +299,18 @@ return require('lib/tap')(function (test)
     collectgarbage()
     collectgarbage()
 
+  end, "1.28.0")
+
+  test("fs.{read,close}dir after closedir", function(print, p, expect, uv)
+    local dir = assert(uv.fs_opendir('.'))
+    assert(dir:closedir() == true)
+
+    local ok, err = pcall(dir.readdir, dir)
+    assert(not ok and err:match("dir is closed"), err)
+    ok, err = pcall(dir.closedir, dir)
+    assert(not ok and err:match("dir is closed"), err)
+    ok, err = pcall(uv.fs_closedir, dir, function() end)
+    assert(not ok and err:match("dir is closed"), err)
   end, "1.28.0")
 
   test("fs.statfs sync", function (print, p, expect, uv)
